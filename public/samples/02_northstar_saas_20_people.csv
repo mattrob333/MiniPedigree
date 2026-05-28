@@ -1,0 +1,21 @@
+name,email,title,manager_email,department,known_tools,notes
+Morgan Hayes,morgan.hayes@northstargtm.example,CEO,,Executive,"Google Workspace, Slack, Notion",Root executive.
+Nadia Bennett,nadia.bennett@northstargtm.example,Chief Revenue Officer,morgan.hayes@northstargtm.example,Revenue,"Salesforce, Clari, Slack, Gong",Owns revenue strategy.
+Oscar Lin,oscar.lin@northstargtm.example,VP Sales,nadia.bennett@northstargtm.example,Sales,"Salesforce, Outreach, Gong, Slack",Owns sales team execution.
+Tara Singh,tara.singh@northstargtm.example,Enterprise AE,oscar.lin@northstargtm.example,Sales,"Salesforce, Outreach, Gmail, Slack",Owns enterprise pipeline.
+Ben Carter,ben.carter@northstargtm.example,Mid-Market AE,oscar.lin@northstargtm.example,Sales,"Salesforce, Outreach, Gmail, Slack",Owns mid-market pipeline.
+Ivy Chen,ivy.chen@northstargtm.example,Sales Development Manager,oscar.lin@northstargtm.example,Sales Development,"Salesforce, Apollo, Outreach, Slack",Owns SDR team.
+Samir Patel,samir.patel@northstargtm.example,Sales Development Rep,ivy.chen@northstargtm.example,Sales Development,"Apollo, Outreach, Salesforce, Slack",Outbound prospecting.
+Leah Thompson,leah.thompson@northstargtm.example,Revenue Operations Manager,nadia.bennett@northstargtm.example,Revenue Operations,"Salesforce, Clari, Snowflake, Slack",Forecast and CRM hygiene.
+Elena Vargas,elena.vargas@northstargtm.example,VP Customer Success,nadia.bennett@northstargtm.example,Customer Success,"Gainsight, Zendesk, Salesforce, Slack",Owns retention and expansion.
+Chris Walker,chris.walker@northstargtm.example,CS Team Lead,elena.vargas@northstargtm.example,Customer Success,"Gainsight, Zendesk, Slack",Manages CSM pod.
+Amina Okafor,amina.okafor@northstargtm.example,Customer Success Manager,chris.walker@northstargtm.example,Customer Success,"Gainsight, Zendesk, Slack",Owns strategic accounts.
+Diego Alvarez,diego.alvarez@northstargtm.example,Implementation Specialist,chris.walker@northstargtm.example,Implementation,"Asana, Google Drive, Slack, Zendesk",Owns onboarding tasks.
+Rachel Kim,rachel.kim@northstargtm.example,Chief Product Officer,morgan.hayes@northstargtm.example,Product,"Jira, Figma, Notion, Slack",Owns product and design.
+Victor Stone,victor.stone@northstargtm.example,Product Manager,rachel.kim@northstargtm.example,Product,"Jira, Figma, Notion, Slack",Owns roadmap execution.
+Mina Park,mina.park@northstargtm.example,Product Designer,rachel.kim@northstargtm.example,Design,"Figma, Notion, Slack",Owns product design.
+Julian Price,julian.price@northstargtm.example,VP Engineering,rachel.kim@northstargtm.example,Engineering,"GitHub, Jira, Datadog, Slack",Owns engineering delivery.
+Sofia Russo,sofia.russo@northstargtm.example,Engineering Manager,julian.price@northstargtm.example,Engineering,"GitHub, Jira, Datadog, Slack",Manages product engineering.
+Henry Walsh,henry.walsh@northstargtm.example,Full-Stack Engineer,sofia.russo@northstargtm.example,Engineering,"GitHub, Jira, Vercel, Slack",Builds product features.
+Grace Ito,grace.ito@northstargtm.example,Data Analyst,leah.thompson@northstargtm.example,Revenue Operations,"Snowflake, Tableau, Salesforce, Slack",Revenue reporting and dashboards.
+Owen Brooks,owen.brooks@northstargtm.example,Finance & People Ops Manager,morgan.hayes@northstargtm.example,Finance & People Ops,"QuickBooks, Gusto, Google Sheets, Slack","Finance, hiring operations, payroll coordination."

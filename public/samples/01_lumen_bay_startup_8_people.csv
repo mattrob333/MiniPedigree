@@ -1,0 +1,9 @@
+name,email,title,manager_email,department,known_tools,notes
+Avery Collins,avery.collins@lumenbay.example,Founder & CEO,,Executive,"Slack, Google Workspace, Notion",Root executive; good small-org chart demo.
+Maya Brooks,maya.brooks@lumenbay.example,Head of Product,avery.collins@lumenbay.example,Product,"Notion, Linear, Figma, Slack",Owns product roadmap and discovery.
+Ethan Reed,ethan.reed@lumenbay.example,Founding Engineer,maya.brooks@lumenbay.example,Engineering,"GitHub, Linear, Vercel, Supabase",Builds core application and integrations.
+Noah Grant,noah.grant@lumenbay.example,AI Automation Engineer,maya.brooks@lumenbay.example,Engineering,"OpenAI, LangGraph, GitHub, Slack",Builds internal AI workflows and agent prototypes.
+Priya Shah,priya.shah@lumenbay.example,Head of Revenue,avery.collins@lumenbay.example,Revenue,"HubSpot, Gmail, Apollo, Slack",Owns sales pipeline and partnerships.
+Lucas Meyer,lucas.meyer@lumenbay.example,Account Executive,priya.shah@lumenbay.example,Sales,"HubSpot, Gmail, Slack",Owns prospect outreach and deal follow-up.
+Camila Torres,camila.torres@lumenbay.example,Customer Success Manager,priya.shah@lumenbay.example,Customer Success,"HubSpot, Intercom, Notion, Slack",Owns customer onboarding and renewals.
+Jordan Kim,jordan.kim@lumenbay.example,Operations Coordinator,avery.collins@lumenbay.example,Operations,"Google Sheets, Notion, Slack","Owns scheduling, vendor ops, and internal admin."

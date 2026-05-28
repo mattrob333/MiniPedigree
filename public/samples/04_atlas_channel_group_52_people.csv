@@ -1,0 +1,53 @@
+name,email,title,manager_email,department,known_tools,notes
+Adam Westbrook,adam.westbrook@atlaschannel.example,Chief Executive Officer,,Executive,"Google Workspace, Slack, Notion",Root executive; larger channel partner org demo.
+Kelly Ramirez,kelly.ramirez@atlaschannel.example,Chief Operating Officer,adam.westbrook@atlaschannel.example,Operations,"Monday.com, Slack, Google Workspace",Owns operating cadence and partner delivery.
+David Chen,david.chen@atlaschannel.example,Chief Revenue Officer,adam.westbrook@atlaschannel.example,Revenue,"Salesforce, Clari, Gong, Slack",Owns sales and partner revenue.
+Monica Grant,monica.grant@atlaschannel.example,Chief Technology Officer,adam.westbrook@atlaschannel.example,Technology,"GitHub, Jira, Datadog, Slack",Owns platform and internal technology.
+Irene Foster,irene.foster@atlaschannel.example,Chief Information Security Officer,adam.westbrook@atlaschannel.example,Security & Compliance,"Okta, Microsoft Defender, Jira, Slack",Owns security and compliance.
+Patrick Doyle,patrick.doyle@atlaschannel.example,Chief Financial Officer,adam.westbrook@atlaschannel.example,Finance,"NetSuite, Bill.com, Google Sheets",Owns finance and planning.
+Samantha Lee,samantha.lee@atlaschannel.example,VP Partner Success,kelly.ramirez@atlaschannel.example,Partner Success,"Salesforce, Zendesk, Slack, Notion",Owns partner success programs.
+Nolan Hughes,nolan.hughes@atlaschannel.example,Director of Partner Onboarding,samantha.lee@atlaschannel.example,Partner Success,"Salesforce, Asana, Notion, Slack",Owns onboarding playbooks.
+Bella Martin,bella.martin@atlaschannel.example,Partner Onboarding Manager,nolan.hughes@atlaschannel.example,Partner Success,"Salesforce, Asana, Slack",Partner onboarding manager.
+Omar Siddiqui,omar.siddiqui@atlaschannel.example,Partner Onboarding Specialist,bella.martin@atlaschannel.example,Partner Success,"Salesforce, Asana, Slack",Onboarding specialist.
+Chloe Rivers,chloe.rivers@atlaschannel.example,Partner Enablement Manager,nolan.hughes@atlaschannel.example,Partner Success,"Notion, LMS, Slack",Enablement and training.
+Luis Herrera,luis.herrera@atlaschannel.example,Partner Support Manager,samantha.lee@atlaschannel.example,Partner Support,"Zendesk, Salesforce, Slack",Support operations.
+Fatima Noor,fatima.noor@atlaschannel.example,Partner Support Specialist,luis.herrera@atlaschannel.example,Partner Support,"Zendesk, Salesforce, Slack",Support tickets.
+Gavin Moore,gavin.moore@atlaschannel.example,Partner Support Specialist,luis.herrera@atlaschannel.example,Partner Support,"Zendesk, Salesforce, Slack",Support tickets.
+Ryan Cooper,ryan.cooper@atlaschannel.example,VP Vendor Relations,kelly.ramirez@atlaschannel.example,Vendor Relations,"Salesforce, Airtable, Slack",Owns vendor ecosystem.
+Alina Petrova,alina.petrova@atlaschannel.example,Director of Vendor Programs,ryan.cooper@atlaschannel.example,Vendor Relations,"Airtable, Salesforce, Google Sheets",Vendor program operations.
+Victor Reyes,victor.reyes@atlaschannel.example,Vendor Program Manager,alina.petrova@atlaschannel.example,Vendor Relations,"Airtable, Salesforce, Slack",Vendor profiles and scorecards.
+Molly Jenkins,molly.jenkins@atlaschannel.example,Vendor Data Analyst,alina.petrova@atlaschannel.example,Vendor Relations,"Airtable, Snowflake, Tableau",Vendor data quality.
+Quinn Adler,quinn.adler@atlaschannel.example,Vendor Contract Coordinator,ryan.cooper@atlaschannel.example,Vendor Relations,"DocuSign, Google Drive, Salesforce",Contract tracking.
+Bradley Scott,bradley.scott@atlaschannel.example,VP Sales,david.chen@atlaschannel.example,Sales,"Salesforce, Gong, Outreach, Slack",Sales leadership.
+Mei Tan,mei.tan@atlaschannel.example,Director of Enterprise Sales,bradley.scott@atlaschannel.example,Sales,"Salesforce, Gong, Outreach, Slack",Enterprise sales.
+Jason Miller,jason.miller@atlaschannel.example,Enterprise Account Executive,mei.tan@atlaschannel.example,Sales,"Salesforce, Outreach, Gmail, Slack",Enterprise deals.
+Isabella Wright,isabella.wright@atlaschannel.example,Enterprise Account Executive,mei.tan@atlaschannel.example,Sales,"Salesforce, Outreach, Gmail, Slack",Enterprise deals.
+Aaron Patel,aaron.patel@atlaschannel.example,Director of Mid-Market Sales,bradley.scott@atlaschannel.example,Sales,"Salesforce, Gong, Outreach, Slack",Mid-market sales.
+Hannah Cook,hannah.cook@atlaschannel.example,Mid-Market Account Executive,aaron.patel@atlaschannel.example,Sales,"Salesforce, Outreach, Gmail, Slack",Mid-market deals.
+Derek Young,derek.young@atlaschannel.example,Mid-Market Account Executive,aaron.patel@atlaschannel.example,Sales,"Salesforce, Outreach, Gmail, Slack",Mid-market deals.
+Trina Wallace,trina.wallace@atlaschannel.example,SDR Manager,bradley.scott@atlaschannel.example,Sales Development,"Apollo, Outreach, Salesforce, Slack",SDR manager.
+Ian Brooks,ian.brooks@atlaschannel.example,Sales Development Rep,trina.wallace@atlaschannel.example,Sales Development,"Apollo, Outreach, Salesforce",Outbound prospecting.
+Zoe Kim,zoe.kim@atlaschannel.example,Sales Development Rep,trina.wallace@atlaschannel.example,Sales Development,"Apollo, Outreach, Salesforce",Outbound prospecting.
+Evan Walsh,evan.walsh@atlaschannel.example,Revenue Operations Director,david.chen@atlaschannel.example,Revenue Operations,"Salesforce, Clari, Snowflake, Tableau",Revenue operations.
+Paige Turner,paige.turner@atlaschannel.example,CRM Administrator,evan.walsh@atlaschannel.example,Revenue Operations,"Salesforce, Gearset, Slack",CRM administration.
+Nikhil Desai,nikhil.desai@atlaschannel.example,Revenue Analyst,evan.walsh@atlaschannel.example,Revenue Operations,"Snowflake, Tableau, Salesforce",Revenue analysis.
+Olga Markovic,olga.markovic@atlaschannel.example,Marketing Director,david.chen@atlaschannel.example,Marketing,"HubSpot, Webflow, Google Analytics, Slack",Marketing programs.
+Jenna Blake,jenna.blake@atlaschannel.example,Content Marketing Manager,olga.markovic@atlaschannel.example,Marketing,"HubSpot, Webflow, Google Docs",Content marketing.
+Mateo Cruz,mateo.cruz@atlaschannel.example,Demand Generation Manager,olga.markovic@atlaschannel.example,Marketing,"HubSpot, LinkedIn Ads, Google Analytics",Demand generation.
+Clara Jensen,clara.jensen@atlaschannel.example,VP Engineering,monica.grant@atlaschannel.example,Engineering,"GitHub, Jira, Datadog, Slack",Engineering leadership.
+Andre Wilson,andre.wilson@atlaschannel.example,Platform Engineering Manager,clara.jensen@atlaschannel.example,Engineering,"GitHub, Jira, AWS, Datadog",Platform engineering.
+Marta Ruiz,marta.ruiz@atlaschannel.example,Backend Engineer,andre.wilson@atlaschannel.example,Engineering,"GitHub, AWS, Jira",Backend services.
+Steven Park,steven.park@atlaschannel.example,Frontend Engineer,andre.wilson@atlaschannel.example,Engineering,"GitHub, Vercel, Jira",Frontend application.
+Yasmin Ali,yasmin.ali@atlaschannel.example,Data Engineering Manager,clara.jensen@atlaschannel.example,Data,"Snowflake, dbt, Airflow, GitHub",Data platform.
+Colin Price,colin.price@atlaschannel.example,Data Engineer,yasmin.ali@atlaschannel.example,Data,"Snowflake, dbt, Airflow",Data pipelines.
+Rosa Bennett,rosa.bennett@atlaschannel.example,Product Manager,monica.grant@atlaschannel.example,Product,"Jira, Figma, Notion, Slack",Product requirements.
+Seth Morgan,seth.morgan@atlaschannel.example,UX Designer,rosa.bennett@atlaschannel.example,Design,"Figma, Notion, Slack",UX design.
+Miles Porter,miles.porter@atlaschannel.example,Security Engineering Manager,irene.foster@atlaschannel.example,Security,"Okta, Wiz, Microsoft Defender, Jira",Security engineering.
+Nora Fields,nora.fields@atlaschannel.example,IAM Analyst,miles.porter@atlaschannel.example,Security,"Okta, Microsoft Entra, ServiceNow",Identity and access.
+Tobias Klein,tobias.klein@atlaschannel.example,GRC Manager,irene.foster@atlaschannel.example,Compliance,"Vanta, Google Drive, Jira",Compliance programs.
+Lena Strauss,lena.strauss@atlaschannel.example,Compliance Analyst,tobias.klein@atlaschannel.example,Compliance,"Vanta, Google Drive, Slack",Audit evidence.
+Harper Stone,harper.stone@atlaschannel.example,Finance Director,patrick.doyle@atlaschannel.example,Finance,"NetSuite, Bill.com, Google Sheets",Finance operations.
+Micah Grant,micah.grant@atlaschannel.example,FP&A Analyst,harper.stone@atlaschannel.example,Finance,"NetSuite, Google Sheets, Tableau",Planning analysis.
+Bianca Ross,bianca.ross@atlaschannel.example,Accounts Receivable Specialist,harper.stone@atlaschannel.example,Finance,"NetSuite, Bill.com, Salesforce",Receivables.
+Teresa Lang,teresa.lang@atlaschannel.example,People Operations Director,kelly.ramirez@atlaschannel.example,People Operations,"BambooHR, Gusto, Slack",People operations.
+Ali Johnson,ali.johnson@atlaschannel.example,Recruiting Coordinator,teresa.lang@atlaschannel.example,People Operations,"Greenhouse, BambooHR, Gmail",Recruiting coordination.

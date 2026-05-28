@@ -1,0 +1,35 @@
+name,email,title,manager_email,department,known_tools,notes
+Dr. Claire Donovan,claire.donovan@summitclinic.example,Chief Executive Officer,,Executive,"Google Workspace, Slack, BoardEffect",Root executive.
+Marcus Ellison,marcus.ellison@summitclinic.example,Chief Operating Officer,claire.donovan@summitclinic.example,Operations,"Smartsheet, Slack, Google Workspace",Owns clinic operations.
+Dr. Hannah Lee,hannah.lee@summitclinic.example,Chief Medical Officer,claire.donovan@summitclinic.example,Clinical,"Epic, Doximity, Slack",Owns clinical quality and provider policy.
+Anika Rao,anika.rao@summitclinic.example,Chief Financial Officer,claire.donovan@summitclinic.example,Finance,"NetSuite, Bill.com, Google Sheets",Owns finance and revenue cycle.
+Peter Novak,peter.novak@summitclinic.example,Chief Information Officer,claire.donovan@summitclinic.example,IT,"ServiceNow, Okta, Microsoft 365, Slack",Owns IT and security.
+Lydia Nguyen,lydia.nguyen@summitclinic.example,Director of Clinic Operations,marcus.ellison@summitclinic.example,Clinic Operations,"Epic, Smartsheet, Slack",Manages clinic sites.
+Jamal Rivera,jamal.rivera@summitclinic.example,North Region Clinic Manager,lydia.nguyen@summitclinic.example,Clinic Operations,"Epic, Smartsheet, Slack",North region clinic manager.
+Emily Foster,emily.foster@summitclinic.example,South Region Clinic Manager,lydia.nguyen@summitclinic.example,Clinic Operations,"Epic, Smartsheet, Slack",South region clinic manager.
+Carlos Mendoza,carlos.mendoza@summitclinic.example,Patient Access Supervisor,jamal.rivera@summitclinic.example,Patient Access,"Epic, Five9, Slack",Front desk and scheduling workflows.
+Olivia Hart,olivia.hart@summitclinic.example,Patient Access Coordinator,carlos.mendoza@summitclinic.example,Patient Access,"Epic, Five9, Slack",Scheduling and intake.
+Natalie Green,natalie.green@summitclinic.example,Patient Access Coordinator,carlos.mendoza@summitclinic.example,Patient Access,"Epic, Five9, Slack",Scheduling and intake.
+Rafael Torres,rafael.torres@summitclinic.example,Clinical Operations Supervisor,emily.foster@summitclinic.example,Clinical Operations,"Epic, Slack, Smartsheet",Clinic staffing and room utilization.
+Megan Boyd,megan.boyd@summitclinic.example,Nurse Team Lead,rafael.torres@summitclinic.example,Clinical Operations,"Epic, Slack",Nursing schedule and escalations.
+Aisha Khan,aisha.khan@summitclinic.example,Registered Nurse,megan.boyd@summitclinic.example,Clinical Operations,"Epic, Slack",Clinical patient care.
+Thomas Reed,thomas.reed@summitclinic.example,Medical Assistant,megan.boyd@summitclinic.example,Clinical Operations,"Epic, Slack",Rooming and prep tasks.
+Dr. Samuel Pierce,samuel.pierce@summitclinic.example,Medical Director,hannah.lee@summitclinic.example,Clinical,"Epic, Slack",Provider management.
+Dr. Maya Kapoor,maya.kapoor@summitclinic.example,Primary Care Physician,samuel.pierce@summitclinic.example,Clinical,"Epic, Doximity, Slack",Patient care and documentation.
+Dr. Alan Brooks,alan.brooks@summitclinic.example,Primary Care Physician,samuel.pierce@summitclinic.example,Clinical,"Epic, Doximity, Slack",Patient care and documentation.
+Janet Wallace,janet.wallace@summitclinic.example,Director of Revenue Cycle,anika.rao@summitclinic.example,Revenue Cycle,"Epic, Waystar, NetSuite, Slack",Claims and billing operations.
+Andre Mills,andre.mills@summitclinic.example,Billing Supervisor,janet.wallace@summitclinic.example,Revenue Cycle,"Epic, Waystar, Slack",Billing queue management.
+Priya Nair,priya.nair@summitclinic.example,Claims Specialist,andre.mills@summitclinic.example,Revenue Cycle,"Epic, Waystar, Slack",Claims review.
+Kevin Shaw,kevin.shaw@summitclinic.example,Denials Analyst,andre.mills@summitclinic.example,Revenue Cycle,"Epic, Waystar, Excel",Denials research and reporting.
+Sarah Whitman,sarah.whitman@summitclinic.example,Controller,anika.rao@summitclinic.example,Finance,"NetSuite, Bill.com, Excel",Accounting operations.
+Felix Moreno,felix.moreno@summitclinic.example,Accounts Payable Specialist,sarah.whitman@summitclinic.example,Finance,"Bill.com, NetSuite, Excel",Vendor payments.
+Evelyn Cho,evelyn.cho@summitclinic.example,IT Operations Manager,peter.novak@summitclinic.example,IT,"ServiceNow, Okta, Microsoft 365, Slack",IT service desk and endpoints.
+Brian OConnor,brian.oconnor@summitclinic.example,Service Desk Analyst,evelyn.cho@summitclinic.example,IT,"ServiceNow, Okta, Microsoft 365",Support tickets.
+Farah Ali,farah.ali@summitclinic.example,Security Analyst,peter.novak@summitclinic.example,Security,"Okta, Microsoft Defender, ServiceNow",Security monitoring.
+Rebecca Sloan,rebecca.sloan@summitclinic.example,HR Director,claire.donovan@summitclinic.example,Human Resources,"Gusto, Google Workspace, Slack","HR, recruiting, employee records."
+Daniel Wu,daniel.wu@summitclinic.example,Recruiting Coordinator,rebecca.sloan@summitclinic.example,Human Resources,"Greenhouse, Gusto, Gmail",Recruiting coordination.
+Maria Santos,maria.santos@summitclinic.example,Training Manager,rebecca.sloan@summitclinic.example,Human Resources,"LMS, Google Drive, Slack",Training and compliance.
+George Bennett,george.bennett@summitclinic.example,Facilities Manager,marcus.ellison@summitclinic.example,Facilities,"MaintainX, Slack, Google Sheets",Facilities operations.
+Heather Kim,heather.kim@summitclinic.example,Facilities Coordinator,george.bennett@summitclinic.example,Facilities,"MaintainX, Slack",Work orders and vendors.
+Neil Patel,neil.patel@summitclinic.example,Quality Improvement Manager,hannah.lee@summitclinic.example,Quality,"Epic, Tableau, Google Sheets",Quality metrics and compliance.
+Tessa Morgan,tessa.morgan@summitclinic.example,Compliance Coordinator,neil.patel@summitclinic.example,Quality,"Epic, Google Drive, Slack",Compliance documentation.
