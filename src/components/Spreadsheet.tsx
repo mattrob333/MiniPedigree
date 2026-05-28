@@ -53,7 +53,7 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
           <Icon name="network" size={12} /> Org Map
         </button>
         <button className="btn btn-sm btn-primary" onClick={onOpenInput}>
-          <Icon name="sparkles" size={12} /> Start Responsibility Input
+          <Icon name="sparkles" size={12} /> Start Mapping Session
         </button>
       </div>
 

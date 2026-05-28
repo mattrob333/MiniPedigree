@@ -22,13 +22,26 @@ export function initialPedigreeState(people: Person[]): PedigreeState {
   return out;
 }
 
+export interface ApplyOptions {
+  /** Only apply to these person ids (the mapping-session scope). */
+  scopeIds?: string[];
+  /** Label of the session, recorded as responsibility source + lastSession. */
+  sessionLabel?: string;
+  /** Map of personId -> manager name, for lineage ("assigned by manager"). */
+  people?: Person[];
+}
+
 /** Apply a parsed-discovery map onto the pedigree state (PRD §6 step 6). */
 export function applyParsed(
   people: Person[],
   parsed: ParsedMap,
   existing: PedigreeState,
+  opts: ApplyOptions = {},
 ): PedigreeState {
   const next: PedigreeState = { ...existing };
+  const scope = opts.scopeIds ? new Set(opts.scopeIds) : null;
+  const managerName = (p: Person) =>
+    p.managerId ? people.find((x) => x.id === p.managerId)?.name : undefined;
 
   for (const person of people) {
     const data = parsed[person.id];
@@ -38,7 +51,8 @@ export function applyParsed(
       tasks: { delegatable: [], approval: [], not_delegatable: [] },
       agents: [],
     };
-    if (!data) {
+    // Out of scope or no data → keep prior state untouched.
+    if (!data || (scope && !scope.has(person.id))) {
       next[person.id] = prev;
       continue;
     }
@@ -56,7 +70,14 @@ export function applyParsed(
       r.tasks.not_delegatable.forEach((t, i) =>
         not_delegatable.push({ id: `${r.id}-n-${i}`, label: t, respId: r.id, respTitle: r.title }),
       );
-      return { id: r.id, title: r.title, suggestedAgent: suggestedAgentName(r.title) };
+      return {
+        id: r.id,
+        title: r.title,
+        suggestedAgent: suggestedAgentName(r.title),
+        source: opts.sessionLabel,
+        assignedByName: managerName(person),
+        confidence: r.confidence,
+      };
     });
 
     const status: Status = data.needsReview
@@ -74,6 +95,7 @@ export function applyParsed(
       responsibilities,
       tasks: { delegatable, approval, not_delegatable },
       agents: prev.agents,
+      lastSession: opts.sessionLabel ?? prev.lastSession,
     };
     next[person.id] = row;
   }
@@ -85,7 +107,11 @@ export function computeMetrics(people: Person[], pedigree: PedigreeState) {
   let respMapped = 0,
     delegTasks = 0,
     candidates = 0,
-    agentsBuilt = 0;
+    agentsBuilt = 0,
+    mappedPeople = 0,
+    needsDiscovery = 0,
+    readyForAgent = 0;
+  const MAPPED = new Set(["mapped", "ready", "generated"]);
   for (const p of people) {
     const ped = pedigree[p.id];
     if (!ped) continue;
@@ -93,8 +119,20 @@ export function computeMetrics(people: Person[], pedigree: PedigreeState) {
     delegTasks += ped.tasks.delegatable.length;
     candidates += new Set(ped.tasks.delegatable.map((t) => t.respId)).size;
     agentsBuilt += ped.agents.length;
+    if (MAPPED.has(ped.status)) mappedPeople++;
+    if (ped.status === "needs-discovery") needsDiscovery++;
+    if (ped.status === "ready" || ped.status === "generated") readyForAgent++;
   }
-  return { peopleCount: people.length, respMapped, delegTasks, candidates, agentsBuilt };
+  return {
+    peopleCount: people.length,
+    respMapped,
+    delegTasks,
+    candidates,
+    agentsBuilt,
+    mappedPeople,
+    needsDiscovery,
+    readyForAgent,
+  };
 }
 
 function joinLabels(items: { label?: string; title?: string }[]): string {

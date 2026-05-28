@@ -1,0 +1,171 @@
+/* ============================================================
+   v2 — Department-aware nodes, readability, legends, sessions
+   ============================================================ */
+
+/* Node readability (detailed) */
+.org-node-head .name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.org-node-head .title { font-size: 11px; line-height: 1.25; color: var(--text-3); margin-top: 1px; }
+.org-node:hover { transform: translateY(-1px); }            /* keep dept border on hover */
+
+/* Department row */
+.org-node-dept { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.org-node-dept .dept-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.org-node-dept .dept-pill {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px;
+  border: 1px solid; letter-spacing: 0.01em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  font-family: var(--font-sans);
+}
+
+/* Metrics row */
+.org-node-metrics {
+  margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--border-1);
+  display: flex; align-items: center; gap: 14px; font-size: 11px;
+  color: var(--text-2); font-variant-numeric: tabular-nums;
+}
+.org-node-metrics .m { display: inline-flex; align-items: center; gap: 4px; }
+.org-node-metrics .m b { font-family: var(--font-mono); font-weight: 700; font-size: 10.5px; color: var(--text-1); }
+.org-node-metrics .m b.cy { color: var(--cyan); }
+.org-node-metrics .m b.gr { color: var(--green); }
+.org-node-metrics .m b.dim { color: var(--text-4); }
+.org-node-metrics .m.team {
+  margin-left: auto; color: var(--text-3); font-size: 10px;
+  font-family: var(--font-mono); letter-spacing: 0.02em;
+}
+
+/* Compact mode — meaningfully denser */
+.org-node.compact { width: 200px; }
+.org-node.compact .org-node-body { padding: 10px 12px 10px; }
+.org-node.compact .org-node-head .name { font-size: 12px; }
+.org-node.compact .org-node-head .title { font-size: 10px; }
+.org-node.compact .org-node-metrics { margin-top: 8px; padding-top: 8px; gap: 10px; font-size: 10.5px; }
+.org-node.compact .org-node-foot { padding: 5px 12px; }
+.org-node.compact .org-node-foot .badge { font-size: 9.5px; }
+
+/* New status badges */
+.badge.session-scheduled { color: var(--yellow); border-color: #5a4a14; background: rgba(250,204,21,0.06); }
+.badge.session-scheduled .dot { background: var(--yellow); }
+.badge.session-captured { color: var(--cyan); border-color: var(--border-cyan); background: rgba(56,213,255,0.06); }
+.badge.session-captured .dot { background: var(--cyan); box-shadow: 0 0 5px rgba(56,213,255,0.6); }
+
+/* Department legend / focus */
+.dept-legend {
+  position: relative;
+  background: var(--surface-glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--border-1); border-radius: var(--r-3);
+  padding: 10px 12px; width: 230px;
+}
+.dept-legend .lh {
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-4);
+  letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.dept-legend .row {
+  display: flex; align-items: center; gap: 8px; padding: 3px 5px; margin: 0 -5px;
+  font-size: 11px; color: var(--text-2); border-radius: 5px; cursor: pointer;
+}
+.dept-legend .row:hover { background: var(--bg-hover); }
+.dept-legend .row[data-active="true"] { background: var(--row-selected); }
+.dept-legend .row .swatch { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 9px; }
+.dept-legend .row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dept-legend .row .ct { font-family: var(--font-mono); font-size: 10px; color: var(--text-4); }
+
+/* Focus banner (top center) */
+.focus-banner {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  z-index: 11; display: flex; align-items: center; gap: 12px;
+  background: var(--surface-glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--border-cyan); border-radius: 20px;
+  padding: 6px 8px 6px 14px; font-size: 12px; color: var(--text-1);
+  box-shadow: 0 8px 24px -12px rgba(0,0,0,0.4);
+}
+.focus-banner .meta { color: var(--text-3); font-size: 11px; font-family: var(--font-mono); }
+
+/* Org map select (department / status filters) */
+.orgmap-select {
+  appearance: none; -webkit-appearance: none;
+  background: var(--bg-2); border: 1px solid var(--border-2); border-radius: var(--r-2);
+  color: var(--text-1); font-size: 11.5px; padding: 4px 26px 4px 10px; height: 28px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position: calc(100% - 14px) center, calc(100% - 10px) center;
+  background-size: 4px 4px, 4px 4px; background-repeat: no-repeat;
+}
+
+/* Next Recommended Sessions panel */
+.next-sessions {
+  position: absolute; right: 14px; top: 70px; z-index: 11; width: 280px;
+  background: var(--surface-glass); backdrop-filter: blur(10px);
+  border: 1px solid var(--border-1); border-radius: var(--r-3);
+  box-shadow: 0 16px 40px -18px rgba(0,0,0,0.5); overflow: hidden;
+  max-height: calc(100% - 220px); display: flex; flex-direction: column;
+}
+.next-sessions .ns-head {
+  padding: 10px 12px; border-bottom: 1px solid var(--border-1);
+  display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600;
+  background: var(--bg-1);
+}
+.next-sessions .ns-head .count {
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-4);
+  background: var(--bg-3); border-radius: 8px; padding: 1px 6px;
+}
+.next-sessions .ns-head .x { margin-left: auto; color: var(--text-4); }
+.next-sessions .ns-head .x:hover { color: var(--text-1); }
+.next-sessions .ns-body { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.ns-card {
+  border: 1px solid var(--border-1); border-radius: var(--r-2);
+  background: var(--bg-2); padding: 10px; border-left: 3px solid var(--cyan);
+}
+.ns-card .nm { font-size: 12.5px; font-weight: 600; color: var(--text-1); }
+.ns-card .ti { font-size: 11px; color: var(--text-3); margin: 1px 0 2px; }
+.ns-card .rsn { font-size: 10.5px; color: var(--text-4); margin-bottom: 8px; line-height: 1.4; }
+.next-sessions .ns-empty { padding: 16px 12px; font-size: 11.5px; color: var(--text-4); font-style: italic; text-align: center; }
+
+/* Collapsed Next-sessions launcher button */
+.ns-fab {
+  position: absolute; right: 14px; top: 70px; z-index: 11;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface-glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--border-cyan); border-radius: 20px; color: var(--cyan);
+  padding: 6px 12px; font-size: 12px; font-weight: 600;
+}
+.ns-fab .count { background: var(--cyan); color: var(--primary-text); border-radius: 8px; font-size: 10px; padding: 1px 6px; }
+
+/* Mapping wizard step rail */
+.wizard-steps { display: flex; gap: 6px; align-items: center; margin-bottom: 14px; }
+.wizard-steps .ws { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-4); }
+.wizard-steps .ws .n {
+  width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 10px; font-family: var(--font-mono); border: 1px solid var(--border-2); color: var(--text-4);
+}
+.wizard-steps .ws[data-active="true"] { color: var(--text-1); }
+.wizard-steps .ws[data-active="true"] .n { background: var(--cyan); border-color: var(--cyan); color: var(--primary-text); }
+.wizard-steps .ws[data-done="true"] .n { border-color: var(--green); color: var(--green); }
+.wizard-steps .sep { flex: 1; height: 1px; background: var(--border-1); }
+
+.scope-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
+.scope-person {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--border-1); border-radius: var(--r-2); background: var(--bg-2); font-size: 12.5px;
+}
+.scope-person .avatar {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 10px; font-weight: 600; background: linear-gradient(135deg, var(--avatar-from), var(--avatar-to));
+  color: var(--text-2); border: 1px solid var(--border-2);
+}
+.scope-person .owner-tag { margin-left: auto; }
+
+/* Metrics progress bar */
+.map-progress { padding: 8px 20px 12px; background: var(--bg-1); border-top: 1px solid var(--border-1); }
+.map-progress .lbl {
+  display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); margin-bottom: 5px;
+}
+.map-progress .bar { height: 6px; border-radius: 4px; background: var(--bg-3); overflow: hidden; }
+.map-progress .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--green)); transition: width 320ms; }
+
+/* Lineage chips in drawer */
+.lineage { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--text-3); margin-top: 8px; }
+.lineage .chip { padding: 2px 8px; border: 1px solid var(--border-2); border-radius: 12px; background: var(--bg-2); }
+.lineage .arrow { color: var(--text-5); }
+
+/* drawer section source line */
+.resp-source { font-size: 10.5px; color: var(--text-4); font-family: var(--font-mono); margin-top: 3px; }

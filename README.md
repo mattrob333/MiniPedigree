@@ -14,6 +14,33 @@ be created from specific responsibilities owned by specific humans.**
 Person → Responsibility → Task → Delegation Decision → Agent Candidate → Manifest → Standard System Prompt
 ```
 
+The **org map is the primary workflow surface**: you walk the org top-down and "light it up"
+layer by layer as responsibilities are discovered, reviewed, delegated, and turned into agents.
+
+### Department-aware, progressive mapping workflow
+
+```
+Upload CSV → Org Map → Start Leadership Session (CEO + reports)
+  → nodes light up → Next Recommended Sessions suggest department heads
+  → run Department Sessions → responsibilities pass down to teams
+  → identify delegatable tasks → generate Agent Manifest + System Prompt
+```
+
+- **Scoped mapping sessions** — a guided wizard (Scope → Participants → Input → Review) replaces
+  one giant transcript. Session type is recommended from the node: *leadership* (no manager + reports),
+  *department* (manager + reports), *individual role* (no reports), or *clarification* (blocked/unclear).
+  Mentions outside the chosen scope are flagged, not silently applied. "Insert Demo Session" generates
+  a realistic transcript from the actual selected people, so it works on any uploaded CSV.
+- **Department color coding** — every node carries a department accent bar, pill, and dot (curated
+  dark-mode palette; unknown departments get a deterministic hashed color). A department legend with
+  per-dept mapped counts doubles as a **focus mode** (click a department to highlight it and dim the rest,
+  keeping the parent chain visible). Status (rings/badges) is rendered independently of department color.
+- **Next Recommended Sessions** panel guides you to the next department to map.
+- **Lineage** — the drawer shows manager → person assignment and the session each responsibility came from,
+  plus team-mapped progress (`Team 2/4`) on manager nodes.
+- **Mapping statuses**: needs-discovery → session-scheduled → session-captured → needs-review →
+  responsibilities-mapped → ready-for-agent → agent-generated (and blocked / needs-clarification).
+
 ## What it does
 
 1. **Upload** a people CSV (`name, email, title, manager_email, department, known_tools, notes`).

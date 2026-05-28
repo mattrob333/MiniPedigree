@@ -2,12 +2,42 @@
 
 export type Status =
   | "needs-discovery"
+  | "session-scheduled"
+  | "session-captured"
   | "needs-review"
   | "parsed"
   | "mapped"
   | "ready"
   | "generated"
   | "blocked";
+
+export type MappingSessionType =
+  | "leadership_session"
+  | "department_session"
+  | "individual_role_session"
+  | "clarification_session";
+
+export type SessionScope =
+  | "self"
+  | "self_and_reports"
+  | "unmapped_reports"
+  | "department"
+  | "leadership";
+
+export interface RecommendedSession {
+  personId: string;
+  type: MappingSessionType;
+  reason: string;
+}
+
+export interface MappingSession {
+  id: string;
+  type: MappingSessionType;
+  scopeOwnerPersonId: string;
+  scopedPersonIds: string[];
+  status: "draft" | "captured" | "parsed" | "reviewed" | "applied";
+  rawInput: string;
+}
 
 export type DelegationClass =
   | "delegatable"
@@ -35,6 +65,9 @@ export interface ResponsibilityRow {
   id: string;
   title: string;
   suggestedAgent?: string;
+  source?: string; // e.g. "Leadership Session", "Department Session · Dr. Claire Donovan"
+  assignedByName?: string; // manager who assigned this responsibility (lineage)
+  confidence?: number;
 }
 
 export interface TaskItem {
@@ -74,6 +107,7 @@ export interface PedigreeRow {
   responsibilities: ResponsibilityRow[];
   tasks: PersonTasks;
   agents: AgentRecord[];
+  lastSession?: string; // label of the most recent session that mapped this person
 }
 
 export type PedigreeState = Record<string, PedigreeRow>;

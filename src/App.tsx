@@ -4,19 +4,18 @@ import { UploadScreen } from "./components/UploadScreen";
 import { Spreadsheet } from "./components/Spreadsheet";
 import { OrgMap } from "./components/OrgMap";
 import { Drawer, type CreateAgentCtx } from "./components/Drawer";
-import { ResponsibilityInputModal } from "./components/modals/ResponsibilityInputModal";
-import { ParseReviewModal } from "./components/modals/ParseReviewModal";
+import { MappingSessionWizard } from "./components/MappingSessionWizard";
 import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
 import { Toasts, type Toast } from "./components/Toasts";
 import { Icon } from "./components/Icon";
 
-import type { AgentRecord, ParsedMap, PedigreeState, Person } from "./types";
+import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
-import { DEMO_PEOPLE, DEMO_PARSED, DEMO_TRANSCRIPT } from "./lib/demoData";
+import { DEMO_PEOPLE } from "./lib/demoData";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
-import { parseDiscovery } from "./lib/api";
 import { buildAgentArtifacts, newAgentRecord } from "./lib/agent";
+import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
 import { saveWorkspace } from "./lib/persist";
 
@@ -27,23 +26,17 @@ export default function App() {
   const [themePref, setThemePref, resolvedTheme] = useTheme();
 
   const [screen, setScreen] = useState<Screen>("upload");
-  const [tab, setTab] = useState<Tab>("spreadsheet");
+  const [tab, setTab] = useState<Tab>("orgmap");
 
   const [people, setPeople] = useState<Person[]>([]);
   const [pedigree, setPedigree] = useState<PedigreeState>({});
   const [workspaceName, setWorkspaceName] = useState("Untitled Workspace");
-  const [isDemo, setIsDemo] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const [showInput, setShowInput] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const [parsedMap, setParsedMap] = useState<ParsedMap | null>(null);
-  const [parseSource, setParseSource] = useState<"ai" | "local">("local");
-  const [parsing, setParsing] = useState(false);
-
+  const [wizardPersonId, setWizardPersonId] = useState<string | null>(null);
   const [createAgentCtx, setCreateAgentCtx] = useState<CreateAgentCtx | null>(null);
   const [activeAgent, setActiveAgent] = useState<AgentRecord | null>(null);
 
@@ -56,16 +49,14 @@ export default function App() {
 
   const metrics = useMemo(() => computeMetrics(people, pedigree), [people, pedigree]);
   const selectedPerson = useMemo(() => people.find((p) => p.id === selectedId), [people, selectedId]);
+  const recommended = useMemo(() => computeNextRecommendedSessions(people, pedigree), [people, pedigree]);
+  const rootId = useMemo(() => people.find((p) => !p.managerId)?.id ?? people[0]?.id, [people]);
   const topDepartment = useMemo(() => {
     const counts = new Map<string, number>();
     for (const p of people) counts.set(p.department, (counts.get(p.department) ?? 0) + 1);
-    let best = "";
-    let n = 0;
-    for (const [k, v] of counts) if (v > n) { best = k; n = v; }
-    return counts.size > 1 ? "All" : best;
+    return counts.size > 1 ? "All" : [...counts.keys()][0] ?? "";
   }, [people]);
 
-  // Persist workspace on change.
   useEffect(() => {
     if (screen !== "upload" && people.length) {
       const id = workspaceName.toLowerCase().replace(/\s+/g, "-");
@@ -73,7 +64,6 @@ export default function App() {
     }
   }, [people, pedigree, workspaceName, screen]);
 
-  // Keyboard tab shortcuts.
   useEffect(() => {
     if (screen !== "workspace") return;
     const onKey = (e: KeyboardEvent) => {
@@ -87,16 +77,14 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, metrics.agentsBuilt]);
 
-  // ── Upload handlers ──
-  const startWorkspace = (newPeople: Person[], name: string, demo: boolean) => {
+  const startWorkspace = (newPeople: Person[], name: string) => {
     setPeople(newPeople);
     setPedigree(initialPedigreeState(newPeople));
     setWorkspaceName(name);
-    setIsDemo(demo);
     setSelectedId(null);
     setDrawerOpen(false);
     setScreen("workspace");
-    setTab("spreadsheet");
+    setTab("orgmap");
   };
 
   const onUploadText = (text: string, fileName: string) => {
@@ -110,68 +98,38 @@ export default function App() {
       setUploadError(result.errors.join("\n"));
       return;
     }
-    startWorkspace(result.people, result.workspaceName, false);
+    startWorkspace(result.people, result.workspaceName);
     const warn = result.warnings.length ? ` · ${result.warnings.length} warning(s)` : "";
     pushToast("CSV imported", `${result.people.length} people loaded${warn}`);
   };
 
   const onUseDemo = () => {
-    startWorkspace(DEMO_PEOPLE, "Northwind Co.", true);
+    startWorkspace(DEMO_PEOPLE, "Northwind Co.");
     pushToast("Demo CSV imported", "4 people loaded · Revenue Ops");
   };
 
-  // ── Discovery parse ──
-  const onParse = async (text: string, scopeIds: string[] | undefined) => {
-    setShowInput(false);
-    setParsing(true);
-    try {
-      let parsed: ParsedMap;
-      let source: "ai" | "local" = "local";
-      if (isDemo && (!scopeIds || scopeIds.length === people.length || scopeIds.length === 0)) {
-        // Curated demo mapping (includes the deliberate "needs review" case).
-        parsed = DEMO_PARSED;
-      } else if (isDemo && scopeIds) {
-        parsed = Object.fromEntries(scopeIds.filter((id) => DEMO_PARSED[id]).map((id) => [id, DEMO_PARSED[id]]));
-        if (Object.keys(parsed).length === 0) {
-          const r = await parseDiscovery(people, text, scopeIds);
-          parsed = r.parsed;
-          source = r.source;
-        }
-      } else {
-        const r = await parseDiscovery(people, text, scopeIds);
-        parsed = r.parsed;
-        source = r.source;
-      }
-      setParsedMap(parsed);
-      setParseSource(source);
-      setShowReview(true);
-    } catch (e) {
-      pushToast("Parse failed", (e as Error).message);
-    } finally {
-      setParsing(false);
-    }
+  const onStartSession = (personId: string | undefined) => {
+    if (!personId) return;
+    setWizardPersonId(personId);
   };
 
-  const onApply = () => {
-    if (!parsedMap) return;
-    const next = applyParsed(people, parsedMap, pedigree);
+  const onApplyMapping = (args: { scopeIds: string[]; sessionType: MappingSessionType; sessionLabel: string; parsed: ParsedMap }) => {
+    const next = applyParsed(people, args.parsed, pedigree, {
+      scopeIds: args.scopeIds,
+      sessionLabel: args.sessionLabel,
+      people,
+    });
     setPedigree(next);
-    setShowReview(false);
-    pushToast("Responsibilities applied", "Spreadsheet and Org Map updated", true);
+    setWizardPersonId(null);
+    pushToast("Mapping applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}`, true);
   };
 
-  // ── Agent generation ──
   const onGenerateAgent = (ctx: GenerateCtx) => {
     const row = pedigree[ctx.person.id];
     if (!row) return;
     const artifacts = buildAgentArtifacts({
-      person: ctx.person,
-      row,
-      task: ctx.task,
-      respTitle: ctx.respTitle,
-      agentName: ctx.agentName,
-      policy: ctx.policy,
-      riskLevel: ctx.riskLevel,
+      person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
+      agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
     });
     const agent = newAgentRecord(
       { person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle, agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel },
@@ -190,6 +148,11 @@ export default function App() {
   };
 
   const onSelect = (id: string) => {
+    if (selectedId === id && drawerOpen) {
+      setDrawerOpen(false);
+      setSelectedId(null);
+      return;
+    }
     setSelectedId(id);
     setDrawerOpen(true);
   };
@@ -201,6 +164,8 @@ export default function App() {
   };
 
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
+  const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
+  const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
 
   return (
     <div className="app">
@@ -213,9 +178,7 @@ export default function App() {
         resolvedTheme={resolvedTheme}
       />
 
-      {screen === "upload" && (
-        <UploadScreen onUploadText={onUploadText} onUseDemo={onUseDemo} error={uploadError} />
-      )}
+      {screen === "upload" && <UploadScreen onUploadText={onUploadText} onUseDemo={onUseDemo} error={uploadError} />}
 
       {screen === "workspace" && (
         <div className="workspace">
@@ -228,17 +191,26 @@ export default function App() {
               <div className="actions">
                 <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("upload")} title="Upload a new CSV"><Icon name="upload" size={12} /></button>
-                <button className="btn btn-primary" onClick={() => setShowInput(true)} disabled={parsing}>
-                  <Icon name="sparkles" size={12} /> {parsing ? "Parsing…" : "Start Responsibility Input"}
+                <button className="btn btn-primary" onClick={() => onStartSession(selectedId ?? rootId)}>
+                  <Icon name="sparkles" size={12} /> Start Mapping Session
                 </button>
               </div>
             </div>
 
             <div className="metrics">
               <Metric label="People Uploaded" value={metrics.peopleCount} delta="from CSV" />
-              <Metric label="Responsibilities Mapped" value={metrics.respMapped} delta={metrics.respMapped > 0 ? "+from parse" : "awaiting input"} up={metrics.respMapped > 0} />
-              <Metric label="Delegatable Tasks" value={metrics.delegTasks} delta={metrics.delegTasks > 0 ? "ready to scope" : "awaiting input"} up={metrics.delegTasks > 0} />
+              <Metric label="Mapped People" value={metrics.mappedPeople} delta={metrics.mappedPeople > 0 ? "+from sessions" : "awaiting input"} up={metrics.mappedPeople > 0} />
+              <Metric label="Needs Discovery" value={metrics.needsDiscovery} delta={metrics.needsDiscovery === 0 && metrics.peopleCount > 0 ? "all mapped" : "to map"} up={metrics.needsDiscovery === 0 && metrics.peopleCount > 0} />
+              <Metric label="Ready for Agent" value={metrics.readyForAgent} delta={metrics.readyForAgent > 0 ? "ready to scope" : "—"} up={metrics.readyForAgent > 0} />
               <Metric label="Agent Candidates" value={metrics.candidates} extra={`${metrics.agentsBuilt} built`} up={metrics.candidates > 0} />
+            </div>
+
+            <div className="map-progress">
+              <div className="lbl">
+                <span>Responsibility Mapping Progress</span>
+                <span className="mono">{metrics.mappedPeople} / {metrics.peopleCount} people mapped</span>
+              </div>
+              <div className="bar"><span style={{ width: `${progressPct}%` }} /></div>
             </div>
 
             <div className="tabs" role="tablist">
@@ -248,13 +220,7 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "orgmap"} onClick={() => setTab("orgmap")}>
                 <Icon name="network" size={12} /> Org Map <span className="count">{people.length}</span>
               </button>
-              <button
-                className={"tab" + (metrics.agentsBuilt === 0 ? " disabled" : "")}
-                role="tab"
-                aria-selected={tab === "agents"}
-                onClick={() => metrics.agentsBuilt > 0 && setTab("agents")}
-                title={metrics.agentsBuilt === 0 ? "Available after first agent is generated" : "Generated agents"}
-              >
+              <button className={"tab" + (metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => metrics.agentsBuilt > 0 && setTab("agents")} title={metrics.agentsBuilt === 0 ? "Available after first agent is generated" : "Generated agents"}>
                 <Icon name="robot" size={12} /> Agents <span className="count">{metrics.agentsBuilt}</span>
               </button>
               <span style={{ flex: 1 }} />
@@ -264,67 +230,41 @@ export default function App() {
 
           <div className="workspace-body">
             {tab === "spreadsheet" && (
-              <Spreadsheet
-                people={people}
-                pedigree={pedigree}
-                department={topDepartment}
-                onOpenInput={() => setShowInput(true)}
-                onSwitchTab={(t) => setTab(t as Tab)}
-                onExport={onExport}
-                selectedId={selectedId}
-                onSelectRow={onSelect}
-              />
+              <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} onOpenInput={() => onStartSession(selectedId ?? rootId)} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
             )}
             {tab === "orgmap" && (
-              <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} />
+              <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
             )}
-            {tab === "agents" && (
-              <AgentsList agents={allAgents} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />
-            )}
+            {tab === "agents" && <AgentsList agents={allAgents} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
 
             <Drawer
               open={drawerOpen}
               person={selectedPerson}
               state={selectedPerson ? pedigree[selectedPerson.id] : null}
               people={people}
+              pedigree={pedigree}
               onClose={() => setDrawerOpen(false)}
               onCreateAgent={(ctx) => setCreateAgentCtx(ctx)}
               onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
+              onStartSession={onStartSession}
             />
           </div>
         </div>
       )}
 
       {screen === "manifest" && (
-        <ManifestScreen
-          agent={activeAgent}
-          onBack={() => setScreen("workspace")}
-          onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }}
-          onToast={pushToast}
-        />
+        <ManifestScreen agent={activeAgent} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
       )}
 
-      <ResponsibilityInputModal
-        open={showInput}
-        onClose={() => setShowInput(false)}
-        onParse={onParse}
+      <MappingSessionWizard
+        open={!!wizardPerson}
+        person={wizardPerson}
         people={people}
-        initialText={isDemo ? DEMO_TRANSCRIPT : ""}
+        pedigree={pedigree}
+        onClose={() => setWizardPersonId(null)}
+        onApply={onApplyMapping}
       />
-      <ParseReviewModal
-        open={showReview}
-        onClose={() => setShowReview(false)}
-        onApply={onApply}
-        people={people}
-        parsed={parsedMap}
-        source={parseSource}
-      />
-      <CreateAgentModal
-        open={!!createAgentCtx}
-        onClose={() => setCreateAgentCtx(null)}
-        ctx={createAgentCtx}
-        onGenerate={onGenerateAgent}
-      />
+      <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
 
       <Toasts toasts={toasts} />
     </div>
@@ -335,10 +275,7 @@ function Metric({ label, value, delta, extra, up }: { label: string; value: numb
   return (
     <div className="metric">
       <div className="label">{label}</div>
-      <div className="value">
-        {value}
-        {extra && <span style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{extra}</span>}
-      </div>
+      <div className="value">{value}{extra && <span style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{extra}</span>}</div>
       {delta && <div className={"delta " + (up ? "up" : "")}>{delta}</div>}
     </div>
   );

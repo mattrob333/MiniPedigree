@@ -12,12 +12,14 @@ export function initials(name: string): string {
 
 export const STATUS_LABEL: Record<Status, string> = {
   "needs-discovery": "Needs discovery",
+  "session-scheduled": "Session scheduled",
+  "session-captured": "Session captured",
   "needs-review": "Needs review",
   parsed: "Parsed",
   mapped: "Responsibilities mapped",
   ready: "Ready for agent",
   generated: "Agent generated",
-  blocked: "Blocked",
+  blocked: "Needs clarification",
 };
 
 export async function copyText(text: string): Promise<boolean> {
