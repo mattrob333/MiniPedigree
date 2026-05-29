@@ -8,6 +8,8 @@ import { MappingSessionWizard } from "./components/MappingSessionWizard";
 import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
 import { ProfileScreen } from "./components/ProfileScreen";
+import { OrgSyncModal } from "./components/OrgSyncModal";
+import { applyOrgSync, type Changeset } from "./lib/orgSync";
 import { Toasts, type Toast } from "./components/Toasts";
 import { LoginScreen } from "./components/LoginScreen";
 import { Icon } from "./components/Icon";
@@ -42,6 +44,7 @@ export default function App() {
 
   const [profileId, setProfileId] = useState<string | null>(null);
   const [wizardPersonId, setWizardPersonId] = useState<string | null>(null);
+  const [orgSyncOpen, setOrgSyncOpen] = useState(false);
   const [createAgentCtx, setCreateAgentCtx] = useState<CreateAgentCtx | null>(null);
   const [activeAgent, setActiveAgent] = useState<AgentRecord | null>(null);
 
@@ -220,6 +223,13 @@ export default function App() {
     setScreen("profile");
   };
 
+  const onApplyOrgSync = (parsed: ParsedMap, changeset: Changeset, approvedIds: string[]) => {
+    const next = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
+    setPedigree(next);
+    setOrgSyncOpen(false);
+    pushToast("Org Sync applied", `${approvedIds.length} people updated · ${changeset.summary.newResponsibilities} new resp, ${changeset.summary.newTasks} new tasks`, true);
+  };
+
   const onExport = () => {
     const csv = exportEnrichedCsv(people, pedigree);
     downloadFile(`${workspaceName.toLowerCase().replace(/\s+/g, "-")}-pedigree.csv`, csv, "text/csv");
@@ -260,6 +270,7 @@ export default function App() {
               <div className="actions">
                 <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("upload")} title="Upload a new CSV"><Icon name="upload" size={12} /></button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
                 <button className="btn btn-primary" onClick={() => onStartSession(selectedId ?? rootId)} title="Run a discovery pass to map responsibilities">
                   <Icon name="sparkles" size={12} /> Map Responsibilities
                 </button>
@@ -350,6 +361,7 @@ export default function App() {
         onApply={onApplyMapping}
       />
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
+      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={profile?.companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
       <Toasts toasts={toasts} />
     </div>

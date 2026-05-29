@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { PedigreeState, Person, TaskItem } from "@/types";
 import { Icon } from "./Icon";
 import { StatusBadge } from "./StatusBadge";
@@ -7,17 +8,24 @@ function Empty() {
   return <span className="empty">Not mapped yet</span>;
 }
 
+// Collapsed by default (2 chips + "+N"); click "+N" to expand the cell (P2.3).
 function TaskCell({ list, color }: { list: TaskItem[]; color?: string }) {
+  const [open, setOpen] = useState(false);
   if (!list || list.length === 0) return <Empty />;
   const max = 2;
-  const shown = list.slice(0, max);
+  const shown = open ? list : list.slice(0, max);
   const extra = list.length - max;
   return (
     <div className="pill-list">
       {shown.map((t, i) => (
         <span key={i} className={"tag " + (color || "")}>{t.label}</span>
       ))}
-      {extra > 0 && <span className="tag">+{extra}</span>}
+      {!open && extra > 0 && (
+        <span className="tag" style={{ cursor: "pointer" }} title="Expand" onClick={(e) => { e.stopPropagation(); setOpen(true); }}>+{extra}</span>
+      )}
+      {open && list.length > max && (
+        <span className="tag" style={{ cursor: "pointer" }} title="Collapse" onClick={(e) => { e.stopPropagation(); setOpen(false); }}>− less</span>
+      )}
     </div>
   );
 }
