@@ -38,8 +38,53 @@ Upload CSV → Org Map → Start Leadership Session (CEO + reports)
 - **Next Recommended Sessions** panel guides you to the next department to map.
 - **Lineage** — the drawer shows manager → person assignment and the session each responsibility came from,
   plus team-mapped progress (`Team 2/4`) on manager nodes.
-- **Mapping statuses**: needs-discovery → session-scheduled → session-captured → needs-review →
-  responsibilities-mapped → ready-for-agent → agent-generated (and blocked / needs-clarification).
+- **Status state machine**: `Uploaded → Needs Discovery → Mapped → Agent Ready → Agent Generated`
+  (plus *Needs Review* / *Needs Clarification*). Used consistently across stat cards, the Status
+  column, and org-card badges.
+
+### Discovery first, then Org Sync (orgs are dynamic)
+
+Pedigree distinguishes the **first pass** from **ongoing updates**, because companies change:
+
+- **Discovery** — the initial pass that maps each person. The primary CTA reads **"Map
+  Responsibilities"** and the *Next Recommended Sessions* queue walks you CEO → department heads.
+- Once a person is mapped, their session CTA flips to **"Update"** (Update Leadership/Department/
+  Individual Session). When the whole org is mapped, the header shows **"Discovery complete"** and
+  promotes **Org Sync** to the primary action.
+- **Org Sync (Discovery Refresh)** — paste a fresh **Fireflies / meeting transcript** and Pedigree
+  returns a **reviewed changeset** (new responsibilities, new tasks, ownership shifts). Nothing
+  applies until you approve it, and approvals **merge** onto existing mappings — they never overwrite.
+  This is the recurring loop that keeps the org map current as initiatives and ownership change.
+
+### Sign in, persistence & company context
+
+- **Lightweight sign-in** (email + name + company + "what your company does") — no password.
+- **Session auto-resume**: refresh or come back later and your workspace (people, mappings, agents)
+  is restored (Supabase when configured, otherwise localStorage), keyed by company.
+- **Company context** is a first-class object injected into both discovery parsing and every
+  generated manifest + system prompt (`[BUSINESS CONTEXT]`), so agents are grounded in the business,
+  not just a role.
+
+### What you get per agent (the portable, governed manifest)
+
+The defensible artifact is the **manifest**, not the prompt. Each generated agent includes:
+
+- **Authority & guardrails** — human owner, parent responsibility, allowed / approval-required /
+  blocked tasks.
+- **`io_contract`** — declared `inputs[]` (human_upload / document / data_source / upstream_agent),
+  `outputs[]` (→ owner_review_queue / downstream agent / Slack draft), and a `trigger`
+  (human / schedule). This turns the flat chain into a directed graph of agents.
+- **`lifecycle`** — `standing` (persistent) vs `task` (ephemeral, TTL, but still governed and
+  audited — `teardown_policy: delete_agent_retain_log`). The Agents tab separates the two.
+- **Deployment Package** — one click exports a `.zip` (`system-prompt.txt`, `manifest.json`,
+  `SETUP.md`) with the exact documents to load, MCP servers + scopes, data sources, guardrail notes,
+  and numbered setup steps for **OpenAI**, **Claude**, and a **generic** runtime.
+
+### Full-screen profiles
+
+Clicking a person opens a quick-peek drawer; **"Open full profile"** opens a roomy page with the
+reports-to chain, responsibilities (delegatable/approval/blocked), agent inventory (standing vs task),
+tools & permitted MCP scopes, and a delegated-task-feed placeholder.
 
 ## What it does
 

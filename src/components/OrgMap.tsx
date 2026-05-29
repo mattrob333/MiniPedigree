@@ -321,7 +321,7 @@ function Flow({ people, pedigree, selectedId, onSelectNode, recommended, onStart
           {/* Contextual (selected node) — distinct from the global header CTA */}
           {selectedPerson && (
             <button className="btn btn-sm btn-primary" onClick={() => onStartSession(selectedPerson.id)} title="Run discovery for the selected person">
-              <Icon name="sparkles" size={12} /> Map {selectedPerson.name.split(/\s+/)[0]}
+              <Icon name="sparkles" size={12} /> {isMapped(pedigree[selectedPerson.id]?.status) ? "Update" : "Map"} {selectedPerson.name.split(/\s+/)[0]}
             </button>
           )}
         </div>
@@ -343,7 +343,7 @@ function Flow({ people, pedigree, selectedId, onSelectNode, recommended, onStart
           <Icon name="target" size={13} stroke="var(--cyan)" />
           <span>Mapping Scope: <strong>{selectedPerson.name}</strong> + {selReports.length} direct reports</span>
           <button className="btn btn-sm btn-primary" onClick={() => onStartSession(selectedPerson.id)}>
-            Start {SESSION_LABEL[sessionType]}
+            {isMapped(pedigree[selectedPerson.id]?.status) ? "Update" : "Start"} {SESSION_LABEL[sessionType]}
           </button>
           <button className="btn btn-sm btn-ghost" onClick={() => onSelectNode(selectedPerson.id)}>Clear</button>
         </div>

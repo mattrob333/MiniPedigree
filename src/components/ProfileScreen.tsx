@@ -3,7 +3,7 @@ import { Icon } from "./Icon";
 import { StatusBadge } from "./StatusBadge";
 import { initials } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
-import { directReports, teamMapped, recommendSessionType, SESSION_LABEL } from "@/lib/sessions";
+import { directReports, teamMapped, recommendSessionType, SESSION_LABEL, isMapped } from "@/lib/sessions";
 import type { CreateAgentCtx } from "./Drawer";
 
 interface Props {
@@ -87,7 +87,7 @@ export function ProfileScreen({ person, people, pedigree, onBack, onOpenPerson, 
           <div className="profile-actions">
             <StatusBadge status={ped.status} />
             <button className="btn btn-primary btn-sm" onClick={() => onStartSession(person.id)}>
-              <Icon name="sparkles" size={12} /> Start {SESSION_LABEL[sessionType]}
+              <Icon name="sparkles" size={12} /> {isMapped(ped.status) ? "Update" : "Start"} {SESSION_LABEL[sessionType]}
             </button>
           </div>
         </div>

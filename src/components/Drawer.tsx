@@ -2,7 +2,7 @@ import type { AgentRecord, PedigreeRow, PedigreeState, Person, TaskItem } from "
 import { Icon } from "./Icon";
 import { StatusBadge } from "./StatusBadge";
 import { getDepartmentColor } from "@/lib/departments";
-import { recommendSessionType, SESSION_LABEL, teamMapped } from "@/lib/sessions";
+import { isMapped, recommendSessionType, SESSION_LABEL, teamMapped } from "@/lib/sessions";
 
 export interface CreateAgentCtx {
   person: Person;
@@ -178,7 +178,7 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
               )}
               {sessionType && (
                 <button className="btn btn-primary" onClick={() => onStartSession(person.id)}>
-                  <Icon name="sparkles" size={12} /> Start {SESSION_LABEL[sessionType]}
+                  <Icon name="sparkles" size={12} /> {isMapped(status) ? "Update" : "Start"} {SESSION_LABEL[sessionType]}
                 </button>
               )}
             </div>

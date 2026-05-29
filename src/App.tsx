@@ -239,6 +239,8 @@ export default function App() {
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
+  const discoveryStarted = metrics.mappedPeople > 0;
+  const discoveryComplete = metrics.peopleCount > 0 && metrics.mappedPeople === metrics.peopleCount;
 
   return (
     <div className="app">
@@ -265,14 +267,18 @@ export default function App() {
             <div className="workspace-hero">
               <div>
                 <h1>Pedigree Discover Lite</h1>
-                <div className="subtitle">CSV-to-Agent Prompt MVP · {workspaceName}{topDepartment && topDepartment !== "All" ? ` · ${topDepartment}` : ""}</div>
+                <div className="subtitle">
+                  {discoveryComplete
+                    ? <>Discovery complete · {workspaceName} · use <strong style={{ color: "var(--text-2)" }}>Org Sync</strong> to capture changes from new meetings</>
+                    : <>CSV-to-Agent Prompt MVP · {workspaceName}{topDepartment && topDepartment !== "All" ? ` · ${topDepartment}` : ""}</>}
+                </div>
               </div>
               <div className="actions">
                 <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("upload")} title="Upload a new CSV"><Icon name="upload" size={12} /></button>
-                <button className="btn btn-sm btn-ghost" onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
-                <button className="btn btn-primary" onClick={() => onStartSession(selectedId ?? rootId)} title="Run a discovery pass to map responsibilities">
-                  <Icon name="sparkles" size={12} /> Map Responsibilities
+                <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
+                <button className={"btn " + (discoveryComplete ? "btn-ghost btn-sm" : "btn-primary")} onClick={() => onStartSession(selectedId ?? rootId)} title={discoveryComplete ? "Re-run discovery for a person to update them" : "Run a discovery pass to map responsibilities"}>
+                  <Icon name="sparkles" size={12} /> {discoveryStarted ? (discoveryComplete ? "Update Responsibilities" : "Continue Discovery") : "Map Responsibilities"}
                 </button>
               </div>
             </div>

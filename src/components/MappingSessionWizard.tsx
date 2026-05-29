@@ -7,6 +7,7 @@ import {
   defaultScopeFor,
   directReports,
   getScopePersonIds,
+  isMapped,
   recommendSessionType,
   sessionPrompt,
 } from "@/lib/sessions";
@@ -89,6 +90,7 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
   const reports = directReports(person.id, people);
   const scopedPeople = people.filter((p) => scopeIds.includes(p.id));
   const deptColor = getDepartmentColor(person.department);
+  const alreadyMapped = isMapped(pedigree[person.id]?.status);
 
   const insertDemo = () => setText(buildDemoSessionText(person, reports, sessionType));
 
@@ -154,8 +156,8 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
       <div className="modal" style={{ width: 760 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head" style={{ borderTop: `3px solid ${deptColor.accent}` }}>
           <div className="h">
-            <h3><Icon name="sparkles" size={16} stroke="var(--cyan)" /> Responsibility Discovery — {person.name}</h3>
-            <div className="sub">{SESSION_LABEL[sessionType]} · responsibility and task discovery for {person.title} · {person.department}</div>
+            <h3><Icon name="sparkles" size={16} stroke="var(--cyan)" /> {alreadyMapped ? "Update Responsibilities" : "Responsibility Discovery"} — {person.name}</h3>
+            <div className="sub">{SESSION_LABEL[sessionType]} · {alreadyMapped ? "refresh responsibilities and tasks since the last pass" : "responsibility and task discovery"} for {person.title} · {person.department}</div>
           </div>
           <button className="close" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>

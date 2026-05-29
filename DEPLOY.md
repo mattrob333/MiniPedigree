@@ -37,7 +37,15 @@ Skip this to launch faster; the app persists to `localStorage` without it. Add i
      browser using the anon key. Keep service_role secret if you ever use it server-side.)
 3. Open **SQL Editor → New query**, paste the entire contents of
    [`supabase/migrations/001_initial_schema.sql`](./supabase/migrations/001_initial_schema.sql),
-   and click **Run**. This creates the tables and demo-friendly anon access policies.
+   and click **Run**. This creates the tables (`workspaces`, `people`, `profiles`,
+   `discovery_sessions`, `agent_manifests`) and demo-friendly anon access policies. It is safe to
+   re-run (everything uses `if not exists`).
+
+> **Auth note (important for real client data).** The built-in sign-in is **auth-lite**: email +
+> name + company with **no password**, and the Supabase policies are open (anyone with the anon key
+> can read/write). Workspaces are keyed by company, so the same company shares one workspace. This is
+> fine for demos and single-operator use, but **before storing real/regulated client data**, add
+> Supabase Auth (magic link or SSO) and tighten the RLS policies to per-user/per-org access.
 
 ---
 
