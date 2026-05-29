@@ -73,6 +73,13 @@ Upload CSV → Org Map → Start Leadership Session (CEO + reports)
 - **Supabase** (optional) for persistence; falls back to `localStorage`
 - Hand-authored dark/light enterprise theme (charcoal / navy / slate / cyan / teal)
 
+## Going live
+
+To host on Vercel with a custom domain, real OpenAI, and optional Supabase, follow
+[**DEPLOY.md**](./DEPLOY.md) — step-by-step for keys, env vars, and DNS. The frontend is served
+statically and the API runs as Vercel serverless functions in `api/` (sharing the core logic in
+`server/core/`); the Express server in `server/` is used for local dev.
+
 ## Getting started
 
 ```bash
