@@ -8,24 +8,27 @@ import { MappingSessionWizard } from "./components/MappingSessionWizard";
 import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
 import { Toasts, type Toast } from "./components/Toasts";
+import { LoginScreen } from "./components/LoginScreen";
 import { Icon } from "./components/Icon";
 
-import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person } from "./types";
+import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { DEMO_PEOPLE } from "./lib/demoData";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord } from "./lib/agent";
 import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
-import { saveWorkspace } from "./lib/persist";
+import { saveWorkspace, loadWorkspace, loadProfile, saveProfile, clearProfile, workspaceIdFor } from "./lib/persist";
 
-type Screen = "upload" | "workspace" | "manifest";
+type Screen = "login" | "upload" | "workspace" | "manifest";
 type Tab = "spreadsheet" | "orgmap" | "agents";
 
 export default function App() {
   const [themePref, setThemePref, resolvedTheme] = useTheme();
 
-  const [screen, setScreen] = useState<Screen>("upload");
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [booting, setBooting] = useState(true);
+  const [screen, setScreen] = useState<Screen>("login");
   const [tab, setTab] = useState<Tab>("orgmap");
 
   const [people, setPeople] = useState<Person[]>([]);
@@ -57,12 +60,64 @@ export default function App() {
     return counts.size > 1 ? "All" : [...counts.keys()][0] ?? "";
   }, [people]);
 
+  // Bootstrap: restore session + workspace on load (the refresh / session-resume fix).
   useEffect(() => {
-    if (screen !== "upload" && people.length) {
-      const id = workspaceName.toLowerCase().replace(/\s+/g, "-");
+    const p = loadProfile();
+    if (!p) {
+      setScreen("login");
+      setBooting(false);
+      return;
+    }
+    setProfile(p);
+    loadWorkspace(workspaceIdFor(p))
+      .then((ws) => {
+        if (ws && ws.people.length) {
+          setPeople(ws.people);
+          setPedigree(ws.pedigree);
+          setWorkspaceName(ws.name);
+          setScreen("workspace");
+          setTab("orgmap");
+        } else {
+          setScreen("upload");
+        }
+      })
+      .finally(() => setBooting(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the workspace (keyed by company so a refresh restores it).
+  useEffect(() => {
+    if (booting) return;
+    if (screen !== "upload" && people.length && profile) {
+      const id = workspaceIdFor(profile);
       void saveWorkspace({ id, name: workspaceName, people, pedigree, createdAt: new Date().toISOString() });
     }
-  }, [people, pedigree, workspaceName, screen]);
+  }, [people, pedigree, workspaceName, screen, profile, booting]);
+
+  const onSignIn = (p: UserProfile) => {
+    saveProfile(p);
+    setProfile(p);
+    loadWorkspace(workspaceIdFor(p)).then((ws) => {
+      if (ws && ws.people.length) {
+        setPeople(ws.people);
+        setPedigree(ws.pedigree);
+        setWorkspaceName(ws.name);
+        setScreen("workspace");
+        setTab("orgmap");
+        pushToast("Welcome back", `${ws.people.length} people · ${ws.name}`);
+      } else {
+        setScreen("upload");
+      }
+    });
+  };
+
+  const onSignOut = () => {
+    clearProfile();
+    setProfile(null);
+    setPeople([]);
+    setPedigree({});
+    setScreen("login");
+  };
 
   useEffect(() => {
     if (screen !== "workspace") return;
@@ -121,7 +176,7 @@ export default function App() {
     });
     setPedigree(next);
     setWizardPersonId(null);
-    pushToast("Mapping applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}`, true);
+    pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}`, true);
   };
 
   const onGenerateAgent = (ctx: GenerateCtx) => {
@@ -130,6 +185,7 @@ export default function App() {
     const artifacts = buildAgentArtifacts({
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
       agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
+      companyContext: profile?.companyContext,
     });
     const agent = newAgentRecord(
       { person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle, agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel },
@@ -176,7 +232,13 @@ export default function App() {
         themePref={themePref}
         setThemePref={setThemePref}
         resolvedTheme={resolvedTheme}
+        onHome={screen !== "login" ? () => setScreen(people.length ? "workspace" : "upload") : undefined}
+        onWorkspace={screen !== "login" && people.length ? () => setScreen("workspace") : undefined}
+        userInitials={profile ? profile.name.split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase() : undefined}
+        onSignOut={profile ? onSignOut : undefined}
       />
+
+      {screen === "login" && <LoginScreen onSignIn={onSignIn} existingProfile={profile} />}
 
       {screen === "upload" && <UploadScreen onUploadText={onUploadText} onUseDemo={onUseDemo} error={uploadError} />}
 
@@ -191,23 +253,24 @@ export default function App() {
               <div className="actions">
                 <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("upload")} title="Upload a new CSV"><Icon name="upload" size={12} /></button>
-                <button className="btn btn-primary" onClick={() => onStartSession(selectedId ?? rootId)}>
-                  <Icon name="sparkles" size={12} /> Start Mapping Session
+                <button className="btn btn-primary" onClick={() => onStartSession(selectedId ?? rootId)} title="Run a discovery pass to map responsibilities">
+                  <Icon name="sparkles" size={12} /> Map Responsibilities
                 </button>
               </div>
             </div>
 
-            <div className="metrics">
-              <Metric label="People Uploaded" value={metrics.peopleCount} delta="from CSV" />
-              <Metric label="Mapped People" value={metrics.mappedPeople} delta={metrics.mappedPeople > 0 ? "+from sessions" : "awaiting input"} up={metrics.mappedPeople > 0} />
-              <Metric label="Needs Discovery" value={metrics.needsDiscovery} delta={metrics.needsDiscovery === 0 && metrics.peopleCount > 0 ? "all mapped" : "to map"} up={metrics.needsDiscovery === 0 && metrics.peopleCount > 0} />
-              <Metric label="Ready for Agent" value={metrics.readyForAgent} delta={metrics.readyForAgent > 0 ? "ready to scope" : "—"} up={metrics.readyForAgent > 0} />
-              <Metric label="Agent Candidates" value={metrics.candidates} extra={`${metrics.agentsBuilt} built`} up={metrics.candidates > 0} />
+            {/* Funnel: People → Responsibilities → Delegatable → Candidates → Built */}
+            <div className="metrics funnel">
+              <Metric label="People" value={metrics.peopleCount} delta={`${metrics.mappedPeople} mapped`} up={metrics.mappedPeople > 0} arrow />
+              <Metric label="Responsibilities" value={metrics.respMapped} delta={metrics.respMapped > 0 ? "discovered" : "awaiting discovery"} up={metrics.respMapped > 0} arrow />
+              <Metric label="Delegatable Tasks" value={metrics.delegTasks} delta={metrics.delegTasks > 0 ? "automatable" : "—"} up={metrics.delegTasks > 0} arrow />
+              <Metric label="Agent Candidates" value={metrics.candidates} delta={metrics.candidates > 0 ? "ready to build" : "—"} up={metrics.candidates > 0} arrow />
+              <Metric label="Agents Built" value={metrics.agentsBuilt} delta={metrics.agentsBuilt > 0 ? "governed" : "none yet"} up={metrics.agentsBuilt > 0} />
             </div>
 
             <div className="map-progress">
               <div className="lbl">
-                <span>Responsibility Mapping Progress</span>
+                <span>Discovery Progress</span>
                 <span className="mono">{metrics.mappedPeople} / {metrics.peopleCount} people mapped</span>
               </div>
               <div className="bar"><span style={{ width: `${progressPct}%` }} /></div>
@@ -261,6 +324,7 @@ export default function App() {
         person={wizardPerson}
         people={people}
         pedigree={pedigree}
+        companyContext={profile?.companyContext}
         onClose={() => setWizardPersonId(null)}
         onApply={onApplyMapping}
       />
@@ -271,9 +335,10 @@ export default function App() {
   );
 }
 
-function Metric({ label, value, delta, extra, up }: { label: string; value: number; delta?: string; extra?: string; up?: boolean }) {
+function Metric({ label, value, delta, extra, up, arrow }: { label: string; value: number; delta?: string; extra?: string; up?: boolean; arrow?: boolean }) {
   return (
     <div className="metric">
+      {arrow && <span className="funnel-arrow" aria-hidden>›</span>}
       <div className="label">{label}</div>
       <div className="value">{value}{extra && <span style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{extra}</span>}</div>
       {delta && <div className={"delta " + (up ? "up" : "")}>{delta}</div>}

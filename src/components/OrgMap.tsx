@@ -318,9 +318,12 @@ function Flow({ people, pedigree, selectedId, onSelectNode, recommended, onStart
           <button className="icon-btn" onClick={() => rf.fitView({ padding: 0.18, duration: 320, maxZoom: 1.2 })} title="Fit to view"><Icon name="fit" size={13} /></button>
           <button className="icon-btn" onClick={centerRoot} title="Center root"><Icon name="target" size={13} /></button>
 
-          <button className="btn btn-sm btn-primary" onClick={() => onStartSession(selectedId ?? people.find((p) => !p.managerId)?.id ?? people[0]?.id)}>
-            <Icon name="sparkles" size={12} /> Start Mapping Session
-          </button>
+          {/* Contextual (selected node) — distinct from the global header CTA */}
+          {selectedPerson && (
+            <button className="btn btn-sm btn-primary" onClick={() => onStartSession(selectedPerson.id)} title="Run discovery for the selected person">
+              <Icon name="sparkles" size={12} /> Map {selectedPerson.name.split(/\s+/)[0]}
+            </button>
+          )}
         </div>
       </div>
 

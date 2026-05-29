@@ -103,6 +103,7 @@ const responseSchema = {
 export interface ParseInput {
   transcript?: unknown;
   people?: unknown;
+  company_context?: unknown;
 }
 
 export type ParseResult =
@@ -110,7 +111,7 @@ export type ParseResult =
   | { mode: "demo"; reason: string };
 
 /** Framework-agnostic discovery parse — used by both the Express dev server and Vercel functions. */
-export async function runDiscoveryParse({ transcript, people }: ParseInput): Promise<ParseResult> {
+export async function runDiscoveryParse({ transcript, people, company_context }: ParseInput): Promise<ParseResult> {
   if (!openaiEnabled || !openai) {
     return { mode: "demo", reason: "OPENAI_API_KEY not configured" };
   }
@@ -119,7 +120,10 @@ export async function runDiscoveryParse({ transcript, people }: ParseInput): Pro
   }
 
   try {
-    const userMsg = `People (JSON):\n${JSON.stringify(people, null, 2)}\n\nDiscovery transcript:\n"""\n${transcript}\n"""`;
+    const ctxBlock = company_context && typeof company_context === "object"
+      ? `Company context (use to ground responsibilities in the business; prefer the company's own terminology):\n${JSON.stringify(company_context, null, 2)}\n\n`
+      : "";
+    const userMsg = `${ctxBlock}People (JSON):\n${JSON.stringify(people, null, 2)}\n\nDiscovery transcript:\n"""\n${transcript}\n"""`;
     const completion = await openai.chat.completions.create({
       model: MODEL,
       messages: [

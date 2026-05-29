@@ -81,8 +81,18 @@ create table if not exists agent_manifests (
   unique (workspace_id, agent_slug)
 );
 
+create table if not exists profiles (
+  email text primary key,
+  name text,
+  company text,
+  company_context jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Demo-friendly: allow anon access. Tighten with real auth before production.
 alter table workspaces enable row level security;
+alter table profiles enable row level security;
 alter table people enable row level security;
 alter table discovery_sessions enable row level security;
 alter table agent_manifests enable row level security;
@@ -100,5 +110,8 @@ begin
   end if;
   if not exists (select 1 from pg_policies where tablename = 'agent_manifests' and policyname = 'anon_all') then
     create policy anon_all on agent_manifests for all using (true) with check (true);
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'profiles' and policyname = 'anon_all') then
+    create policy anon_all on profiles for all using (true) with check (true);
   end if;
 end $$;

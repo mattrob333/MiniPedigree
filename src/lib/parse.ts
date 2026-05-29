@@ -219,7 +219,8 @@ export function generateParsed(people: Person[], transcript: string): ParsedMap 
       if (extracted.length) {
         responsibilities.push({
           id: nextRespId(),
-          title: "From discovery input",
+          // A real, user-facing title (never expose "discovery input" plumbing).
+          title: deriveRespTitle(extracted, person.department),
           description: mentioned[0],
           confidence: 0.86,
           evidence_quote: mentioned[0],
@@ -263,6 +264,26 @@ function escapeRe(s: string): string {
 function trimSummary(s: string): string {
   const clean = s.replace(/\s+/g, " ").trim();
   return clean.length > 140 ? clean.slice(0, 137) + "…" : clean;
+}
+
+// Build a real responsibility title from extracted task themes (never "discovery input").
+function deriveRespTitle(tasks: string[], department: string): string {
+  const hay = tasks.join(" ").toLowerCase();
+  const themes: [RegExp, string][] = [
+    [/forecast/, "Forecast hygiene"],
+    [/crm|opportunity|deal/, "CRM & pipeline review"],
+    [/pipeline|follow|prospect/, "Pipeline follow-up"],
+    [/renewal|customer health|churn|escalation/, "Customer health monitoring"],
+    [/onboard|adoption|implementation|delivery|milestone/, "Delivery & onboarding"],
+    [/claim|billing|denial|revenue cycle|collection/, "Revenue cycle operations"],
+    [/ledger|variance|budget|invoice|reconcile/, "Financial reporting"],
+    [/ticket|incident|service desk|system|security/, "Systems & support monitoring"],
+    [/schedul|intake|coverage|patient/, "Clinical operations"],
+    [/report|summar|dashboard|metric/, "Operational reporting"],
+    [/staff|recruit|onboarding|training|hr/, "People operations"],
+  ];
+  for (const [re, title] of themes) if (re.test(hay)) return title;
+  return `${department} responsibilities`;
 }
 
 export function suggestedAgentName(respTitle: string): string {

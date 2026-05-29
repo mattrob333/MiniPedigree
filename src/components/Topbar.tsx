@@ -3,20 +3,24 @@ import { Icon } from "./Icon";
 import type { ThemePref } from "@/lib/useTheme";
 
 interface TopbarProps {
-  screen: "upload" | "workspace" | "manifest";
+  screen: "login" | "upload" | "workspace" | "manifest";
   workspaceName: string;
   agentName?: string;
   themePref: ThemePref;
   setThemePref: (p: ThemePref) => void;
   resolvedTheme: "light" | "dark";
+  onHome?: () => void;
+  onWorkspace?: () => void;
+  userInitials?: string;
+  onSignOut?: () => void;
 }
 
-export function Topbar({ screen, workspaceName, agentName, themePref, setThemePref, resolvedTheme }: TopbarProps) {
+export function Topbar({ screen, workspaceName, agentName, themePref, setThemePref, resolvedTheme, onHome, onWorkspace, userInitials, onSignOut }: TopbarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <header className="topbar">
-      <div className="brand">
+      <div className="brand" onClick={onHome} style={onHome ? { cursor: "pointer" } : undefined} title={onHome ? "Home" : undefined}>
         <div className="brand-mark">PD</div>
         <div className="brand-text">
           <span className="name">Pedigree</span>
@@ -26,12 +30,12 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
         </div>
       </div>
 
-      {screen !== "upload" && (
+      {(screen === "workspace" || screen === "manifest") && (
         <div className="breadcrumb">
           <span className="sep">/</span>
-          <span>Workspace</span>
+          <span onClick={onWorkspace} style={onWorkspace ? { cursor: "pointer" } : undefined} className="crumb-link">Workspace</span>
           <span className="sep">/</span>
-          <span>{workspaceName}</span>
+          <span onClick={onWorkspace} style={onWorkspace ? { cursor: "pointer" } : undefined} className="crumb-link">{workspaceName}</span>
           {screen === "manifest" && (
             <>
               <span className="sep">/</span>
@@ -69,11 +73,12 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
             setThemePref={setThemePref}
             resolvedTheme={resolvedTheme}
             onClose={() => setSettingsOpen(false)}
+            onSignOut={onSignOut}
           />
         )}
       </div>
 
-      <div className="user">DC</div>
+      <div className="user">{userInitials || "DC"}</div>
     </header>
   );
 }
@@ -83,11 +88,13 @@ function SettingsPopover({
   setThemePref,
   resolvedTheme,
   onClose,
+  onSignOut,
 }: {
   themePref: ThemePref;
   setThemePref: (p: ThemePref) => void;
   resolvedTheme: "light" | "dark";
   onClose: () => void;
+  onSignOut?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -142,6 +149,13 @@ function SettingsPopover({
           <span className="tgl" data-on="true" />
         </div>
       </div>
+      {onSignOut && (
+        <div className="popover-section">
+          <button className="btn btn-sm btn-ghost" style={{ width: "100%", justifyContent: "center" }} onClick={() => { onClose(); onSignOut(); }}>
+            <Icon name="external" size={12} /> Sign out
+          </button>
+        </div>
+      )}
       <div className="popover-foot">Pedigree Discover Lite · v0.1.0</div>
     </div>
   );

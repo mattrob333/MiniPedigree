@@ -1,4 +1,4 @@
-import type { ParsedMap, ParsedResponsibility, Person } from "@/types";
+import type { CompanyContext, ParsedMap, ParsedResponsibility, Person } from "@/types";
 import { generateParsed } from "./parse";
 import { recommendMcp } from "./mcpCatalog";
 import { parsedDiscoverySchema } from "./schemas";
@@ -19,6 +19,7 @@ export async function parseDiscovery(
   people: Person[],
   transcript: string,
   scopeIds?: string[],
+  companyContext?: CompanyContext,
 ): Promise<ParseOutcome> {
   const scoped = scopeIds && scopeIds.length ? people.filter((p) => scopeIds.includes(p.id)) : people;
 
@@ -28,6 +29,7 @@ export async function parseDiscovery(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         transcript,
+        company_context: companyContext,
         people: scoped.map((p) => ({
           id: p.id,
           name: p.name,

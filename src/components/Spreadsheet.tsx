@@ -46,14 +46,9 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
           <span className="mono" style={{ color: "var(--text-1)" }}>Manager → Direct reports</span>
         </span>
         <span style={{ flex: 1 }} />
-        <button className="btn btn-sm btn-ghost" onClick={onExport}>
-          <Icon name="download" size={12} /> Export
-        </button>
+        {/* Export + Map Responsibilities live in the global header; toolbar only switches view. */}
         <button className="btn btn-sm" onClick={() => onSwitchTab("orgmap")}>
           <Icon name="network" size={12} /> Org Map
-        </button>
-        <button className="btn btn-sm btn-primary" onClick={onOpenInput}>
-          <Icon name="sparkles" size={12} /> Start Mapping Session
         </button>
       </div>
 

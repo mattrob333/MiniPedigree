@@ -18,13 +18,13 @@ interface Props {
 }
 
 export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
-  const suggested = ctx ? suggestedAgentName(ctx.respTitle) : "";
+  const suggested = ctx ? suggestedAgentName(ctx.task.label) : "";
   const [agentName, setAgentName] = useState(suggested);
   const [policy, setPolicy] = useState("auto-write-with-approval");
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("low");
 
   useEffect(() => {
-    if (ctx) setAgentName(suggestedAgentName(ctx.respTitle));
+    if (ctx) setAgentName(suggestedAgentName(ctx.task.label));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx?.task.id]);
 

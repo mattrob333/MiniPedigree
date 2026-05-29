@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import type { MappingSessionType, ParsedMap, PedigreeState, Person, SessionScope } from "@/types";
+import type { CompanyContext, MappingSessionType, ParsedMap, PedigreeState, Person, SessionScope } from "@/types";
 import {
   SESSION_LABEL,
   buildDemoSessionText,
@@ -20,6 +20,7 @@ interface Props {
   person: Person | null;
   people: Person[];
   pedigree: PedigreeState;
+  companyContext?: CompanyContext;
   onClose: () => void;
   onApply: (args: {
     scopeIds: string[];
@@ -32,7 +33,7 @@ interface Props {
 type Step = 1 | 2 | 3 | 4;
 type InputTab = "paste" | "record" | "upload";
 
-export function MappingSessionWizard({ open, person, people, pedigree, onClose, onApply }: Props) {
+export function MappingSessionWizard({ open, person, people, pedigree, companyContext, onClose, onApply }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [scope, setScope] = useState<SessionScope>("self_and_reports");
   const [text, setText] = useState("");
@@ -128,7 +129,7 @@ export function MappingSessionWizard({ open, person, people, pedigree, onClose, 
     setBusy("Parsing session…");
     setErr(null);
     try {
-      const r = await parseDiscovery(scopedPeople, text, scopeIds);
+      const r = await parseDiscovery(scopedPeople, text, scopeIds, companyContext);
       setParsed(r.parsed);
       setParseSource(r.source);
       setStep(4);
@@ -153,8 +154,8 @@ export function MappingSessionWizard({ open, person, people, pedigree, onClose, 
       <div className="modal" style={{ width: 760 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head" style={{ borderTop: `3px solid ${deptColor.accent}` }}>
           <div className="h">
-            <h3><Icon name="sparkles" size={16} stroke="var(--cyan)" /> Mapping Session — {SESSION_LABEL[sessionType]}</h3>
-            <div className="sub">Scope owner: {person.name} · {person.title} · {person.department}</div>
+            <h3><Icon name="sparkles" size={16} stroke="var(--cyan)" /> Responsibility Discovery — {person.name}</h3>
+            <div className="sub">{SESSION_LABEL[sessionType]} · responsibility and task discovery for {person.title} · {person.department}</div>
           </div>
           <button className="close" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>
@@ -181,12 +182,21 @@ export function MappingSessionWizard({ open, person, people, pedigree, onClose, 
                 <Icon name="branch" size={14} stroke="var(--text-4)" />
               </div>
               <div className="form-field">
-                <div className="lbl">Mapping Scope</div>
+                <div className="lbl">Discovery Scope</div>
                 <select className="select" value={scope} onChange={(e) => setScope(e.target.value as SessionScope)}>
                   <option value="self">Selected person only ({person.name})</option>
                   {reports.length > 0 && <option value="self_and_reports">Selected person + {reports.length} direct reports</option>}
                   {reports.length > 0 && <option value="unmapped_reports">Selected person + unmapped reports only</option>}
                 </select>
+                <div className="hint" style={{ fontSize: 11, color: "var(--text-4)", marginTop: 4 }}>
+                  {scope === "self"
+                    ? "Individual Role: maps just this person's responsibilities and tasks."
+                    : scope === "unmapped_reports"
+                      ? "Cascades only to direct reports not yet discovered — good for resuming."
+                      : sessionType === "leadership_session"
+                        ? "Leadership Session: maps the top leader plus company-level ownership across their direct reports."
+                        : "Department Session: maps the department head and cascades to their direct reports."}
+                </div>
               </div>
               <div className="hint" style={{ fontSize: 11.5, color: "var(--text-4)" }}>
                 <Icon name="info" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />

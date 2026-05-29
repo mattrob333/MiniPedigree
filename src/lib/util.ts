@@ -10,17 +10,29 @@ export function initials(name: string): string {
     .toUpperCase();
 }
 
+// Single ordered status state machine (P0.5):
+//   Uploaded → Needs Discovery → Mapped → Agent Ready → Agent Generated
+// (needs-review is an in-band "Mapped, flagged" sub-state; blocked = "Needs clarification".)
 export const STATUS_LABEL: Record<Status, string> = {
-  "needs-discovery": "Needs discovery",
-  "session-scheduled": "Session scheduled",
-  "session-captured": "Session captured",
-  "needs-review": "Needs review",
-  parsed: "Parsed",
-  mapped: "Responsibilities mapped",
-  ready: "Ready for agent",
-  generated: "Agent generated",
-  blocked: "Needs clarification",
+  "needs-discovery": "Needs Discovery",
+  "session-scheduled": "Needs Discovery",
+  "session-captured": "Needs Discovery",
+  "needs-review": "Needs Review",
+  parsed: "Mapped",
+  mapped: "Mapped",
+  ready: "Agent Ready",
+  generated: "Agent Generated",
+  blocked: "Needs Clarification",
 };
+
+// The canonical funnel order, used for any ordering/sorting of statuses.
+export const STATUS_ORDER: Status[] = [
+  "needs-discovery",
+  "needs-review",
+  "mapped",
+  "ready",
+  "generated",
+];
 
 export async function copyText(text: string): Promise<boolean> {
   try {

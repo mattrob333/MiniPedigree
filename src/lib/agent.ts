@@ -1,4 +1,4 @@
-import type { AgentRecord, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
+import type { AgentRecord, CompanyContext, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
 import { recommendMcp } from "./mcpCatalog";
 
 export function slugify(s: string): string {
@@ -16,6 +16,7 @@ export interface AgentBuildCtx {
   agentName: string;
   policy: string;
   riskLevel: RiskLevel;
+  companyContext?: CompanyContext;
 }
 
 export interface AgentArtifacts {
@@ -35,7 +36,7 @@ const GLOBAL_BLOCKED = [
 ];
 
 export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
-  const { person, row, task, respTitle, agentName, policy, riskLevel } = ctx;
+  const { person, row, task, respTitle, agentName, policy, riskLevel, companyContext } = ctx;
 
   const inResp = (t: TaskItem) => t.respId === task.respId;
   const allowed = uniq([
@@ -85,6 +86,17 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
       risk: riskLevel,
       requires_approval_from: person.name,
     },
+    ...(companyContext
+      ? {
+          company_context: {
+            company: companyContext.company,
+            what_we_do: companyContext.whatWeDo,
+            mission: companyContext.mission,
+            initiatives: companyContext.initiatives,
+            terminology: companyContext.terminology,
+          },
+        }
+      : {}),
     audit: {
       trace_id: traceId,
       log_destination: "pedigree.audit.bus",
@@ -92,7 +104,7 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     },
   };
 
-  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel });
+  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext });
 
   return { manifest, systemPrompt, allowed, approval, blocked, mcp };
 }
@@ -120,18 +132,25 @@ function buildSystemPrompt(a: {
   mcp: McpRecommendation[];
   policy: string;
   riskLevel: RiskLevel;
+  companyContext?: CompanyContext;
 }): string {
-  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel } = a;
+  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext } = a;
   const mcpLines = mcp.length
     ? mcp.map((m) => `- ${m.name}: ${m.recommended_scope.replace("_", "-")} scope. ${m.reason}.`).join("\n")
     : `- Recommended from ${person.name}'s known tools: ${person.tools.join(", ") || "none listed"} (read-only).`;
+
+  const businessContext = companyContext
+    ? `\n\n[BUSINESS CONTEXT]
+You operate inside ${companyContext.company}. ${companyContext.whatWeDo}${companyContext.mission ? ` Mission: ${companyContext.mission}.` : ""}${companyContext.initiatives ? ` Current initiatives: ${companyContext.initiatives}.` : ""}${companyContext.terminology ? ` Use the company's own terminology where relevant: ${companyContext.terminology}.` : ""}
+Ground your work in this business context; do not contradict it or invent facts about the company.`
+    : "";
 
   return `[ROLE]
 You are ${agentName}. You work for ${person.name}, ${person.title}. You support the business responsibility defined in the Pedigree manifest.
 
 [HUMAN OWNER AND AUTHORITY CEILING]
 Your human owner is ${person.name}. You do not replace this person. You assist with specific delegated tasks under their responsibility for "${respTitle}".
-You may not exceed the authority of ${person.name}, and you may not perform actions that require human approval unless approval is explicitly granted.
+You may not exceed the authority of ${person.name}, and you may not perform actions that require human approval unless approval is explicitly granted.${businessContext}
 
 [PARENT RESPONSIBILITY]
 Responsibility: ${respTitle}

@@ -166,3 +166,20 @@ export interface Workspace {
   pedigree: PedigreeState;
   createdAt: string;
 }
+
+// ── Auth-lite: user profile + company context (P1.4) ──────────────────
+export interface CompanyContext {
+  company: string;
+  whatWeDo: string;      // what the company does
+  mission?: string;
+  initiatives?: string;  // key current initiatives
+  terminology?: string;  // internal terms / product names
+}
+
+export interface UserProfile {
+  email: string;
+  name: string;
+  company: string;
+  companyContext: CompanyContext;
+  createdAt: string;
+}
