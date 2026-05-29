@@ -134,7 +134,8 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
     const discovery = parsedDiscoverySchema.parse(parsed);
     return { mode: "ai", discovery };
   } catch (e) {
-    console.error("discovery parse failed:", (e as Error).message);
-    return { mode: "demo", reason: "ai_error" };
+    const msg = (e as Error).message || String(e);
+    console.error("discovery parse failed:", msg);
+    return { mode: "demo", reason: "ai_error: " + msg.slice(0, 200) };
   }
 }
