@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAgentArtifacts } from "../src/lib/agent";
+import { buildAgentArtifacts, buildDeploymentGuide } from "../src/lib/agent";
 import type { PedigreeRow, Person, TaskItem } from "../src/types";
 
 const person: Person = {
@@ -50,5 +50,31 @@ describe("buildAgentArtifacts", () => {
     for (const m of out.mcp) {
       expect(["read_only", "draft_only", "none"]).toContain(m.recommended_scope);
     }
+  });
+
+  it("includes an io_contract and lifecycle in the manifest", () => {
+    const m = out.manifest as any;
+    expect(m.io_contract).toBeDefined();
+    expect(Array.isArray(m.io_contract.inputs)).toBe(true);
+    expect(Array.isArray(m.io_contract.outputs)).toBe(true);
+    expect(typeof m.io_contract.trigger).toBe("string");
+    expect(m.lifecycle.class).toBe("standing");
+  });
+
+  it("marks task agents ephemeral but keeps a teardown audit policy", () => {
+    const t = buildAgentArtifacts({ person, row, task, respTitle: "Forecast hygiene", agentName: "X Agent", policy: "read-only", riskLevel: "low", lifecycleClass: "task" });
+    const m = t.manifest as any;
+    expect(m.lifecycle.class).toBe("task");
+    expect(m.lifecycle.ttl).toBe("on_complete");
+    expect(m.lifecycle.teardown_policy).toBe("delete_agent_retain_log");
+  });
+
+  it("builds a deployment guide covering OpenAI, Claude, and generic setup", () => {
+    const guide = buildDeploymentGuide(out.manifest as any);
+    expect(guide).toContain("Deployment Package");
+    expect(guide).toContain("OpenAI");
+    expect(guide).toContain("Claude");
+    expect(guide).toContain("Required tools / MCP servers");
+    expect(guide).toContain("Trigger");
   });
 });

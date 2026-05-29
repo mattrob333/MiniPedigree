@@ -1,4 +1,4 @@
-import type { AgentRecord, CompanyContext, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
+import type { AgentLifecycleClass, AgentRecord, CompanyContext, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
 import { recommendMcp } from "./mcpCatalog";
 
 export function slugify(s: string): string {
@@ -16,7 +16,27 @@ export interface AgentBuildCtx {
   agentName: string;
   policy: string;
   riskLevel: RiskLevel;
+  lifecycleClass?: AgentLifecycleClass;
   companyContext?: CompanyContext;
+}
+
+export interface IoInput {
+  name: string;
+  type: "human_upload" | "document" | "upstream_agent" | "data_source";
+  source: string;
+  format: "pdf" | "csv" | "json" | "text" | "document";
+  required: boolean;
+}
+export interface IoOutput {
+  name: string;
+  type: "document" | "record" | "message";
+  destination: string;
+  format: string;
+}
+export interface IoContract {
+  inputs: IoInput[];
+  outputs: IoOutput[];
+  trigger: string;
 }
 
 export interface AgentArtifacts {
@@ -37,6 +57,7 @@ const GLOBAL_BLOCKED = [
 
 export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
   const { person, row, task, respTitle, agentName, policy, riskLevel, companyContext } = ctx;
+  const lifecycleClass: AgentLifecycleClass = ctx.lifecycleClass ?? "standing";
 
   const inResp = (t: TaskItem) => t.respId === task.respId;
   const allowed = uniq([
@@ -54,6 +75,12 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
 
   const slug = slugify(agentName) || "pedigree-agent";
   const traceId = `pdg-${slug}-001`;
+  const ioContract = deriveIoContract(task, respTitle, mcp, person);
+  const lifecycle = {
+    class: lifecycleClass,
+    ttl: lifecycleClass === "task" ? "on_complete" : null,
+    teardown_policy: "delete_agent_retain_log",
+  };
 
   const manifest = {
     manifest_version: "pdq-manifest-v0.1",
@@ -81,6 +108,8 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
       tools: person.tools.map((t) => ({ name: t, scope: scopeForTool(t, policy) })),
     },
     recommended_mcp_servers: mcp.map((m) => ({ name: m.name, scope: m.recommended_scope, reason: m.reason })),
+    io_contract: ioContract,
+    lifecycle,
     policy: {
       tier: policy,
       risk: riskLevel,
@@ -207,6 +236,7 @@ export function newAgentRecord(ctx: AgentBuildCtx, artifacts: AgentArtifacts): A
     respTitle: ctx.respTitle,
     policy: ctx.policy,
     riskLevel: ctx.riskLevel,
+    lifecycle: ctx.lifecycleClass ?? "standing",
     person: ctx.person,
     task: ctx.task,
     createdAt: new Date().toISOString(),
@@ -217,4 +247,154 @@ export function newAgentRecord(ctx: AgentBuildCtx, artifacts: AgentArtifacts): A
 
 function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr));
+}
+
+// ── io_contract derivation (P1.1) ─────────────────────────────────────
+function deriveIoContract(task: TaskItem, respTitle: string, mcp: McpRecommendation[], person: Person): IoContract {
+  const hay = `${respTitle} ${task.label}`.toLowerCase();
+  const inputs: IoInput[] = [];
+
+  // Data sources / documents from recommended MCP servers (read-only feeds).
+  for (const m of mcp) {
+    const isDoc = /drive|notion|doc/i.test(m.name);
+    inputs.push({
+      name: slugify(m.name).replace(/-mcp$/, "") + (isDoc ? "_docs" : "_data"),
+      type: isDoc ? "document" : "data_source",
+      source: m.name,
+      format: isDoc ? "document" : "json",
+      required: true,
+    });
+  }
+  // Always allow the owner to hand the agent reference documents.
+  inputs.push({
+    name: "owner_reference_docs",
+    type: "human_upload",
+    source: `Documents provided by ${person.name}`,
+    format: "document",
+    required: false,
+  });
+
+  const outName = slugify(task.label).split("-").slice(0, 4).join("_") || "summary";
+  const externalDraft = /draft|email|message|notify|slack/.test(hay);
+  const outputs: IoOutput[] = [
+    {
+      name: outName,
+      type: externalDraft ? "message" : "document",
+      destination: externalDraft ? "Slack draft (owner approves before send)" : "owner_review_queue",
+      format: "markdown",
+    },
+  ];
+
+  const recurring = /weekly|forecast|report|digest|monthly|variance|scorecard/.test(hay);
+  const trigger = recurring ? "schedule:weekly" : "human";
+
+  return { inputs, outputs, trigger };
+}
+
+// ── Deployment package guide (P1.2) ───────────────────────────────────
+const PLATFORMS: { id: string; name: string; steps: (a: DeploymentInfo) => string[] }[] = [
+  {
+    id: "openai",
+    name: "OpenAI (Custom GPT / Assistants)",
+    steps: (a) => [
+      "Create a new Custom GPT (chatgpt.com → Explore GPTs → Create) or an Assistant (platform.openai.com).",
+      "Paste the System Prompt (below / system-prompt.txt) into Instructions.",
+      a.documents.length ? `Upload these documents to Knowledge: ${a.documents.join("; ")}.` : "No knowledge documents required.",
+      a.mcp.length ? `Connect these tools/actions with the stated scope: ${a.mcp.join("; ")}. OpenAI calls these Actions — configure each as read-only unless noted.` : "No external tools required.",
+      a.dataSources.length ? `Wire these data sources (read-only): ${a.dataSources.join("; ")}.` : "No data sources required.",
+      `Set the trigger: ${a.trigger}.`,
+      "Guardrails: OpenAI cannot natively block the approval-required actions — instruct the owner to review any output before it is sent or written. The prompt already enforces this.",
+      "Verify: run a test request and confirm the agent escalates blocked actions instead of performing them.",
+    ],
+  },
+  {
+    id: "claude",
+    name: "Claude (Project + connectors)",
+    steps: (a) => [
+      "Create a new Project in Claude (claude.ai → Projects → New).",
+      "Paste the System Prompt into the Project's custom instructions.",
+      a.documents.length ? `Add these documents to Project knowledge: ${a.documents.join("; ")}.` : "No knowledge documents required.",
+      a.mcp.length ? `Connect these MCP servers with the stated scope: ${a.mcp.join("; ")}.` : "No MCP servers required.",
+      a.dataSources.length ? `Connect these data sources (read-only): ${a.dataSources.join("; ")}.` : "No data sources required.",
+      `Set the trigger: ${a.trigger}.`,
+      "Guardrails: enforce approval-required actions via the owner's review; Claude will escalate per the prompt.",
+      "Verify with a test prompt that falls outside scope — the agent should reply that it falls outside its pedigree.",
+    ],
+  },
+  {
+    id: "generic",
+    name: "Generic runtime (LangGraph / CrewAI / your cloud)",
+    steps: (a) => [
+      "Instantiate an agent/LLM with the System Prompt as its system message.",
+      a.documents.length ? `Load these documents into the agent's context/RAG store: ${a.documents.join("; ")}.` : "No documents required.",
+      a.mcp.length ? `Register these tools with the stated scopes: ${a.mcp.join("; ")}.` : "No tools required.",
+      a.dataSources.length ? `Grant read-only access to: ${a.dataSources.join("; ")}.` : "No data sources required.",
+      `Trigger: ${a.trigger}.`,
+      "Implement an approval gate for the human-approval-required actions before any write/send.",
+      "Log every action with the manifest trace_id for audit.",
+    ],
+  },
+];
+
+interface DeploymentInfo {
+  documents: string[];
+  mcp: string[];
+  dataSources: string[];
+  trigger: string;
+}
+
+export function buildDeploymentGuide(manifest: Record<string, any>): string {
+  const owner = manifest.human_owner ?? {};
+  const io: IoContract = manifest.io_contract ?? { inputs: [], outputs: [], trigger: "human" };
+  const documents = io.inputs.filter((i) => i.type === "document" || i.type === "human_upload").map((i) => `${i.name} (${i.source})`);
+  const dataSources = io.inputs.filter((i) => i.type === "data_source").map((i) => `${i.source} — read-only`);
+  const mcp: string[] = (manifest.recommended_mcp_servers ?? []).map((m: any) => `${m.name} — ${String(m.scope).replace("_", "-")}`);
+  const info: DeploymentInfo = { documents, mcp, dataSources, trigger: io.trigger };
+
+  const lines: string[] = [];
+  lines.push(`# Deployment Package — ${manifest.agent_name}`);
+  lines.push("");
+  lines.push(`Provisioned by Pedigree · manifest \`${manifest.agent_id}\` · class: ${manifest.lifecycle?.class ?? "standing"}`);
+  lines.push(`Human owner: ${owner.name} (${owner.title}${owner.department ? ", " + owner.department : ""})`);
+  lines.push(`Parent responsibility: ${manifest.parent_responsibility?.name ?? ""}`);
+  lines.push("");
+  lines.push("This package contains everything needed to stand up this governed agent on the platform of your choice: the system prompt, the manifest, the documents to load, the tools/data to connect, and platform-specific steps.");
+  lines.push("");
+  lines.push("## 1. Artifacts");
+  lines.push("- `system-prompt.txt` — paste into the agent's instructions");
+  lines.push("- `manifest.json` — the portable Pedigree manifest (authority, I/O contract, lifecycle)");
+  lines.push("");
+  lines.push("## 2. Required documents to load");
+  lines.push(documents.length ? documents.map((d) => `- ${d}`).join("\n") : "- None");
+  lines.push("");
+  lines.push("## 3. Required tools / MCP servers (with scopes)");
+  lines.push(mcp.length ? mcp.map((m) => `- ${m}`).join("\n") : "- None");
+  lines.push("");
+  lines.push("## 4. Data sources");
+  lines.push(dataSources.length ? dataSources.map((d) => `- ${d}`).join("\n") : "- None");
+  lines.push("");
+  lines.push("## 5. Approval & guardrails");
+  const approvals: string[] = manifest.human_approval_required ?? [];
+  const blocked: string[] = manifest.blocked_tasks ?? [];
+  lines.push(`These actions require ${owner.name}'s approval before completion:`);
+  lines.push(approvals.length ? approvals.map((a) => `- ${a}`).join("\n") : "- None");
+  lines.push("");
+  lines.push("These actions are blocked entirely (never perform, even with approval):");
+  lines.push(blocked.length ? blocked.map((b) => `- ${b}`).join("\n") : "- None");
+  lines.push("");
+  lines.push("> Most target platforms cannot natively enforce these approval gates. The system prompt instructs the agent to escalate, but the human owner must review outputs before they are sent or written.");
+  lines.push("");
+  lines.push(`## 6. Trigger`);
+  lines.push(`- ${io.trigger}`);
+  lines.push("");
+  lines.push("## 7. Platform-specific setup");
+  for (const p of PLATFORMS) {
+    lines.push("");
+    lines.push(`### ${p.name}`);
+    p.steps(info).forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+  }
+  lines.push("");
+  lines.push("---");
+  lines.push("Generated by Pedigree Discover Lite. The manifest is the source of truth.");
+  return lines.join("\n");
 }

@@ -85,6 +85,8 @@ export interface PersonTasks {
   not_delegatable: TaskItem[];
 }
 
+export type AgentLifecycleClass = "standing" | "task";
+
 export interface AgentRecord {
   id: string;
   name: string;
@@ -93,6 +95,7 @@ export interface AgentRecord {
   respTitle: string;
   policy: string;
   riskLevel: RiskLevel;
+  lifecycle?: AgentLifecycleClass;
   person: Person;
   task: TaskItem;
   createdAt: string;

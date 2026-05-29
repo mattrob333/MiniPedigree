@@ -182,15 +182,14 @@ export default function App() {
   const onGenerateAgent = (ctx: GenerateCtx) => {
     const row = pedigree[ctx.person.id];
     if (!row) return;
-    const artifacts = buildAgentArtifacts({
+    const buildCtx = {
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
       agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
+      lifecycleClass: ctx.lifecycleClass,
       companyContext: profile?.companyContext,
-    });
-    const agent = newAgentRecord(
-      { person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle, agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel },
-      artifacts,
-    );
+    };
+    const artifacts = buildAgentArtifacts(buildCtx);
+    const agent = newAgentRecord(buildCtx, artifacts);
     setPedigree((prev) => {
       const nextRow = { ...prev[ctx.person.id] };
       nextRow.agents = [...nextRow.agents, agent];
@@ -347,26 +346,50 @@ function Metric({ label, value, delta, extra, up, arrow }: { label: string; valu
 }
 
 function AgentsList({ agents, onOpen }: { agents: AgentRecord[]; onOpen: (a: AgentRecord) => void }) {
+  const standing = agents.filter((a) => (a.lifecycle ?? "standing") === "standing");
+  const task = agents.filter((a) => a.lifecycle === "task");
+
+  const Card = ({ a }: { a: AgentRecord }) => (
+    <div className="manifest-card" style={{ marginBottom: 0, cursor: "pointer" }} onClick={() => onOpen(a)}>
+      <div className="manifest-card-head">
+        <Icon name="robot" size={11} style={{ marginRight: 6 }} /> {a.id}
+        <span className="right" style={{ display: "flex", gap: 4 }}>
+          <span className="tag">{a.lifecycle === "task" ? "task" : "standing"}</span>
+          <span className="badge generated"><span className="dot" />generated</span>
+        </span>
+      </div>
+      <div className="manifest-card-body">
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>{a.name}</div>
+        <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 8 }}>{a.person.name} · {a.person.title}</div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          <span className="tag cyan">{a.respTitle}</span>
+          <span className="tag yellow">{a.riskLevel} risk</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const Section = ({ title, hint, list }: { title: string; hint: string; list: AgentRecord[] }) => (
+    <section style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{title}</h3>
+        <span className="tag">{list.length}</span>
+        <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>{hint}</span>
+      </div>
+      {list.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--text-4)", fontStyle: "italic" }}>None yet.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+          {list.map((a) => <Card key={a.id} a={a} />)}
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <div className="sheet-wrap" style={{ padding: 20 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
-        {agents.map((a) => (
-          <div key={a.id} className="manifest-card" style={{ marginBottom: 0, cursor: "pointer" }} onClick={() => onOpen(a)}>
-            <div className="manifest-card-head">
-              <Icon name="robot" size={11} style={{ marginRight: 6 }} /> {a.id}
-              <span className="right"><span className="badge generated"><span className="dot" />generated</span></span>
-            </div>
-            <div className="manifest-card-body">
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>{a.name}</div>
-              <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 8 }}>{a.person.name} · {a.person.title}</div>
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                <span className="tag cyan">{a.respTitle}</span>
-                <span className="tag yellow">{a.riskLevel} risk</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <Section title="Standing agents" hint="persistent, tied to a recurring responsibility" list={standing} />
+      <Section title="Task agents (active / recent)" hint="ephemeral but governed — audit log retained on teardown" list={task} />
     </div>
   );
 }

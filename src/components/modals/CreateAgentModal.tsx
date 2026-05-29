@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon";
-import type { RiskLevel } from "@/types";
+import type { AgentLifecycleClass, RiskLevel } from "@/types";
 import type { CreateAgentCtx } from "../Drawer";
 import { suggestedAgentName } from "@/lib/parse";
 
@@ -8,6 +8,7 @@ export interface GenerateCtx extends CreateAgentCtx {
   agentName: string;
   policy: string;
   riskLevel: RiskLevel;
+  lifecycleClass: AgentLifecycleClass;
 }
 
 interface Props {
@@ -22,6 +23,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
   const [agentName, setAgentName] = useState(suggested);
   const [policy, setPolicy] = useState("auto-write-with-approval");
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("low");
+  const [lifecycleClass, setLifecycleClass] = useState<AgentLifecycleClass>("standing");
 
   useEffect(() => {
     if (ctx) setAgentName(suggestedAgentName(ctx.task.label));
@@ -82,6 +84,18 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           </div>
 
           <div className="form-field">
+            <div className="lbl">Lifecycle</div>
+            <select className="select" value={lifecycleClass} onChange={(e) => setLifecycleClass(e.target.value as AgentLifecycleClass)}>
+              <option value="standing">Standing — persistent, tied to a recurring responsibility</option>
+              <option value="task">Task — one-off, torn down on completion (audit log retained)</option>
+            </select>
+            <div className="hint" style={{ fontSize: 11, color: "var(--text-4)" }}>
+              <Icon name="info" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
+              Both inherit {ctx.person.name}'s authority ceiling. Task agents are ephemeral but still governed and audited.
+            </div>
+          </div>
+
+          <div className="form-field">
             <div className="lbl">Tool access (derived from {ctx.person.name}'s known tools)</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {ctx.person.tools.length ? ctx.person.tools.map((t) => <span key={t} className="tag cyan">{t}</span>) : <span className="dim" style={{ fontSize: 12 }}>No tools listed in CSV</span>}
@@ -93,7 +107,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           <span className="left"><Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Pedigree Standard System Prompt will be generated.</span>
           <div className="right">
             <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel })}>
+            <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass })}>
               <Icon name="sparkles" size={12} /> Generate Agent Manifest
             </button>
           </div>
