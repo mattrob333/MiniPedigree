@@ -3,7 +3,7 @@ import { Icon } from "./Icon";
 import type { ThemePref } from "@/lib/useTheme";
 
 interface TopbarProps {
-  screen: "login" | "upload" | "workspace" | "manifest" | "profile" | "company";
+  screen: "login" | "home" | "workspace" | "manifest" | "profile" | "company";
   workspaceName: string;
   agentName?: string;
   themePref: ThemePref;
@@ -33,7 +33,7 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
       {(screen === "workspace" || screen === "manifest" || screen === "profile" || screen === "company") && (
         <div className="breadcrumb">
           <span className="sep">/</span>
-          <span onClick={onWorkspace} style={onWorkspace ? { cursor: "pointer" } : undefined} className="crumb-link">Workspace</span>
+          <span onClick={onHome} style={onHome ? { cursor: "pointer" } : undefined} className="crumb-link">Companies</span>
           <span className="sep">/</span>
           <span onClick={onWorkspace} style={onWorkspace ? { cursor: "pointer" } : undefined} className="crumb-link">{workspaceName}</span>
           {screen === "manifest" && (

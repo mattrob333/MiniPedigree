@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Topbar } from "./components/Topbar";
-import { UploadScreen } from "./components/UploadScreen";
 import { Spreadsheet } from "./components/Spreadsheet";
 import { OrgMap } from "./components/OrgMap";
 import { Drawer, type CreateAgentCtx } from "./components/Drawer";
@@ -14,19 +13,22 @@ import { applyOrgSync, type Changeset } from "./lib/orgSync";
 import type { CompanyContext } from "./types";
 import { Toasts, type Toast } from "./components/Toasts";
 import { LoginScreen } from "./components/LoginScreen";
+import { WorkspacesHome, type DemoCompany } from "./components/WorkspacesHome";
 import { Icon } from "./components/Icon";
 
-import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile } from "./types";
+import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
-import { DEMO_PEOPLE } from "./lib/demoData";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AuthoredAgent } from "./lib/agent";
 import { authorAgent } from "./lib/api";
 import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
-import { saveWorkspace, loadWorkspace, loadProfile, saveProfile, clearProfile, workspaceIdFor } from "./lib/persist";
+import {
+  saveWorkspace, loadWorkspace, deleteWorkspace, listWorkspaces, newWorkspaceId,
+  getLastWorkspaceId, setLastWorkspaceId, loadProfile, saveProfile, clearProfile,
+} from "./lib/persist";
 
-type Screen = "login" | "upload" | "workspace" | "manifest" | "profile" | "company";
+type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company";
 type Tab = "spreadsheet" | "orgmap" | "agents";
 
 export default function App() {
@@ -40,6 +42,9 @@ export default function App() {
   const [people, setPeople] = useState<Person[]>([]);
   const [pedigree, setPedigree] = useState<PedigreeState>({});
   const [workspaceName, setWorkspaceName] = useState("Untitled Workspace");
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [companyContext, setCompanyContext] = useState<CompanyContext | undefined>(undefined);
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -68,7 +73,19 @@ export default function App() {
     return counts.size > 1 ? "All" : [...counts.keys()][0] ?? "";
   }, [people]);
 
-  // Bootstrap: restore session + workspace on load (the refresh / session-resume fix).
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext }) => {
+    setPeople(ws.people);
+    setPedigree(ws.pedigree);
+    setWorkspaceName(ws.name);
+    setCurrentWorkspaceId(ws.id);
+    setCompanyContext(ws.companyContext);
+    setSelectedId(null);
+    setDrawerOpen(false);
+    setScreen("workspace");
+    setTab("orgmap");
+  };
+
+  // Bootstrap: restore session, list this user's companies, resume the last one.
   useEffect(() => {
     const p = loadProfile();
     if (!p) {
@@ -77,46 +94,40 @@ export default function App() {
       return;
     }
     setProfile(p);
-    loadWorkspace(workspaceIdFor(p))
-      .then((ws) => {
-        if (ws && ws.people.length) {
-          setPeople(ws.people);
-          setPedigree(ws.pedigree);
-          setWorkspaceName(ws.name);
-          setScreen("workspace");
-          setTab("orgmap");
-        } else {
-          setScreen("upload");
-        }
-      })
-      .finally(() => setBooting(false));
+    setWorkspaces(listWorkspaces(p.email));
+    const lastId = getLastWorkspaceId(p.email);
+    if (lastId) {
+      loadWorkspace(lastId)
+        .then((ws) => {
+          if (ws && ws.people.length) openWorkspaceState(ws);
+          else setScreen("home");
+        })
+        .finally(() => setBooting(false));
+    } else {
+      setScreen("home");
+      setBooting(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist the workspace (keyed by company so a refresh restores it).
+  // Persist the active workspace by its own id whenever it changes.
   useEffect(() => {
     if (booting) return;
-    if (screen !== "upload" && people.length && profile) {
-      const id = workspaceIdFor(profile);
-      void saveWorkspace({ id, name: workspaceName, people, pedigree, createdAt: new Date().toISOString() });
+    if (currentWorkspaceId && people.length && profile) {
+      void saveWorkspace(
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, createdAt: new Date().toISOString() },
+        profile.email,
+      );
     }
-  }, [people, pedigree, workspaceName, screen, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, currentWorkspaceId, profile, booting]);
+
+  const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
   const onSignIn = (p: UserProfile) => {
     saveProfile(p);
     setProfile(p);
-    loadWorkspace(workspaceIdFor(p)).then((ws) => {
-      if (ws && ws.people.length) {
-        setPeople(ws.people);
-        setPedigree(ws.pedigree);
-        setWorkspaceName(ws.name);
-        setScreen("workspace");
-        setTab("orgmap");
-        pushToast("Welcome back", `${ws.people.length} people · ${ws.name}`);
-      } else {
-        setScreen("upload");
-      }
-    });
+    setWorkspaces(listWorkspaces(p.email));
+    setScreen("home");
   };
 
   const onSignOut = () => {
@@ -124,17 +135,44 @@ export default function App() {
     setProfile(null);
     setPeople([]);
     setPedigree({});
+    setCurrentWorkspaceId(null);
+    setCompanyContext(undefined);
+    setWorkspaces([]);
     setScreen("login");
   };
 
-  const onSaveCompanyProfile = (ctx: CompanyContext) => {
-    setProfile((prev) => {
-      const next = prev ? { ...prev, company: ctx.company || prev.company, companyContext: ctx } : prev;
-      if (next) saveProfile(next);
-      return next;
+  const exitToHome = () => {
+    setLastWorkspaceId(profile?.email, null);
+    setCurrentWorkspaceId(null);
+    refreshWorkspaces();
+    setScreen("home");
+  };
+
+  const openWorkspace = (id: string) => {
+    loadWorkspace(id).then((ws) => {
+      if (ws) {
+        openWorkspaceState(ws);
+        setLastWorkspaceId(profile?.email, id);
+      } else {
+        pushToast("Could not open company", "It may have been removed");
+        refreshWorkspaces();
+      }
     });
+  };
+
+  const onDeleteWorkspace = (id: string) => {
+    void deleteWorkspace(id, profile?.email);
+    if (currentWorkspaceId === id) setCurrentWorkspaceId(null);
+    refreshWorkspaces();
+  };
+
+  const onSaveCompanyProfile = (ctx: CompanyContext) => {
+    setCompanyContext(ctx);
+    if (currentWorkspaceId) {
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, createdAt: new Date().toISOString() }, profile?.email);
+    }
     setScreen("workspace");
-    pushToast("Company profile saved", "Used to ground discovery and agent generation", true);
+    pushToast("Company profile saved", "Grounds discovery and agent generation for this company", true);
   };
 
   useEffect(() => {
@@ -150,17 +188,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, metrics.agentsBuilt]);
 
-  const startWorkspace = (newPeople: Person[], name: string) => {
-    setPeople(newPeople);
-    setPedigree(initialPedigreeState(newPeople));
-    setWorkspaceName(name);
-    setSelectedId(null);
-    setDrawerOpen(false);
-    setScreen("workspace");
-    setTab("orgmap");
-  };
-
-  const onUploadText = (text: string, fileName: string) => {
+  const createWorkspaceFromCsv = (text: string, fileName: string, nameOverride?: string) => {
     setUploadError(null);
     if (!text.trim()) {
       setUploadError("Could not read the file. Please try again.");
@@ -171,14 +199,28 @@ export default function App() {
       setUploadError(result.errors.join("\n"));
       return;
     }
-    startWorkspace(result.people, result.workspaceName);
+    const name = nameOverride || result.workspaceName;
+    const id = newWorkspaceId(name);
+    const ped = initialPedigreeState(result.people);
+    const ctx: CompanyContext = { company: name, whatWeDo: "" };
+    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt: new Date().toISOString() }, profile?.email);
+    setLastWorkspaceId(profile?.email, id);
+    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx });
+    refreshWorkspaces();
     const warn = result.warnings.length ? ` · ${result.warnings.length} warning(s)` : "";
-    pushToast("CSV imported", `${result.people.length} people loaded${warn}`);
+    pushToast("Company created", `${result.people.length} people loaded${warn}`);
   };
 
-  const onUseDemo = () => {
-    startWorkspace(DEMO_PEOPLE, "Northwind Co.");
-    pushToast("Demo CSV imported", "4 people loaded · Revenue Ops");
+  const onUploadText = (text: string, fileName: string) => createWorkspaceFromCsv(text, fileName);
+
+  const onOpenDemo = async (demo: DemoCompany) => {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}samples/${demo.file}`);
+      const text = await res.text();
+      createWorkspaceFromCsv(text, demo.file, demo.label);
+    } catch {
+      setUploadError(`Could not load demo company "${demo.label}".`);
+    }
   };
 
   const onStartSession = (personId: string | undefined) => {
@@ -204,7 +246,7 @@ export default function App() {
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
       agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
       lifecycleClass: ctx.lifecycleClass,
-      companyContext: profile?.companyContext,
+      companyContext,
     };
 
     let authored: AuthoredAgent | null = null;
@@ -222,7 +264,7 @@ export default function App() {
         approval: seed.approval,
         blocked: seed.blocked,
         mcp: seed.mcp.map((m) => ({ name: m.name, scope: m.recommended_scope })),
-        company_context: profile?.companyContext,
+        company_context: companyContext,
         policy: ctx.policy,
         riskLevel: ctx.riskLevel,
       });
@@ -287,15 +329,25 @@ export default function App() {
         themePref={themePref}
         setThemePref={setThemePref}
         resolvedTheme={resolvedTheme}
-        onHome={screen !== "login" ? () => setScreen(people.length ? "workspace" : "upload") : undefined}
-        onWorkspace={screen !== "login" && people.length ? () => setScreen("workspace") : undefined}
+        onHome={screen !== "login" ? exitToHome : undefined}
+        onWorkspace={currentWorkspaceId ? () => setScreen("workspace") : undefined}
         userInitials={profile ? profile.name.split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase() : undefined}
         onSignOut={profile ? onSignOut : undefined}
       />
 
       {screen === "login" && <LoginScreen onSignIn={onSignIn} existingProfile={profile} />}
 
-      {screen === "upload" && <UploadScreen onUploadText={onUploadText} onUseDemo={onUseDemo} error={uploadError} />}
+      {screen === "home" && profile && (
+        <WorkspacesHome
+          userName={profile.name}
+          workspaces={workspaces}
+          onOpen={openWorkspace}
+          onDelete={onDeleteWorkspace}
+          onUploadText={onUploadText}
+          onOpenDemo={onOpenDemo}
+          error={uploadError}
+        />
+      )}
 
       {screen === "workspace" && (
         <div className="workspace">
@@ -312,7 +364,7 @@ export default function App() {
               <div className="actions">
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
                 <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
-                <button className="btn btn-sm btn-ghost" onClick={() => setScreen("upload")} title="Upload a new CSV"><Icon name="upload" size={12} /></button>
+                <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
                 <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
                 <button className={"btn " + (discoveryComplete ? "btn-ghost btn-sm" : "btn-primary")} onClick={() => onStartSession(selectedId ?? rootId)} title={discoveryComplete ? "Re-run discovery for a person to update them" : "Run a discovery pass to map responsibilities"}>
                   <Icon name="sparkles" size={12} /> {discoveryStarted ? (discoveryComplete ? "Update Responsibilities" : "Continue Discovery") : "Map Responsibilities"}
@@ -382,7 +434,7 @@ export default function App() {
       )}
 
       {screen === "company" && profile && (
-        <CompanyProfileScreen context={profile.companyContext} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
+        <CompanyProfileScreen context={companyContext ?? { company: workspaceName, whatWeDo: "" }} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
       )}
 
       {screen === "profile" && profileId && people.find((p) => p.id === profileId) && (
@@ -403,12 +455,12 @@ export default function App() {
         person={wizardPerson}
         people={people}
         pedigree={pedigree}
-        companyContext={profile?.companyContext}
+        companyContext={companyContext}
         onClose={() => setWizardPersonId(null)}
         onApply={onApplyMapping}
       />
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
-      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={profile?.companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
+      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
       <Toasts toasts={toasts} />
     </div>

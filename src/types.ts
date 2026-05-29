@@ -168,6 +168,18 @@ export interface Workspace {
   people: Person[];
   pedigree: PedigreeState;
   createdAt: string;
+  companyContext?: CompanyContext; // per-workspace company profile (one per client)
+  ownerEmail?: string;
+  updatedAt?: string;
+}
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  peopleCount: number;
+  mappedCount: number;
+  agentsCount: number;
+  updatedAt: string;
 }
 
 // ── Auth-lite: user profile + company context (P1.4) ──────────────────

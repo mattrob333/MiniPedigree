@@ -7,11 +7,14 @@ create extension if not exists "pgcrypto";
 create table if not exists workspaces (
   id text primary key,
   name text not null default 'Untitled Workspace',
-  -- lite persistence: full {people, pedigree} snapshot for the MVP
+  owner_email text,
+  -- lite persistence: full {people, pedigree, companyContext} snapshot for the MVP
   snapshot jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- for existing databases created before owner_email existed:
+alter table workspaces add column if not exists owner_email text;
 
 create table if not exists people (
   id uuid primary key default gen_random_uuid(),

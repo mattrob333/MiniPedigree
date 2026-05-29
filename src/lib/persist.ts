@@ -1,33 +1,94 @@
-import type { UserProfile, Workspace } from "@/types";
+import type { UserProfile, Workspace, WorkspaceSummary } from "@/types";
 import { supabase, supabaseEnabled } from "./supabase";
 
-const WS_PREFIX = "pedigree.workspace.v2.";
+const WS_PREFIX = "pedigree.ws.";       // per-workspace blob
+const IDX_PREFIX = "pedigree.index.";   // per-owner list of summaries
+const LAST_PREFIX = "pedigree.lastws."; // per-owner last-open id
 const PROFILE_KEY = "pedigree.profile.v1";
 
-function wsKey(id: string) {
-  return WS_PREFIX + id;
+function ownerSlug(email?: string): string {
+  return (email || "anon").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+const wsKey = (id: string) => WS_PREFIX + id;
+const idxKey = (email?: string) => IDX_PREFIX + ownerSlug(email);
+const lastKey = (email?: string) => LAST_PREFIX + ownerSlug(email);
+
+export function newWorkspaceId(name: string): string {
+  const slug = (name || "company").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "company";
+  return `${slug}-${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
 }
 
-/** Stable workspace id derived from the logged-in company (so reloads restore it). */
-export function workspaceIdFor(profile: UserProfile | null, fallback = "default"): string {
-  const base = (profile?.company || profile?.email || fallback).toLowerCase().trim();
-  return base.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || fallback;
-}
-
-/** Persist the active workspace. Uses Supabase when configured, always mirrors to localStorage. */
-export async function saveWorkspace(ws: Workspace): Promise<void> {
-  try {
-    localStorage.setItem(wsKey(ws.id), JSON.stringify(ws));
-  } catch {
-    /* ignore quota errors */
+function summarize(ws: Workspace): WorkspaceSummary {
+  let mapped = 0;
+  let agents = 0;
+  const MAPPED = new Set(["mapped", "ready", "generated"]);
+  for (const p of ws.people) {
+    const row = ws.pedigree[p.id];
+    if (row && MAPPED.has(row.status)) mapped++;
+    agents += row?.agents?.length ?? 0;
   }
+  return { id: ws.id, name: ws.name, peopleCount: ws.people.length, mappedCount: mapped, agentsCount: agents, updatedAt: new Date().toISOString() };
+}
+
+function readIndex(email?: string): WorkspaceSummary[] {
+  try {
+    const raw = localStorage.getItem(idxKey(email));
+    return raw ? (JSON.parse(raw) as WorkspaceSummary[]) : [];
+  } catch {
+    return [];
+  }
+}
+function writeIndex(email: string | undefined, list: WorkspaceSummary[]) {
+  try {
+    localStorage.setItem(idxKey(email), JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function listWorkspaces(email?: string): WorkspaceSummary[] {
+  return readIndex(email).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+}
+
+export function getLastWorkspaceId(email?: string): string | null {
+  try {
+    return localStorage.getItem(lastKey(email));
+  } catch {
+    return null;
+  }
+}
+export function setLastWorkspaceId(email: string | undefined, id: string | null) {
+  try {
+    if (id) localStorage.setItem(lastKey(email), id);
+    else localStorage.removeItem(lastKey(email));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Persist a workspace (per id) and update this owner's index + last-open pointer. */
+export async function saveWorkspace(ws: Workspace, email?: string): Promise<void> {
+  const stamped: Workspace = { ...ws, ownerEmail: email, updatedAt: new Date().toISOString() };
+  try {
+    localStorage.setItem(wsKey(ws.id), JSON.stringify(stamped));
+  } catch {
+    /* ignore quota */
+  }
+  // update index
+  const summary = summarize(stamped);
+  const list = readIndex(email).filter((s) => s.id !== ws.id);
+  list.unshift(summary);
+  writeIndex(email, list);
+  setLastWorkspaceId(email, ws.id);
+
   if (supabaseEnabled && supabase) {
     try {
       await supabase.from("workspaces").upsert({
         id: ws.id,
         name: ws.name,
-        snapshot: { people: ws.people, pedigree: ws.pedigree },
-        updated_at: new Date().toISOString(),
+        owner_email: email ?? null,
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext },
+        updated_at: stamped.updatedAt,
       });
     } catch (e) {
       console.warn("Supabase save failed, kept local copy", e);
@@ -35,15 +96,14 @@ export async function saveWorkspace(ws: Workspace): Promise<void> {
   }
 }
 
-/** Load a workspace by id: Supabase first (cross-device), then localStorage. */
 export async function loadWorkspace(id: string): Promise<Workspace | null> {
   if (supabaseEnabled && supabase) {
     try {
-      const { data } = await supabase.from("workspaces").select("id,name,snapshot").eq("id", id).maybeSingle();
+      const { data } = await supabase.from("workspaces").select("id,name,owner_email,snapshot").eq("id", id).maybeSingle();
       if (data?.snapshot) {
-        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"] };
+        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"] };
         if (snap.people?.length) {
-          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, createdAt: new Date().toISOString() };
+          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
         }
       }
     } catch (e) {
@@ -59,15 +119,24 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
   return null;
 }
 
-export function clearWorkspaceLocal(id: string): void {
+export async function deleteWorkspace(id: string, email?: string): Promise<void> {
   try {
     localStorage.removeItem(wsKey(id));
   } catch {
     /* ignore */
   }
+  writeIndex(email, readIndex(email).filter((s) => s.id !== id));
+  if (getLastWorkspaceId(email) === id) setLastWorkspaceId(email, null);
+  if (supabaseEnabled && supabase) {
+    try {
+      await supabase.from("workspaces").delete().eq("id", id);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
-// ── Profile (auth-lite) ───────────────────────────────────────────────
+// ── Profile (identity) ────────────────────────────────────────────────
 export function saveProfile(profile: UserProfile): void {
   try {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
@@ -77,13 +146,7 @@ export function saveProfile(profile: UserProfile): void {
   if (supabaseEnabled && supabase) {
     supabase
       .from("profiles")
-      .upsert({
-        email: profile.email,
-        name: profile.name,
-        company: profile.company,
-        company_context: profile.companyContext,
-        updated_at: new Date().toISOString(),
-      })
+      .upsert({ email: profile.email, name: profile.name, company: profile.company, company_context: profile.companyContext, updated_at: new Date().toISOString() })
       .then(undefined, (e) => console.warn("Supabase profile save failed", e));
   }
 }
