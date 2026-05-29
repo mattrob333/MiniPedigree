@@ -9,6 +9,7 @@ export interface GenerateCtx extends CreateAgentCtx {
   policy: string;
   riskLevel: RiskLevel;
   lifecycleClass: AgentLifecycleClass;
+  aiAuthored: boolean;
 }
 
 interface Props {
@@ -24,6 +25,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
   const [policy, setPolicy] = useState("auto-write-with-approval");
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("low");
   const [lifecycleClass, setLifecycleClass] = useState<AgentLifecycleClass>("standing");
+  const [aiAuthored, setAiAuthored] = useState(true);
 
   useEffect(() => {
     if (ctx) setAgentName(suggestedAgentName(ctx.task.label));
@@ -96,6 +98,20 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           </div>
 
           <div className="form-field">
+            <div className="lbl">Prompt authoring</div>
+            <div className="view-toggle" style={{ width: "100%" }}>
+              <button style={{ flex: 1 }} data-active={aiAuthored} onClick={() => setAiAuthored(true)}>AI-authored (GPT-5.5)</button>
+              <button style={{ flex: 1 }} data-active={!aiAuthored} onClick={() => setAiAuthored(false)}>Standard template</button>
+            </div>
+            <div className="hint" style={{ fontSize: 11, color: "var(--text-4)" }}>
+              <Icon name="info" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
+              {aiAuthored
+                ? "GPT-5.5 writes each section grounded in your company profile, this person's role, and the task. Guardrails are never weakened. Takes a few seconds."
+                : "Instant, deterministic Pedigree Standard template (no AI call)."}
+            </div>
+          </div>
+
+          <div className="form-field">
             <div className="lbl">Tool access (derived from {ctx.person.name}'s known tools)</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
               {ctx.person.tools.length ? ctx.person.tools.map((t) => <span key={t} className="tag cyan">{t}</span>) : <span className="dim" style={{ fontSize: 12 }}>No tools listed in CSV</span>}
@@ -107,7 +123,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           <span className="left"><Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Pedigree Standard System Prompt will be generated.</span>
           <div className="right">
             <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass })}>
+            <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass, aiAuthored })}>
               <Icon name="sparkles" size={12} /> Generate Agent Manifest
             </button>
           </div>

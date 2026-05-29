@@ -8,6 +8,18 @@ export function slugify(s: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export interface AuthoredAgent {
+  role: string;
+  authority_ceiling: string;
+  purpose: string;
+  goal: string;
+  allowed_tasks: string[];
+  approval_required: string[];
+  blocked_tasks: string[];
+  escalation_rules: string[];
+  output_style: string;
+}
+
 export interface AgentBuildCtx {
   person: Person;
   row: PedigreeRow;
@@ -18,6 +30,8 @@ export interface AgentBuildCtx {
   riskLevel: RiskLevel;
   lifecycleClass?: AgentLifecycleClass;
   companyContext?: CompanyContext;
+  /** When present, the AI-authored sections are used instead of the deterministic template. */
+  authored?: AuthoredAgent | null;
 }
 
 export interface IoInput {
@@ -56,19 +70,20 @@ const GLOBAL_BLOCKED = [
 ];
 
 export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
-  const { person, row, task, respTitle, agentName, policy, riskLevel, companyContext } = ctx;
+  const { person, row, task, respTitle, agentName, policy, riskLevel, companyContext, authored } = ctx;
   const lifecycleClass: AgentLifecycleClass = ctx.lifecycleClass ?? "standing";
 
   const inResp = (t: TaskItem) => t.respId === task.respId;
-  const allowed = uniq([
-    task.label,
-    ...row.tasks.delegatable.filter(inResp).map((t) => t.label),
-  ]);
-  const approval = uniq(row.tasks.approval.filter(inResp).map((t) => t.label));
-  const blocked = uniq([
-    ...row.tasks.not_delegatable.filter(inResp).map((t) => t.label),
-    ...GLOBAL_BLOCKED,
-  ]);
+  // Deterministic governance seeds from the discovery classification.
+  const seedAllowed = uniq([task.label, ...row.tasks.delegatable.filter(inResp).map((t) => t.label)]);
+  const seedApproval = uniq(row.tasks.approval.filter(inResp).map((t) => t.label));
+  const seedBlocked = uniq([...row.tasks.not_delegatable.filter(inResp).map((t) => t.label), ...GLOBAL_BLOCKED]);
+
+  // AI-authored content refines/expands the seeds. Guardrails can only be
+  // STRENGTHENED: blocked/approval always include the deterministic seeds.
+  const allowed = authored ? uniq([task.label, ...authored.allowed_tasks]) : seedAllowed;
+  const approval = uniq([...(authored?.approval_required ?? []), ...seedApproval]);
+  const blocked = uniq([...(authored?.blocked_tasks ?? []), ...seedBlocked]);
 
   const mcpText = [respTitle, ...allowed, ...approval].join(" ");
   const mcp = recommendMcp(mcpText, person.tools);
@@ -100,7 +115,8 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
       name: respTitle,
     },
     task: { id: task.id, label: task.label },
-    purpose: `Help ${person.name} with: ${task.label.toLowerCase()}.`,
+    purpose: authored?.purpose || `Help ${person.name} with: ${task.label.toLowerCase()}.`,
+    authored_by: authored ? "ai" : "template",
     allowed_tasks: allowed,
     human_approval_required: approval,
     blocked_tasks: blocked,
@@ -133,7 +149,7 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     },
   };
 
-  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext });
+  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, authored });
 
   return { manifest, systemPrompt, allowed, approval, blocked, mcp };
 }
@@ -162,11 +178,35 @@ function buildSystemPrompt(a: {
   policy: string;
   riskLevel: RiskLevel;
   companyContext?: CompanyContext;
+  authored?: AuthoredAgent | null;
 }): string {
-  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext } = a;
+  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, authored } = a;
   const mcpLines = mcp.length
     ? mcp.map((m) => `- ${m.name}: ${m.recommended_scope.replace("_", "-")} scope. ${m.reason}.`).join("\n")
     : `- Recommended from ${person.name}'s known tools: ${person.tools.join(", ") || "none listed"} (read-only).`;
+
+  // AI-authored prose for the human sections (governed lists stay deterministic above).
+  const roleLine = authored?.role
+    ? authored.role
+    : `You are ${agentName}. You work for ${person.name}, ${person.title}. You support the business responsibility defined in the Pedigree manifest.`;
+  const authorityLine = authored?.authority_ceiling
+    ? authored.authority_ceiling
+    : `Your human owner is ${person.name}. You do not replace this person. You assist with specific delegated tasks under their responsibility for "${respTitle}".\nYou may not exceed the authority of ${person.name}, and you may not perform actions that require human approval unless approval is explicitly granted.`;
+  const goalLine = authored?.goal
+    ? authored.goal
+    : `Your goal is to help ${person.name} with ${task.label.toLowerCase()}, staying strictly within the scope above.`;
+  const escalationBlock = authored?.escalation_rules?.length
+    ? bullets(authored.escalation_rules)
+    : bullets([
+        "The request involves a blocked task.",
+        "The request affects official business records.",
+        "The request involves external communication.",
+        "The request involves financial, legal, customer, employee, or security risk.",
+        "The available information is incomplete or conflicting.",
+      ]);
+  const outputStyle = authored?.output_style
+    ? authored.output_style
+    : `Be concise, operational, and decision-ready.\nWhen summarizing, separate facts, assumptions, risks, and recommended next steps.\nWhen approval is required, clearly label the output as a draft or recommendation.`;
 
   const businessContext = companyContext
     ? `\n\n[BUSINESS CONTEXT]
@@ -175,18 +215,17 @@ Ground your work in this business context; do not contradict it or invent facts 
     : "";
 
   return `[ROLE]
-You are ${agentName}. You work for ${person.name}, ${person.title}. You support the business responsibility defined in the Pedigree manifest.
+${roleLine}
 
 [HUMAN OWNER AND AUTHORITY CEILING]
-Your human owner is ${person.name}. You do not replace this person. You assist with specific delegated tasks under their responsibility for "${respTitle}".
-You may not exceed the authority of ${person.name}, and you may not perform actions that require human approval unless approval is explicitly granted.${businessContext}
+${authorityLine}${businessContext}
 
 [PARENT RESPONSIBILITY]
 Responsibility: ${respTitle}
 Anchored task: ${task.label}
 
 [GOAL]
-Your goal is to help ${person.name} with ${task.label.toLowerCase()}, staying strictly within the scope above.
+${goalLine}
 
 [ALLOWED TASKS]
 You may perform the following tasks:
@@ -215,16 +254,10 @@ Do not invent company policy, customer commitments, pricing terms, approvals, or
 
 [ESCALATION RULES]
 Escalate to ${person.name} when:
-- The request involves a blocked task.
-- The request affects official business records.
-- The request involves external communication.
-- The request involves financial, legal, customer, employee, or security risk.
-- The available information is incomplete or conflicting.
+${escalationBlock}
 
 [OUTPUT STYLE]
-Be concise, operational, and decision-ready.
-When summarizing, separate facts, assumptions, risks, and recommended next steps.
-When approval is required, clearly label the output as a draft or recommendation.`;
+${outputStyle}`;
 }
 
 export function newAgentRecord(ctx: AgentBuildCtx, artifacts: AgentArtifacts): AgentRecord {

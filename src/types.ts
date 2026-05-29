@@ -171,12 +171,22 @@ export interface Workspace {
 }
 
 // ── Auth-lite: user profile + company context (P1.4) ──────────────────
+// The single source of truth about the business. The whole system (discovery
+// parsing + agent authoring) draws from this. Mostly static; edited in the
+// Company Profile screen. Login captures the first three; the rest are optional
+// but make agents far more grounded.
 export interface CompanyContext {
   company: string;
-  whatWeDo: string;      // what the company does
-  mission?: string;
-  initiatives?: string;  // key current initiatives
-  terminology?: string;  // internal terms / product names
+  whatWeDo: string;        // what the company does
+  industry?: string;       // e.g. "Outpatient healthcare", "B2B SaaS"
+  market?: string;         // who it serves / market segment & geography
+  businessModel?: string;  // how it makes money
+  mission?: string;        // mission / vision
+  strategicGoals?: string; // CEO-level goals & priorities this year
+  products?: string;       // key products / services
+  competitors?: string;    // notable competitors / positioning
+  initiatives?: string;    // key current initiatives
+  terminology?: string;    // internal terms / product names
 }
 
 export interface UserProfile {

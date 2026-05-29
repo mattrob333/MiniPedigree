@@ -106,6 +106,42 @@ function discoveryToMap(
   return out;
 }
 
+import type { AuthoredAgent } from "./agent";
+
+export interface AuthorAgentPayload {
+  agentName: string;
+  person: { name: string; title: string; department: string; email: string; tools: string[] };
+  responsibility: { title: string };
+  task: { label: string };
+  allowed: string[];
+  approval: string[];
+  blocked: string[];
+  mcp: { name: string; scope: string }[];
+  company_context?: CompanyContext;
+  policy: string;
+  riskLevel: string;
+}
+
+/**
+ * Ask the server (GPT-5.5) to author the agent's sections. Returns the authored
+ * object, or null to signal the caller should fall back to the deterministic template.
+ */
+export async function authorAgent(payload: AuthorAgentPayload): Promise<AuthoredAgent | null> {
+  try {
+    const res = await fetch("/api/agents/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json?.mode === "ai" && json.authored) return json.authored as AuthoredAgent;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function transcribeAudio(file: File): Promise<{ transcript: string; provider: string }> {
   const form = new FormData();
   form.append("file", file);

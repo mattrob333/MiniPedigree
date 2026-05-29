@@ -9,7 +9,9 @@ import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAg
 import { ManifestScreen } from "./components/ManifestScreen";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { OrgSyncModal } from "./components/OrgSyncModal";
+import { CompanyProfileScreen } from "./components/CompanyProfileScreen";
 import { applyOrgSync, type Changeset } from "./lib/orgSync";
+import type { CompanyContext } from "./types";
 import { Toasts, type Toast } from "./components/Toasts";
 import { LoginScreen } from "./components/LoginScreen";
 import { Icon } from "./components/Icon";
@@ -18,12 +20,13 @@ import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person,
 import { parsePeopleCsv } from "./lib/csv";
 import { DEMO_PEOPLE } from "./lib/demoData";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
-import { buildAgentArtifacts, newAgentRecord } from "./lib/agent";
+import { buildAgentArtifacts, newAgentRecord, type AuthoredAgent } from "./lib/agent";
+import { authorAgent } from "./lib/api";
 import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
 import { saveWorkspace, loadWorkspace, loadProfile, saveProfile, clearProfile, workspaceIdFor } from "./lib/persist";
 
-type Screen = "login" | "upload" | "workspace" | "manifest" | "profile";
+type Screen = "login" | "upload" | "workspace" | "manifest" | "profile" | "company";
 type Tab = "spreadsheet" | "orgmap" | "agents";
 
 export default function App() {
@@ -124,6 +127,16 @@ export default function App() {
     setScreen("login");
   };
 
+  const onSaveCompanyProfile = (ctx: CompanyContext) => {
+    setProfile((prev) => {
+      const next = prev ? { ...prev, company: ctx.company || prev.company, companyContext: ctx } : prev;
+      if (next) saveProfile(next);
+      return next;
+    });
+    setScreen("workspace");
+    pushToast("Company profile saved", "Used to ground discovery and agent generation", true);
+  };
+
   useEffect(() => {
     if (screen !== "workspace") return;
     const onKey = (e: KeyboardEvent) => {
@@ -184,15 +197,38 @@ export default function App() {
     pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}`, true);
   };
 
-  const onGenerateAgent = (ctx: GenerateCtx) => {
+  const onGenerateAgent = async (ctx: GenerateCtx) => {
     const row = pedigree[ctx.person.id];
     if (!row) return;
-    const buildCtx = {
+    const baseCtx = {
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
       agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
       lifecycleClass: ctx.lifecycleClass,
       companyContext: profile?.companyContext,
     };
+
+    let authored: AuthoredAgent | null = null;
+    if (ctx.aiAuthored) {
+      // Deterministic build first to get the governance seeds, then let GPT-5.5 author.
+      const seed = buildAgentArtifacts(baseCtx);
+      setCreateAgentCtx(null);
+      pushToast("Authoring with GPT-5.5…", "Grounding in company profile + responsibility");
+      authored = await authorAgent({
+        agentName: ctx.agentName,
+        person: { name: ctx.person.name, title: ctx.person.title, department: ctx.person.department, email: ctx.person.email, tools: ctx.person.tools },
+        responsibility: { title: ctx.respTitle },
+        task: { label: ctx.task.label },
+        allowed: seed.allowed,
+        approval: seed.approval,
+        blocked: seed.blocked,
+        mcp: seed.mcp.map((m) => ({ name: m.name, scope: m.recommended_scope })),
+        company_context: profile?.companyContext,
+        policy: ctx.policy,
+        riskLevel: ctx.riskLevel,
+      });
+    }
+
+    const buildCtx = { ...baseCtx, authored };
     const artifacts = buildAgentArtifacts(buildCtx);
     const agent = newAgentRecord(buildCtx, artifacts);
     setPedigree((prev) => {
@@ -204,7 +240,7 @@ export default function App() {
     setActiveAgent(agent);
     setCreateAgentCtx(null);
     setScreen("manifest");
-    pushToast("Agent generated", `${agent.name} · owner ${ctx.person.name}`, true);
+    pushToast("Agent generated", `${agent.name} · ${authored ? "authored by GPT-5.5" : "standard template"} · owner ${ctx.person.name}`, true);
   };
 
   const onSelect = (id: string) => {
@@ -274,6 +310,7 @@ export default function App() {
                 </div>
               </div>
               <div className="actions">
+                <button className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
                 <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("upload")} title="Upload a new CSV"><Icon name="upload" size={12} /></button>
                 <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
@@ -342,6 +379,10 @@ export default function App() {
 
       {screen === "manifest" && (
         <ManifestScreen agent={activeAgent} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
+      )}
+
+      {screen === "company" && profile && (
+        <CompanyProfileScreen context={profile.companyContext} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
       )}
 
       {screen === "profile" && profileId && people.find((p) => p.id === profileId) && (

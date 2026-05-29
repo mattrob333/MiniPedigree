@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { discoveryParseHandler } from "./routes/discoveryParse.js";
+import { agentsGenerateHandler } from "./routes/agentsGenerate.js";
 import { transcribeHandler } from "./routes/transcribe.js";
 import { openaiEnabled, TRANSCRIPTION_PROVIDER } from "./openai.js";
 
@@ -27,6 +28,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/discovery/parse", discoveryParseHandler);
+app.post("/api/agents/generate", agentsGenerateHandler);
 app.post("/api/transcribe", upload.single("file"), transcribeHandler);
 
 app.listen(PORT, () => {
