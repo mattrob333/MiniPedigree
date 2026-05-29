@@ -20,9 +20,10 @@ interface DrawerProps {
   onCreateAgent: (ctx: CreateAgentCtx) => void;
   onOpenAgent: (a: AgentRecord) => void;
   onStartSession: (personId: string) => void;
+  onOpenProfile: (personId: string) => void;
 }
 
-export function Drawer({ open, person, state, people, pedigree, onClose, onCreateAgent, onOpenAgent, onStartSession }: DrawerProps) {
+export function Drawer({ open, person, state, people, pedigree, onClose, onCreateAgent, onOpenAgent, onStartSession, onOpenProfile }: DrawerProps) {
   const mgr = person ? people.find((p) => p.id === person.managerId) : undefined;
   const reports = person ? people.filter((p) => p.managerId === person.id) : [];
   const respList = state?.responsibilities ?? [];
@@ -52,6 +53,9 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
                 {person.name}
                 <StatusBadge status={status} />
               </h2>
+              <button className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} onClick={() => onOpenProfile(person.id)}>
+                <Icon name="external" size={11} /> Open full profile
+              </button>
               <div className="meta">
                 {person.title}
                 <span className="dept-pill" style={{ marginLeft: 8, color: dept.accent, background: dept.bg, border: `1px solid ${dept.border}`, padding: "2px 8px", borderRadius: 5, fontSize: 10, fontWeight: 600 }}>{person.department}</span>

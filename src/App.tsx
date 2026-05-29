@@ -7,6 +7,7 @@ import { Drawer, type CreateAgentCtx } from "./components/Drawer";
 import { MappingSessionWizard } from "./components/MappingSessionWizard";
 import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
+import { ProfileScreen } from "./components/ProfileScreen";
 import { Toasts, type Toast } from "./components/Toasts";
 import { LoginScreen } from "./components/LoginScreen";
 import { Icon } from "./components/Icon";
@@ -20,7 +21,7 @@ import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
 import { saveWorkspace, loadWorkspace, loadProfile, saveProfile, clearProfile, workspaceIdFor } from "./lib/persist";
 
-type Screen = "login" | "upload" | "workspace" | "manifest";
+type Screen = "login" | "upload" | "workspace" | "manifest" | "profile";
 type Tab = "spreadsheet" | "orgmap" | "agents";
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [wizardPersonId, setWizardPersonId] = useState<string | null>(null);
   const [createAgentCtx, setCreateAgentCtx] = useState<CreateAgentCtx | null>(null);
   const [activeAgent, setActiveAgent] = useState<AgentRecord | null>(null);
@@ -212,6 +214,12 @@ export default function App() {
     setDrawerOpen(true);
   };
 
+  const onOpenProfile = (id: string) => {
+    setProfileId(id);
+    setDrawerOpen(false);
+    setScreen("profile");
+  };
+
   const onExport = () => {
     const csv = exportEnrichedCsv(people, pedigree);
     downloadFile(`${workspaceName.toLowerCase().replace(/\s+/g, "-")}-pedigree.csv`, csv, "text/csv");
@@ -309,6 +317,7 @@ export default function App() {
               onCreateAgent={(ctx) => setCreateAgentCtx(ctx)}
               onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
               onStartSession={onStartSession}
+              onOpenProfile={onOpenProfile}
             />
           </div>
         </div>
@@ -316,6 +325,19 @@ export default function App() {
 
       {screen === "manifest" && (
         <ManifestScreen agent={activeAgent} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
+      )}
+
+      {screen === "profile" && profileId && people.find((p) => p.id === profileId) && (
+        <ProfileScreen
+          person={people.find((p) => p.id === profileId)!}
+          people={people}
+          pedigree={pedigree}
+          onBack={() => setScreen("workspace")}
+          onOpenPerson={(id) => setProfileId(id)}
+          onCreateAgent={(ctx) => setCreateAgentCtx(ctx)}
+          onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
+          onStartSession={onStartSession}
+        />
       )}
 
       <MappingSessionWizard
