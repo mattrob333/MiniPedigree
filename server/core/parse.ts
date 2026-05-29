@@ -1,4 +1,5 @@
-import { openai, openaiEnabled, MODEL } from "../openai.js";
+import { openaiEnabled } from "../openai.js";
+import { callStructured } from "./openaiCall.js";
 import { parsedDiscoverySchema } from "../../src/lib/schemas.js";
 
 const SYSTEM_PROMPT = `You are Pedigree's Responsibility Parser and Task Decomposition engine.
@@ -112,7 +113,7 @@ export type ParseResult =
 
 /** Framework-agnostic discovery parse — used by both the Express dev server and Vercel functions. */
 export async function runDiscoveryParse({ transcript, people, company_context }: ParseInput): Promise<ParseResult> {
-  if (!openaiEnabled || !openai) {
+  if (!openaiEnabled) {
     return { mode: "demo", reason: "OPENAI_API_KEY not configured" };
   }
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
@@ -121,35 +122,15 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
 
   try {
     const ctxBlock = company_context && typeof company_context === "object"
-      ? `Company context (use to ground responsibilities in the business; prefer the company's own terminology):\n${JSON.stringify(company_context, null, 2)}\n\n`
+      ? `Company profile (the single source of truth for this business — ground every responsibility, task, and recommendation in it, and prefer the company's own terminology):\n${JSON.stringify(company_context, null, 2)}\n\n`
       : "";
     const userMsg = `${ctxBlock}People (JSON):\n${JSON.stringify(people, null, 2)}\n\nDiscovery transcript:\n"""\n${transcript}\n"""`;
-    const completion = await openai.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-      response_format: { type: "json_schema", json_schema: responseSchema },
-      temperature: 0.2,
+    const parsed = await callStructured({
+      system: SYSTEM_PROMPT,
+      user: userMsg,
+      schemaName: responseSchema.name,
+      schema: responseSchema.schema as Record<string, unknown>,
     });
-
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const repair = await openai.chat.completions.create({
-        model: MODEL,
-        messages: [
-          { role: "system", content: "Return ONLY valid JSON matching the previously requested schema." },
-          { role: "user", content: raw },
-        ],
-        response_format: { type: "json_schema", json_schema: responseSchema },
-      });
-      parsed = JSON.parse(repair.choices[0]?.message?.content ?? "{}");
-    }
-
     const discovery = parsedDiscoverySchema.parse(parsed);
     return { mode: "ai", discovery };
   } catch (e) {
