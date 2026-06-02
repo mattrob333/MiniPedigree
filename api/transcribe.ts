@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./_types.js";
 import formidable from "formidable";
 import { readFile } from "node:fs/promises";
 import { runTranscribe, TranscribeError } from "../server/core/transcribe.js";
@@ -7,7 +7,7 @@ import { runTranscribe, TranscribeError } from "../server/core/transcribe.js";
 export const config = { api: { bodyParser: false } };
 
 // POST /api/transcribe  (multipart form, field "file")  → { transcript, provider }
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") {
     res.status(405).send("Method not allowed");
     return;

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import JSZip from "jszip";
 import { Icon } from "./Icon";
+import { BrandChip } from "./BrandLogo";
 import type { AgentRecord, McpRecommendation } from "@/types";
 import { copyText, initials } from "@/lib/util";
 import { downloadFile } from "@/lib/state";
-import { slugify, buildDeploymentGuide } from "@/lib/agent";
+import { slugify, buildDeploymentGuide, type AgentConstructionSpec } from "@/lib/agent";
+import { buildHermesManifest } from "@/lib/hermesManifest";
 import { recommendMcp } from "@/lib/mcpCatalog";
 
 function highlight(str: string): string {
@@ -44,12 +46,22 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
   const io = manifest.io_contract ?? { inputs: [], outputs: [], trigger: "human" };
   const lifecycle = manifest.lifecycle ?? { class: agent.lifecycle ?? "standing" };
   const setupGuide = buildDeploymentGuide(manifest);
+  const constructionSpec = (manifest.construction_spec ?? {}) as Partial<AgentConstructionSpec>;
+  const hermes = buildHermesManifest(agent);
+  const hermesJson = JSON.stringify(hermes.manifest, null, 2);
+  const workflow = (constructionSpec.workflow_steps ?? manifest.workflow_steps ?? []) as string[];
+  const outputs = (constructionSpec.output_artifacts ?? manifest.output_artifacts ?? []) as string[];
+  const failures = (constructionSpec.failure_modes ?? manifest.failure_modes ?? []) as string[];
+  const testPrompts = (constructionSpec.test_prompts ?? manifest.test_prompts ?? []) as string[];
+  const validationWarnings = Array.from(new Set([...(manifest.validation_warnings ?? []), ...hermes.warnings]));
 
   const exportPackage = async () => {
     const zip = new JSZip();
     const folder = zip.folder(slug) ?? zip;
     folder.file("system-prompt.txt", prompt);
     folder.file("manifest.json", json);
+    folder.file("hermes-manifest.json", hermesJson);
+    folder.file("hermes-agent.md", hermes.markdown);
     folder.file("SETUP.md", setupGuide);
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
@@ -66,7 +78,13 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
   const doCopy = async (text: string, label: string) => {
     if (await copyText(text)) {
       setCopied(label);
-      onToast("Copied", label === "prompt" ? "System prompt copied to clipboard" : "Manifest JSON copied", true);
+      const detail: Record<string, string> = {
+        prompt: "System prompt copied to clipboard",
+        manifest: "Manifest JSON copied",
+        guide: "SETUP.md copied",
+        hermes: "Hermes Markdown copied",
+      };
+      onToast("Copied", detail[label] ?? "Copied to clipboard", true);
       setTimeout(() => setCopied(null), 1500);
     }
   };
@@ -118,11 +136,15 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
               <div className="manifest-kv">
                 <div className="k">Tools</div>
                 <div className="v" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  {tools.length ? tools.map((t) => <span key={t.name} className="tag cyan">{t.name} <span style={{ color: "var(--text-4)" }}>· {t.scope}</span></span>) : <span className="dim">none listed</span>}
+                  {tools.length ? tools.map((t) => (
+                    <BrandChip key={t.name} name={t.name} tone="cyan" suffix={t.scope}>{t.name}</BrandChip>
+                  )) : <span className="dim">none listed</span>}
                 </div>
                 <div className="k">Recommended MCP</div>
                 <div className="v" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  {mcpFallback.map((m) => <span key={m.name} className="tag">{m.name} <span style={{ color: "var(--text-4)" }}>· {m.recommended_scope.replace("_", "-")}</span></span>)}
+                  {mcpFallback.map((m) => (
+                    <BrandChip key={m.name} name={m.name} suffix={m.recommended_scope.replace("_", "-")}>{m.name}</BrandChip>
+                  ))}
                 </div>
               </div>
             </div>
@@ -190,6 +212,41 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
 
           <div className="manifest-card">
             <div className="manifest-card-head">
+              <Icon name="sparkles" size={11} style={{ marginRight: 6 }} /> Construction Spec
+              <span className="right"><span className="tag cyan">{String(constructionSpec.operating_mode ?? manifest.operating_mode ?? "on_demand").replace("_", "-")}</span></span>
+            </div>
+            <div className="manifest-card-body">
+              <div className="manifest-kv">
+                <div className="k">Goal</div>
+                <div className="v">{constructionSpec.goal ?? manifest.goal ?? manifest.purpose}</div>
+                <div className="k">Workflow</div>
+                <div className="v" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {workflow.length ? workflow.slice(0, 5).map((step, idx) => <div key={idx} style={{ fontSize: 12 }}>{idx + 1}. {step}</div>) : <span className="dim">none</span>}
+                </div>
+                <div className="k">Outputs</div>
+                <div className="v" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {outputs.length ? outputs.map((o) => <span key={o} className="tag">{o}</span>) : <span className="dim">none</span>}
+                </div>
+                <div className="k">Failure modes</div>
+                <div className="v" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {failures.length ? failures.slice(0, 4).map((f) => <div key={f} style={{ fontSize: 11.5, color: "var(--text-2)" }}><Icon name="warning" size={10} stroke="var(--yellow)" /> {f}</div>) : <span className="dim">none</span>}
+                </div>
+                <div className="k">Test prompts</div>
+                <div className="v" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {testPrompts.length ? testPrompts.slice(0, 3).map((t) => <div key={t} style={{ fontSize: 11.5 }}>{t}</div>) : <span className="dim">none</span>}
+                </div>
+                {validationWarnings.length > 0 && <>
+                  <div className="k">Draft warnings</div>
+                  <div className="v" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {validationWarnings.slice(0, 4).map((w) => <div key={w} style={{ fontSize: 11.5, color: "var(--yellow)" }}><Icon name="warning" size={10} stroke="var(--yellow)" /> {w}</div>)}
+                  </div>
+                </>}
+              </div>
+            </div>
+          </div>
+
+          <div className="manifest-card">
+            <div className="manifest-card-head">
               <Icon name="code" size={11} style={{ marginRight: 6 }} /> manifest.json
               <span className="right">
                 <button className="btn btn-sm btn-ghost" onClick={() => doCopy(json, "manifest")}><Icon name="copy" size={11} /> {copied === "manifest" ? "Copied" : "Copy"}</button>
@@ -225,6 +282,7 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
             <button className="btn" onClick={() => doCopy(prompt, "prompt")}><Icon name="copy" size={12} /> Copy prompt</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.prompt.txt`, prompt, "text/plain")}><Icon name="download" size={12} /> Export prompt</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.manifest.json`, json, "application/json")}><Icon name="download" size={12} /> Export manifest</button>
+            <button className="btn" onClick={() => downloadFile(`${slug}.hermes.md`, hermes.markdown, "text/markdown")}><Icon name="download" size={12} /> Export Hermes Agent</button>
             <span style={{ flex: 1 }} />
             <button className="btn btn-primary" onClick={exportPackage}><Icon name="download" size={12} /> Export Deployment Package</button>
           </div>
@@ -242,7 +300,7 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
               <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: showGuide ? 12 : 0 }}>
                 Everything needed to stand this agent up elsewhere: system prompt, manifest, the documents to load,
                 the MCP servers/scopes + data sources to connect, guardrails, and numbered setup steps for OpenAI, Claude, and a generic runtime.
-                The <strong style={{ color: "var(--text-1)" }}>Export Deployment Package</strong> button downloads a <span className="mono">.zip</span> with <span className="mono">system-prompt.txt</span>, <span className="mono">manifest.json</span>, and <span className="mono">SETUP.md</span>.
+                The <strong style={{ color: "var(--text-1)" }}>Export Deployment Package</strong> button downloads a <span className="mono">.zip</span> with <span className="mono">system-prompt.txt</span>, <span className="mono">manifest.json</span>, <span className="mono">hermes-manifest.json</span>, <span className="mono">hermes-agent.md</span>, and <span className="mono">SETUP.md</span>.
               </div>
               {showGuide && (
                 <pre className="codeblock" style={{ fontSize: 11.5, maxHeight: 360, overflow: "auto" }}>{setupGuide}</pre>

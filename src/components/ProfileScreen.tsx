@@ -1,5 +1,6 @@
 import type { AgentRecord, PedigreeState, Person } from "@/types";
 import { Icon } from "./Icon";
+import { BrandChip } from "./BrandLogo";
 import { StatusBadge } from "./StatusBadge";
 import { initials } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
@@ -168,13 +169,13 @@ export function ProfileScreen({ person, people, pedigree, onBack, onOpenPerson, 
             <section className="profile-section">
               <div className="ps-head"><Icon name="build" size={13} stroke="var(--cyan)" /> Tools & access</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: mcpScopes.length ? 10 : 0 }}>
-                {person.tools.length ? person.tools.map((t) => <span key={t} className="tag cyan">{t}</span>) : <span className="dim" style={{ fontSize: 12 }}>No tools listed</span>}
+                {person.tools.length ? person.tools.map((t) => <BrandChip key={t} name={t} tone="cyan">{t}</BrandChip>) : <span className="dim" style={{ fontSize: 12 }}>No tools listed</span>}
               </div>
               {mcpScopes.length > 0 && (
                 <>
                   <div className="rc-label" style={{ marginBottom: 4 }}>Permitted MCP scopes (from agents)</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                    {mcpScopes.map((m) => <span key={m} className="tag">{m}</span>)}
+                    {mcpScopes.map((m) => <BrandChip key={m} name={m}>{m}</BrandChip>)}
                   </div>
                 </>
               )}

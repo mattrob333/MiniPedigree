@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../Icon";
+import { BrandChip } from "../BrandLogo";
 import type { AgentLifecycleClass, RiskLevel } from "@/types";
 import type { CreateAgentCtx } from "../Drawer";
 import { suggestedAgentName } from "@/lib/parse";
@@ -98,29 +99,29 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           </div>
 
           <div className="form-field">
-            <div className="lbl">Prompt authoring</div>
+            <div className="lbl">Agent construction</div>
             <div className="view-toggle" style={{ width: "100%" }}>
-              <button style={{ flex: 1 }} data-active={aiAuthored} onClick={() => setAiAuthored(true)}>AI-authored (GPT-5.5)</button>
+              <button style={{ flex: 1 }} data-active={aiAuthored} onClick={() => setAiAuthored(true)}>AI construction (GPT-5.5)</button>
               <button style={{ flex: 1 }} data-active={!aiAuthored} onClick={() => setAiAuthored(false)}>Standard template</button>
             </div>
             <div className="hint" style={{ fontSize: 11, color: "var(--text-4)" }}>
               <Icon name="info" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
               {aiAuthored
-                ? "GPT-5.5 writes each section grounded in your company profile, this person's role, and the task. Guardrails are never weakened. Takes a few seconds."
-                : "Instant, deterministic Pedigree Standard template (no AI call)."}
+                ? "GPT-5.5 designs the governed construction spec: workflow, tools, approvals, audit, failure modes, and test prompts. Guardrails are never weakened."
+                : "Instant, deterministic Pedigree Standard construction spec (no AI call)."}
             </div>
           </div>
 
           <div className="form-field">
             <div className="lbl">Tool access (derived from {ctx.person.name}'s known tools)</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-              {ctx.person.tools.length ? ctx.person.tools.map((t) => <span key={t} className="tag cyan">{t}</span>) : <span className="dim" style={{ fontSize: 12 }}>No tools listed in CSV</span>}
+              {ctx.person.tools.length ? ctx.person.tools.map((t) => <BrandChip key={t} name={t} tone="cyan">{t}</BrandChip>) : <span className="dim" style={{ fontSize: 12 }}>No tools listed in CSV</span>}
             </div>
           </div>
         </div>
 
         <div className="modal-foot">
-          <span className="left"><Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Pedigree Standard System Prompt will be generated.</span>
+          <span className="left"><Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Pedigree manifest, system prompt, and construction spec will be generated.</span>
           <div className="right">
             <button className="btn" onClick={onClose}>Cancel</button>
             <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass, aiAuthored })}>

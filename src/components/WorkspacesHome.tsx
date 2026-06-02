@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { BrandLogo } from "./BrandLogo";
 import type { WorkspaceSummary } from "@/types";
 
 export interface DemoCompany {
@@ -13,6 +14,19 @@ const DEMOS: DemoCompany[] = [
   { file: "02_northstar_saas_20_people.csv", label: "Northstar SaaS", sub: "B2B SaaS · 20 people" },
   { file: "03_summit_clinic_network_34_people.csv", label: "Summit Clinic", sub: "Healthcare · 34 people" },
   { file: "04_atlas_channel_group_52_people.csv", label: "Atlas Channel Group", sub: "Channel · 52 people" },
+];
+
+const HRIS_INTEGRATIONS = [
+  {
+    name: "Workday",
+    label: "Workday HRIS",
+    description: "Import people, managers, departments, titles, and known systems directly from Workday.",
+  },
+  {
+    name: "Oracle",
+    label: "Oracle HRIS",
+    description: "Sync workforce structure from Oracle HCM once the connector is available.",
+  },
 ];
 
 interface Props {
@@ -66,6 +80,23 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
             <Icon name="warning" size={12} stroke="var(--red)" style={{ verticalAlign: -2, marginRight: 6 }} />{error}
           </div>
         )}
+
+        {/* HRIS integrations */}
+        <div className="home-section-head" style={{ marginTop: 22 }}>
+          <Icon name="build" size={12} /> HRIS integrations <span className="dim" style={{ fontSize: 11 }}>connectors coming soon</span>
+        </div>
+        <div className="integration-grid">
+          {HRIS_INTEGRATIONS.map((integration) => (
+            <div key={integration.name} className="integration-card coming-soon" aria-disabled="true">
+              <BrandLogo name={integration.name} size={34} />
+              <div className="integration-copy">
+                <div className="integration-name">{integration.label}</div>
+                <div className="integration-desc">{integration.description}</div>
+              </div>
+              <span className="coming-soon-badge">Coming soon</span>
+            </div>
+          ))}
+        </div>
 
         {/* Your companies */}
         <div className="home-section-head"><Icon name="users" size={13} /> Your companies <span className="tag">{workspaces.length}</span></div>

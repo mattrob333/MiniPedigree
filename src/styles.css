@@ -269,6 +269,13 @@ button {
   font-weight: 600;
   color: var(--text-2);
   border: 1px solid var(--border-2);
+  cursor: pointer;
+  transition: border-color 120ms, box-shadow 120ms, transform 120ms;
+}
+.topbar .user:hover,
+.topbar .user[aria-expanded="true"] {
+  border-color: var(--border-cyan);
+  box-shadow: 0 0 0 3px var(--cyan-faint);
 }
 
 /* ============================================================
@@ -1585,6 +1592,70 @@ select.select {
   color: var(--text-5);
   letter-spacing: 0.04em;
   background: var(--bg-2);
+}
+.account-popover {
+  width: 250px;
+}
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-1);
+}
+.account-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--avatar-from), var(--avatar-to));
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+  font-weight: 700;
+  font-size: 12px;
+}
+.account-copy {
+  min-width: 0;
+}
+.account-name {
+  color: var(--text-1);
+  font-weight: 600;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-meta {
+  margin-top: 2px;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.account-action {
+  width: 100%;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--border-1);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.account-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.account-action.danger:hover {
+  border-color: #5a2024;
+  background: rgba(248,113,113,0.08);
+  color: var(--red);
 }
 
 /* small toggle (used in settings) */

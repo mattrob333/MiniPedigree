@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "../_types.js";
 import { runDiscoveryParse } from "../../server/core/parse.js";
 
 // POST /api/discovery/parse  → { mode: "ai", discovery } | { mode: "demo", reason }
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") {
     res.status(405).send("Method not allowed");
     return;

@@ -90,6 +90,22 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext },
         updated_at: stamped.updatedAt,
       });
+      const contextDocuments = ws.companyContext?.contextDocuments ?? [];
+      if (contextDocuments.length) {
+        await supabase.from("company_context_documents").upsert(contextDocuments.map((doc) => ({
+          id: doc.id,
+          workspace_id: ws.id,
+          bucket: doc.bucket,
+          file_name: doc.fileName,
+          title: doc.title ?? doc.fileName,
+          mime_type: doc.mimeType ?? null,
+          size_bytes: doc.sizeBytes ?? null,
+          content_text: doc.text,
+          uploaded_at: doc.uploadedAt,
+          source_id: doc.sourceId ?? null,
+          updated_at: stamped.updatedAt,
+        })));
+      }
     } catch (e) {
       console.warn("Supabase save failed, kept local copy", e);
     }

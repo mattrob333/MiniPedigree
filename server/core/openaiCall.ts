@@ -13,6 +13,8 @@ export interface StructuredCallOpts {
   /** JSON schema body (the object under "schema"), strict-compatible. */
   schema: Record<string, unknown>;
   model?: string;
+  tools?: unknown[];
+  include?: string[];
 }
 
 /**
@@ -39,6 +41,8 @@ export async function callStructured<T = unknown>(opts: StructuredCallOpts): Pro
   } else {
     base.temperature = 0.2;
   }
+  if (opts.tools?.length) base.tools = opts.tools;
+  if (opts.include?.length) base.include = opts.include;
 
   const res = await (openai as any).responses.create(base);
   const raw: string = res.output_text ?? "";
