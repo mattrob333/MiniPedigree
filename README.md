@@ -64,6 +64,11 @@ Pedigree distinguishes the **first pass** from **ongoing updates**, because comp
 - **Company context** is a first-class object injected into both discovery parsing and every
   generated manifest + system prompt (`[BUSINESS CONTEXT]`), so agents are grounded in the business,
   not just a role.
+- **Context sources** can now be loaded from text files into explicit company buckets:
+  segregation-of-duties documents, company policies, and company knowledge/goals/initiatives.
+  The company profile dropdown shows what has been loaded so agent authors can see the grounding set.
+- **Future connectors** for Saviant, Okta, and Microsoft Entra ID are shown as coming soon until
+  real integrations are wired up.
 
 ### What you get per agent (the portable, governed manifest)
 
@@ -76,6 +81,12 @@ The defensible artifact is the **manifest**, not the prompt. Each generated agen
   (human / schedule). This turns the flat chain into a directed graph of agents.
 - **`lifecycle`** — `standing` (persistent) vs `task` (ephemeral, TTL, but still governed and
   audited — `teardown_policy: delete_agent_retain_log`). The Agents tab separates the two.
+- **Company context document stores** — uploaded SOD, policy, and knowledge text files are emitted
+  in `company_context.context_documents` and referenced as manifest inputs so a future runtime can
+  pull the right grounding documents.
+- **Hermes-ready execution fields** — manifests include operating mode, schedule guidance, workflow
+  steps, input requirements, output artifacts, tool permissions, delivery targets, memory policy,
+  audit events, failure modes, and test prompts.
 - **Deployment Package** — one click exports a `.zip` (`system-prompt.txt`, `manifest.json`,
   `SETUP.md`) with the exact documents to load, MCP servers + scopes, data sources, guardrail notes,
   and numbered setup steps for **OpenAI**, **Claude**, and a **generic** runtime.
@@ -146,8 +157,13 @@ parsing (the Parse Review modal shows a **GPT** badge) and OpenAI/Deepgram for a
 transcription. If a call fails, the client transparently falls back to the local engine.
 
 ### With Supabase (real persistence)
-Set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` and run
-`supabase/migrations/001_initial_schema.sql`. Otherwise the workspace persists to `localStorage`.
+Set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` and run the migrations in
+`supabase/migrations/`:
+
+- `001_initial_schema.sql` for workspaces and workspace snapshots.
+- `002_company_context_documents.sql` for uploaded company context document buckets.
+
+Otherwise the workspace persists to `localStorage`.
 
 ## Scripts
 
@@ -177,6 +193,7 @@ app/
       layout.ts             # recursive tidy-tree layout for the org chart
       parse.ts              # deterministic transcript → responsibilities/tasks
       agent.ts              # manifest JSON + Pedigree Standard System Prompt
+      hermesManifest.ts     # Hermes-ready execution manifest adapter
       mcpCatalog.ts         # static MCP recommendation catalog (read/draft only)
       schemas.ts            # Zod schemas for AI structured output
       api.ts                # client API wrappers w/ local fallback
@@ -184,9 +201,11 @@ app/
   server/
     index.ts                # Express app
     openai.ts
+    core/companyProfile.ts    # company profile parsing + deterministic fallback
     routes/discoveryParse.ts  # OpenAI Structured Outputs
+    routes/companyProfileParse.ts
     routes/transcribe.ts      # OpenAI / Deepgram speech-to-text
-  supabase/migrations/001_initial_schema.sql
+  supabase/migrations/       # workspace + company context document tables
   public/samples/           # four mock-organization CSVs
   tests/                    # Vitest: csv, parse/classification, agent manifest
 ```
@@ -204,6 +223,8 @@ app/
 
 - API keys live only in environment variables; OpenAI is never called from the browser.
 - MCP servers are **recommendations only** — read-only / draft-only scopes, never write.
+- Saviant, Okta, and Microsoft Entra ID are visible as future connectors only. Text uploads are
+  the current supported company-context source.
 - No real tool connections, deployments, or credential brokering. This is a prompt and
   manifest **compiler**, not a runtime.
 - Don't paste regulated/sensitive data into the prototype without proper controls.
