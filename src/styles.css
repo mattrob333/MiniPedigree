@@ -1382,7 +1382,7 @@ button {
 }
 .manifest-body {
   flex: 1; overflow: auto;
-  padding: 16px 20px 32px;
+  padding: 16px 20px 150px;
 }
 
 .manifest-card {
@@ -1437,6 +1437,120 @@ button {
 
 /* prompt pane */
 .prompt-pane .codeblock { font-size: 12.5px; }
+
+.manifest-format-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 130;
+  width: min(1180px, calc(100vw - 40px));
+  display: grid;
+  grid-template-columns: minmax(190px, 0.35fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-1) 94%, transparent);
+  box-shadow: 0 18px 50px -24px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+}
+.manifest-format-copy {
+  min-width: 0;
+  padding-left: 4px;
+}
+.manifest-format-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+.manifest-format-title {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text-2);
+}
+.manifest-format-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(122px, 1fr));
+  gap: 8px;
+}
+.manifest-format-button {
+  min-width: 0;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-1);
+  border-radius: 8px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.15;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease, color 140ms ease;
+}
+.manifest-format-button:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-cyan);
+  background: var(--cyan-faint);
+  color: var(--text-1);
+}
+.manifest-format-button.primary {
+  border-color: var(--border-cyan);
+  background: linear-gradient(180deg, var(--cyan-faint), var(--bg-2));
+  color: var(--text-1);
+}
+.manifest-format-button .brand-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.manifest-format-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1120px) {
+  .manifest-format-dock {
+    grid-template-columns: 1fr;
+  }
+  .manifest-format-actions {
+    grid-template-columns: repeat(3, minmax(132px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .manifest-screen {
+    grid-template-columns: 1fr;
+  }
+  .manifest-pane + .manifest-pane {
+    border-left: 0;
+    border-top: 1px solid var(--border-1);
+  }
+  .manifest-body {
+    padding-bottom: 220px;
+  }
+  .manifest-format-dock {
+    width: calc(100vw - 24px);
+    bottom: 12px;
+  }
+  .manifest-format-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .manifest-format-button {
+    justify-content: flex-start;
+  }
+}
 
 /* ============================================================
    Toast
