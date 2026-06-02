@@ -5,6 +5,7 @@ import multer from "multer";
 import { discoveryParseHandler } from "./routes/discoveryParse.js";
 import { agentsGenerateHandler } from "./routes/agentsGenerate.js";
 import { transcribeHandler } from "./routes/transcribe.js";
+import { companyProfileParseHandler } from "./routes/companyProfileParse.js";
 import { openaiEnabled, TRANSCRIPTION_PROVIDER } from "./openai.js";
 
 const app = express();
@@ -29,9 +30,20 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/discovery/parse", discoveryParseHandler);
 app.post("/api/agents/generate", agentsGenerateHandler);
+app.post("/api/company/profile/parse", companyProfileParseHandler);
 app.post("/api/transcribe", upload.single("file"), transcribeHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT);
+
+server.on("listening", () => {
   console.log(`[pedigree] API server on http://localhost:${PORT}`);
   console.log(`[pedigree] OpenAI: ${openaiEnabled ? "enabled" : "disabled (demo fallback)"} · transcription: ${TRANSCRIPTION_PROVIDER}`);
+});
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE" && process.env.NODE_ENV !== "production") {
+    console.warn(`[pedigree] API port ${PORT} is already in use; keeping the existing local server.`);
+    process.exit(0);
+  }
+  throw err;
 });

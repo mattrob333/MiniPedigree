@@ -58,6 +58,58 @@ export const parsedDiscoverySchema = z.object({
 
 export type ParsedDiscovery = z.infer<typeof parsedDiscoverySchema>;
 
+export const companyResearchSourceSchema = z.object({
+  url: z.string().optional().default(""),
+  title: z.string().optional().default(""),
+  snippet: z.string().optional().default(""),
+  source_type: z.enum(["company_site", "user_text", "manual", "other"]).optional().default("other"),
+});
+
+export const companyContextDocumentSchema = z.object({
+  id: z.string(),
+  bucket: z.enum(["segregation_of_duties", "policy", "knowledge"]),
+  fileName: z.string(),
+  title: z.string().optional().default(""),
+  mimeType: z.string().optional().default(""),
+  sizeBytes: z.number().optional().default(0),
+  text: z.string().default(""),
+  uploadedAt: z.string(),
+  sourceId: z.string().optional().default(""),
+});
+
+export const companyContextSchema = z.object({
+  company: z.string().default(""),
+  url: z.string().optional().default(""),
+  rawNotes: z.string().optional().default(""),
+  whatWeDo: z.string().default(""),
+  industry: z.string().optional().default(""),
+  market: z.string().optional().default(""),
+  businessModel: z.string().optional().default(""),
+  mission: z.string().optional().default(""),
+  strategicGoals: z.string().optional().default(""),
+  products: z.string().optional().default(""),
+  competitors: z.string().optional().default(""),
+  initiatives: z.string().optional().default(""),
+  terminology: z.string().optional().default(""),
+  currentState: z.string().optional().default(""),
+  bottlenecks: z.string().optional().default(""),
+  systems: z.array(z.string()).optional().default([]),
+  sops: z.array(z.string()).optional().default([]),
+  approvalRules: z.array(z.string()).optional().default([]),
+  segregationOfDuties: z.array(z.string()).optional().default([]),
+  complianceNotes: z.array(z.string()).optional().default([]),
+  governanceRisks: z.array(z.string()).optional().default([]),
+  departments: z.array(z.string()).optional().default([]),
+  unknowns: z.array(z.string()).optional().default([]),
+  researchSources: z.array(companyResearchSourceSchema).optional().default([]),
+  contextDocuments: z.array(companyContextDocumentSchema).optional().default([]),
+  confidence: z.number().min(0).max(1).optional().default(0.35),
+  researchedAt: z.string().optional().default(""),
+  updatedAt: z.string().optional().default(""),
+});
+
+export type CompanyContextSchema = z.infer<typeof companyContextSchema>;
+
 export const agentManifestSchema = z.object({
   manifest_version: z.string(),
   agent_id: z.string(),

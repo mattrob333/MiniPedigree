@@ -1,6 +1,6 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { ApiRequest, ApiResponse } from "./_types.js";
 
-export default function handler(_req: VercelRequest, res: VercelResponse) {
+export default function handler(_req: ApiRequest, res: ApiResponse) {
   res.json({
     ok: true,
     openai: Boolean(process.env.OPENAI_API_KEY),

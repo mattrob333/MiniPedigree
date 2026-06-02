@@ -1,7 +1,7 @@
 import type { CompanyContext, ParsedMap, ParsedResponsibility, Person } from "@/types";
 import { generateParsed } from "./parse";
 import { recommendMcp } from "./mcpCatalog";
-import { parsedDiscoverySchema } from "./schemas";
+import { companyContextSchema, parsedDiscoverySchema } from "./schemas";
 
 export interface ParseOutcome {
   parsed: ParsedMap;
@@ -106,7 +106,7 @@ function discoveryToMap(
   return out;
 }
 
-import type { AuthoredAgent } from "./agent";
+import type { AgentConstructionSpec } from "./agent";
 
 export interface AuthorAgentPayload {
   agentName: string;
@@ -123,10 +123,10 @@ export interface AuthorAgentPayload {
 }
 
 /**
- * Ask the server (GPT-5.5) to author the agent's sections. Returns the authored
+ * Ask the server (GPT-5.5) to author the agent construction spec. Returns the authored
  * object, or null to signal the caller should fall back to the deterministic template.
  */
-export async function authorAgent(payload: AuthorAgentPayload): Promise<AuthoredAgent | null> {
+export async function authorAgent(payload: AuthorAgentPayload): Promise<AgentConstructionSpec | null> {
   try {
     const res = await fetch("/api/agents/generate", {
       method: "POST",
@@ -135,7 +135,7 @@ export async function authorAgent(payload: AuthorAgentPayload): Promise<Authored
     });
     if (!res.ok) return null;
     const json = await res.json();
-    if (json?.mode === "ai" && json.authored) return json.authored as AuthoredAgent;
+    if (json?.mode === "ai" && json.authored) return json.authored as AgentConstructionSpec;
     return null;
   } catch {
     return null;
@@ -153,4 +153,39 @@ export async function transcribeAudio(file: File): Promise<{ transcript: string;
   const json = await res.json();
   if (!json?.transcript) throw new Error("Transcription returned no text.");
   return { transcript: json.transcript, provider: json.provider ?? "openai" };
+}
+
+export interface CompanyProfileParseOutcome {
+  profile: CompanyContext;
+  source: "ai" | "demo";
+  reason?: string;
+}
+
+export async function parseCompanyProfile(args: {
+  company?: string;
+  url?: string;
+  notes: string;
+  researchUrl: boolean;
+}): Promise<CompanyProfileParseOutcome> {
+  const res = await fetch("/api/company/profile/parse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      company: args.company,
+      url: args.url,
+      notes: args.notes,
+      research_url: args.researchUrl,
+    }),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "");
+    throw new Error(msg || "Company profile parsing failed.");
+  }
+  const json = await res.json();
+  if (!json?.profile) throw new Error("Company profile parser returned no profile.");
+  return {
+    profile: companyContextSchema.parse(json.profile) as CompanyContext,
+    source: json.mode === "ai" ? "ai" : "demo",
+    reason: typeof json.reason === "string" ? json.reason : undefined,
+  };
 }

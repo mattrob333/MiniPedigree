@@ -182,6 +182,27 @@ export interface WorkspaceSummary {
   updatedAt: string;
 }
 
+export interface CompanyResearchSource {
+  url: string;
+  title?: string;
+  snippet?: string;
+  source_type: "company_site" | "user_text" | "manual" | "other";
+}
+
+export type CompanyContextDocumentBucket = "segregation_of_duties" | "policy" | "knowledge";
+
+export interface CompanyContextDocument {
+  id: string;
+  bucket: CompanyContextDocumentBucket;
+  fileName: string;
+  title?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  text: string;
+  uploadedAt: string;
+  sourceId?: string;
+}
+
 // ── Auth-lite: user profile + company context (P1.4) ──────────────────
 // The single source of truth about the business. The whole system (discovery
 // parsing + agent authoring) draws from this. Mostly static; edited in the
@@ -189,6 +210,9 @@ export interface WorkspaceSummary {
 // but make agents far more grounded.
 export interface CompanyContext {
   company: string;
+  url?: string;
+  rawNotes?: string;
+
   whatWeDo: string;        // what the company does
   industry?: string;       // e.g. "Outpatient healthcare", "B2B SaaS"
   market?: string;         // who it serves / market segment & geography
@@ -199,6 +223,23 @@ export interface CompanyContext {
   competitors?: string;    // notable competitors / positioning
   initiatives?: string;    // key current initiatives
   terminology?: string;    // internal terms / product names
+
+  currentState?: string;
+  bottlenecks?: string;
+  systems?: string[];
+  sops?: string[];
+  approvalRules?: string[];
+  segregationOfDuties?: string[];
+  complianceNotes?: string[];
+  governanceRisks?: string[];
+  departments?: string[];
+  unknowns?: string[];
+
+  researchSources?: CompanyResearchSource[];
+  contextDocuments?: CompanyContextDocument[];
+  confidence?: number;
+  researchedAt?: string;
+  updatedAt?: string;
 }
 
 export interface UserProfile {

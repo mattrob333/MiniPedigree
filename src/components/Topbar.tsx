@@ -12,11 +12,25 @@ interface TopbarProps {
   onHome?: () => void;
   onWorkspace?: () => void;
   userInitials?: string;
+  userName?: string;
   onSignOut?: () => void;
 }
 
-export function Topbar({ screen, workspaceName, agentName, themePref, setThemePref, resolvedTheme, onHome, onWorkspace, userInitials, onSignOut }: TopbarProps) {
+export function Topbar({
+  screen,
+  workspaceName,
+  agentName,
+  themePref,
+  setThemePref,
+  resolvedTheme,
+  onHome,
+  onWorkspace,
+  userInitials,
+  userName,
+  onSignOut,
+}: TopbarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   return (
     <header className="topbar">
@@ -39,7 +53,7 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
           {screen === "manifest" && (
             <>
               <span className="sep">/</span>
-              <span className="crumb-active">Agent · {agentName}</span>
+              <span className="crumb-active">Agent - {agentName}</span>
             </>
           )}
         </div>
@@ -53,7 +67,7 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
       </div>
       <div className="env">
         <span className="env-dot" />
-        demo • local-only
+        demo · local-only
       </div>
 
       <div className="popover-anchor">
@@ -62,7 +76,10 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
           title="Settings"
           aria-label="Settings"
           aria-expanded={settingsOpen}
-          onClick={() => setSettingsOpen((v) => !v)}
+          onClick={() => {
+            setAccountOpen(false);
+            setSettingsOpen((v) => !v);
+          }}
           style={settingsOpen ? { borderColor: "var(--border-cyan)", color: "var(--cyan)" } : undefined}
         >
           <Icon name={resolvedTheme === "light" ? "sun" : "moon"} size={13} />
@@ -73,12 +90,36 @@ export function Topbar({ screen, workspaceName, agentName, themePref, setThemePr
             setThemePref={setThemePref}
             resolvedTheme={resolvedTheme}
             onClose={() => setSettingsOpen(false)}
-            onSignOut={onSignOut}
           />
         )}
       </div>
 
-      <div className="user">{userInitials || "DC"}</div>
+      {onSignOut ? (
+        <div className="popover-anchor">
+          <button
+            className="user"
+            title="Account"
+            aria-label="Account menu"
+            aria-expanded={accountOpen}
+            onClick={() => {
+              setSettingsOpen(false);
+              setAccountOpen((v) => !v);
+            }}
+          >
+            {userInitials || "DC"}
+          </button>
+          {accountOpen && (
+            <AccountPopover
+              initials={userInitials || "DC"}
+              userName={userName}
+              onClose={() => setAccountOpen(false)}
+              onSignOut={onSignOut}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="user">{userInitials || "DC"}</div>
+      )}
     </header>
   );
 }
@@ -88,13 +129,11 @@ function SettingsPopover({
   setThemePref,
   resolvedTheme,
   onClose,
-  onSignOut,
 }: {
   themePref: ThemePref;
   setThemePref: (p: ThemePref) => void;
   resolvedTheme: "light" | "dark";
   onClose: () => void;
-  onSignOut?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -130,7 +169,7 @@ function SettingsPopover({
         </div>
         {themePref === "system" && (
           <div style={{ fontSize: 10.5, color: "var(--text-4)", marginTop: 6, fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
-            Auto · currently {resolvedTheme}
+            Auto - currently {resolvedTheme}
           </div>
         )}
       </div>
@@ -149,14 +188,52 @@ function SettingsPopover({
           <span className="tgl" data-on="true" />
         </div>
       </div>
-      {onSignOut && (
-        <div className="popover-section">
-          <button className="btn btn-sm btn-ghost" style={{ width: "100%", justifyContent: "center" }} onClick={() => { onClose(); onSignOut(); }}>
-            <Icon name="external" size={12} /> Sign out
-          </button>
+      <div className="popover-foot">Pedigree Discover Lite - v0.1.0</div>
+    </div>
+  );
+}
+
+function AccountPopover({
+  initials,
+  userName,
+  onClose,
+  onSignOut,
+}: {
+  initials: string;
+  userName?: string;
+  onClose: () => void;
+  onSignOut?: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="popover account-popover" ref={ref} role="dialog" aria-label="Account">
+      <div className="account-card">
+        <div className="account-avatar">{initials}</div>
+        <div className="account-copy">
+          <div className="account-name">{userName || "Local user"}</div>
+          <div className="account-meta">demo · local-only</div>
         </div>
-      )}
-      <div className="popover-foot">Pedigree Discover Lite · v0.1.0</div>
+      </div>
+      <div className="popover-section">
+        <button className="account-action danger" onClick={() => { onClose(); onSignOut?.(); }}>
+          <Icon name="external" size={12} /> Log out
+        </button>
+      </div>
     </div>
   );
 }

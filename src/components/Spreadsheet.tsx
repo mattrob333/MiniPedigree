@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { PedigreeState, Person, TaskItem } from "@/types";
 import { Icon } from "./Icon";
+import { BrandChip } from "./BrandLogo";
 import { StatusBadge } from "./StatusBadge";
 import { initials } from "@/lib/util";
 
@@ -101,7 +102,7 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
                 <td><span className="mono" style={{ color: "var(--text-3)" }}>{p.department}</span></td>
                 <td>
                   <div className="pill-list">
-                    {p.tools.slice(0, 3).map((tool) => <span key={tool} className="tag">{tool}</span>)}
+                    {p.tools.slice(0, 3).map((tool) => <BrandChip key={tool} name={tool}>{tool}</BrandChip>)}
                     {p.tools.length > 3 && <span className="tag">+{p.tools.length - 3}</span>}
                   </div>
                 </td>

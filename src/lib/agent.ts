@@ -20,6 +20,42 @@ export interface AuthoredAgent {
   output_style: string;
 }
 
+export type AgentOperatingMode = "on_demand" | "scheduled" | "event_driven" | "one_shot";
+
+export interface RecommendedSchedule {
+  type: "cron" | "one-shot" | "on-demand" | "event-driven";
+  cron?: string;
+  timezone?: string;
+  reason: string;
+}
+
+export interface DeliveryTarget {
+  platform: "telegram" | "discord" | "email" | "slack" | "webhook";
+  recipient: string;
+  channel?: string;
+  format?: "brief" | "full" | "rich";
+}
+
+export interface AgentConstructionSpec extends AuthoredAgent {
+  operating_mode: AgentOperatingMode;
+  recommended_schedule?: RecommendedSchedule;
+  workflow_steps: string[];
+  input_requirements: string[];
+  output_artifacts: string[];
+  tool_permissions: {
+    enabled: string[];
+    blocked: string[];
+    mcp_servers?: { name: string; scope: "read_only" | "draft_only" | "full"; reason: string }[];
+  };
+  delivery_recommendations: DeliveryTarget[];
+  skills: string[];
+  memory_policy: string;
+  audit_events: string[];
+  failure_modes: string[];
+  test_prompts: string[];
+  validation_warnings?: string[];
+}
+
 export interface AgentBuildCtx {
   person: Person;
   row: PedigreeRow;
@@ -30,8 +66,8 @@ export interface AgentBuildCtx {
   riskLevel: RiskLevel;
   lifecycleClass?: AgentLifecycleClass;
   companyContext?: CompanyContext;
-  /** When present, the AI-authored sections are used instead of the deterministic template. */
-  authored?: AuthoredAgent | null;
+  /** When present, the AI construction spec is merged into deterministic guardrails. */
+  authored?: Partial<AgentConstructionSpec> | null;
 }
 
 export interface IoInput {
@@ -69,33 +105,64 @@ const GLOBAL_BLOCKED = [
   "Represent yourself as the human owner or an authorized decision maker",
 ];
 
+const DEFAULT_BLOCKED_TOOLS = [
+  "direct_send_external_message",
+  "final_approval",
+  "access_grants",
+  "pricing_or_contract_commitments",
+  "production_changes",
+];
+
 export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
   const { person, row, task, respTitle, agentName, policy, riskLevel, companyContext, authored } = ctx;
   const lifecycleClass: AgentLifecycleClass = ctx.lifecycleClass ?? "standing";
 
   const inResp = (t: TaskItem) => t.respId === task.respId;
-  // Deterministic governance seeds from the discovery classification.
   const seedAllowed = uniq([task.label, ...row.tasks.delegatable.filter(inResp).map((t) => t.label)]);
   const seedApproval = uniq(row.tasks.approval.filter(inResp).map((t) => t.label));
   const seedBlocked = uniq([...row.tasks.not_delegatable.filter(inResp).map((t) => t.label), ...GLOBAL_BLOCKED]);
 
-  // AI-authored content refines/expands the seeds. Guardrails can only be
-  // STRENGTHENED: blocked/approval always include the deterministic seeds.
-  const allowed = authored ? uniq([task.label, ...authored.allowed_tasks]) : seedAllowed;
-  const approval = uniq([...(authored?.approval_required ?? []), ...seedApproval]);
-  const blocked = uniq([...(authored?.blocked_tasks ?? []), ...seedBlocked]);
+  const mergedGovernance = mergeGovernance({
+    taskLabel: task.label,
+    authored,
+    seedAllowed,
+    seedApproval,
+    seedBlocked,
+  });
 
-  const mcpText = [respTitle, ...allowed, ...approval].join(" ");
+  const mcpText = [
+    respTitle,
+    ...mergedGovernance.allowed,
+    ...mergedGovernance.approval,
+    ...(companyContext?.systems ?? []),
+    companyContext?.terminology ?? "",
+  ].join(" ");
   const mcp = recommendMcp(mcpText, person.tools);
 
   const slug = slugify(agentName) || "pedigree-agent";
   const traceId = `pdg-${slug}-001`;
-  const ioContract = deriveIoContract(task, respTitle, mcp, person);
+  const ioContract = deriveIoContract(task, respTitle, mcp, person, companyContext);
   const lifecycle = {
     class: lifecycleClass,
     ttl: lifecycleClass === "task" ? "on_complete" : null,
     teardown_policy: "delete_agent_retain_log",
   };
+
+  const constructionSpec = buildConstructionSpec({
+    person,
+    task,
+    respTitle,
+    agentName,
+    policy,
+    riskLevel,
+    companyContext,
+    authored,
+    allowed: mergedGovernance.allowed,
+    approval: mergedGovernance.approval,
+    blocked: mergedGovernance.blocked,
+    mcp,
+    ioContract,
+  });
 
   const manifest = {
     manifest_version: "pdq-manifest-v0.1",
@@ -115,11 +182,25 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
       name: respTitle,
     },
     task: { id: task.id, label: task.label },
-    purpose: authored?.purpose || `Help ${person.name} with: ${task.label.toLowerCase()}.`,
+    purpose: constructionSpec.purpose,
+    goal: constructionSpec.goal,
+    operating_mode: constructionSpec.operating_mode,
+    workflow_steps: constructionSpec.workflow_steps,
+    input_requirements: constructionSpec.input_requirements,
+    output_artifacts: constructionSpec.output_artifacts,
+    tool_permissions: constructionSpec.tool_permissions,
+    delivery_recommendations: constructionSpec.delivery_recommendations,
+    memory_policy: constructionSpec.memory_policy,
+    audit_events: constructionSpec.audit_events,
+    failure_modes: constructionSpec.failure_modes,
+    test_prompts: constructionSpec.test_prompts,
+    skills: constructionSpec.skills,
+    construction_spec: constructionSpec,
     authored_by: authored ? "ai" : "template",
-    allowed_tasks: allowed,
-    human_approval_required: approval,
-    blocked_tasks: blocked,
+    validation_warnings: constructionSpec.validation_warnings ?? [],
+    allowed_tasks: mergedGovernance.allowed,
+    human_approval_required: mergedGovernance.approval,
+    blocked_tasks: mergedGovernance.blocked,
     capabilities: {
       tools: person.tools.map((t) => ({ name: t, scope: scopeForTool(t, policy) })),
     },
@@ -135,10 +216,32 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
       ? {
           company_context: {
             company: companyContext.company,
+            url: companyContext.url,
             what_we_do: companyContext.whatWeDo,
+            industry: companyContext.industry,
+            market: companyContext.market,
+            business_model: companyContext.businessModel,
             mission: companyContext.mission,
+            strategic_goals: companyContext.strategicGoals,
             initiatives: companyContext.initiatives,
             terminology: companyContext.terminology,
+            systems: companyContext.systems ?? [],
+            sops: companyContext.sops ?? [],
+            approval_rules: companyContext.approvalRules ?? [],
+            segregation_of_duties: companyContext.segregationOfDuties ?? [],
+            compliance_notes: companyContext.complianceNotes ?? [],
+            governance_risks: companyContext.governanceRisks ?? [],
+            context_documents: (companyContext.contextDocuments ?? []).map((doc) => ({
+              id: doc.id,
+              bucket: doc.bucket,
+              file_name: doc.fileName,
+              title: doc.title || doc.fileName,
+              mime_type: doc.mimeType,
+              size_bytes: doc.sizeBytes,
+              uploaded_at: doc.uploadedAt,
+              source_id: doc.sourceId,
+              text: doc.text,
+            })),
           },
         }
       : {}),
@@ -149,9 +252,193 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     },
   };
 
-  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, authored });
+  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp, policy, riskLevel, companyContext, constructionSpec });
 
-  return { manifest, systemPrompt, allowed, approval, blocked, mcp };
+  return { manifest, systemPrompt, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp };
+}
+
+function mergeGovernance(args: {
+  taskLabel: string;
+  authored?: Partial<AgentConstructionSpec> | null;
+  seedAllowed: string[];
+  seedApproval: string[];
+  seedBlocked: string[];
+}): { allowed: string[]; approval: string[]; blocked: string[] } {
+  const blocked = uniqNonEmpty([...(args.authored?.blocked_tasks ?? []), ...args.seedBlocked]);
+  const blockedKeys = new Set(blocked.map(keyOf));
+
+  const approval = uniqNonEmpty([...(args.authored?.approval_required ?? []), ...args.seedApproval])
+    .filter((item) => !blockedKeys.has(keyOf(item)));
+  const approvalKeys = new Set(approval.map(keyOf));
+
+  const allowed = uniqNonEmpty([args.taskLabel, ...(args.authored?.allowed_tasks ?? []), ...args.seedAllowed])
+    .filter((item) => !approvalKeys.has(keyOf(item)) && !blockedKeys.has(keyOf(item)));
+
+  return { allowed, approval, blocked };
+}
+
+function buildConstructionSpec(args: {
+  person: Person;
+  task: TaskItem;
+  respTitle: string;
+  agentName: string;
+  policy: string;
+  riskLevel: RiskLevel;
+  companyContext?: CompanyContext;
+  authored?: Partial<AgentConstructionSpec> | null;
+  allowed: string[];
+  approval: string[];
+  blocked: string[];
+  mcp: McpRecommendation[];
+  ioContract: IoContract;
+}): AgentConstructionSpec {
+  const { person, task, respTitle, agentName, policy, riskLevel, companyContext, authored, allowed, approval, blocked, mcp, ioContract } = args;
+  const operatingMode = normalizeOperatingMode(authored?.operating_mode, ioContract.trigger, `${respTitle} ${task.label}`);
+  const warnings: string[] = [];
+
+  const toolPermissions = normalizeToolPermissions({
+    authored: authored?.tool_permissions,
+    person,
+    mcp,
+    warnings,
+  });
+
+  const defaultSchedule = operatingMode === "scheduled"
+    ? {
+        type: "cron" as const,
+        timezone: "America/New_York",
+        reason: "The task appears recurring and should be reviewed before enabling a runtime schedule.",
+      }
+    : {
+        type: modeToScheduleType(operatingMode),
+        reason: "Defaulted from the selected task and lifecycle.",
+      };
+
+  const recommendedSchedule = authored?.recommended_schedule
+    ? normalizeSchedule(authored.recommended_schedule, operatingMode)
+    : defaultSchedule;
+
+  const defaultInputs = ioContract.inputs.map((input) => `${input.name} from ${input.source}${input.required ? "" : " (optional)"}`);
+  const defaultOutputs = ioContract.outputs.map((output) => `${output.name} as ${output.format} to ${output.destination}`);
+  const companyGrounding = companyContext
+    ? `Ground decisions in ${companyContext.company}${companyContext.systems?.length ? ` systems (${companyContext.systems.join(", ")})` : ""}.`
+    : "Ground decisions in approved owner-provided context.";
+
+  return {
+    role: cleanText(authored?.role) || `You are ${agentName}, a governed AI agent working for ${person.name}, ${person.title}.`,
+    authority_ceiling: cleanText(authored?.authority_ceiling) || `You inherit no authority beyond ${person.name}'s role. You support "${respTitle}" and must stop whenever a request requires ${person.name}'s judgment or approval.`,
+    purpose: cleanText(authored?.purpose) || `Help ${person.name} with: ${task.label.toLowerCase()}.`,
+    goal: cleanText(authored?.goal) || `Produce accurate, review-ready support for ${task.label.toLowerCase()} while preserving ${person.name}'s authority ceiling.`,
+    operating_mode: operatingMode,
+    recommended_schedule: recommendedSchedule,
+    workflow_steps: uniqNonEmpty(authored?.workflow_steps ?? []).length
+      ? uniqNonEmpty(authored?.workflow_steps ?? [])
+      : [
+          `Confirm the request is inside ${person.name}'s responsibility for "${respTitle}".`,
+          companyGrounding,
+          `Collect the required inputs for "${task.label}" before analysis.`,
+          "Prepare the output as a draft or recommendation for owner review.",
+          "Escalate instead of acting when approval, authority, or source data is unclear.",
+        ],
+    input_requirements: uniqNonEmpty(authored?.input_requirements ?? []).length ? uniqNonEmpty(authored?.input_requirements ?? []) : defaultInputs,
+    output_artifacts: uniqNonEmpty(authored?.output_artifacts ?? []).length ? uniqNonEmpty(authored?.output_artifacts ?? []) : defaultOutputs,
+    allowed_tasks: allowed,
+    approval_required: approval,
+    blocked_tasks: blocked,
+    escalation_rules: uniqNonEmpty(authored?.escalation_rules ?? []).length
+      ? uniqNonEmpty(authored?.escalation_rules ?? [])
+      : [
+          "The request involves a blocked task.",
+          "The request requires writing to a system of record or sending an external message.",
+          "The request involves financial, legal, customer, employee, security, access, or production risk.",
+          "Required source data is missing, stale, or contradictory.",
+        ],
+    tool_permissions: toolPermissions,
+    delivery_recommendations: normalizeDeliveryTargets(authored?.delivery_recommendations, person),
+    skills: uniqNonEmpty(authored?.skills ?? []),
+    memory_policy: cleanText(authored?.memory_policy) || "Use only approved conversation context, uploaded documents, the Pedigree manifest, and connected tool outputs. Do not retain sensitive details beyond the runtime's configured audit and memory policy.",
+    audit_events: uniqNonEmpty(authored?.audit_events ?? []).length
+      ? uniqNonEmpty(authored?.audit_events ?? [])
+      : ["request_received", "sources_checked", "draft_created", "approval_requested", "escalation_triggered"],
+    failure_modes: uniqNonEmpty(authored?.failure_modes ?? []).length
+      ? uniqNonEmpty(authored?.failure_modes ?? [])
+      : ["Missing required input", "Conflicting source data", "Request exceeds owner authority", "Approval is required before completion"],
+    test_prompts: uniqNonEmpty(authored?.test_prompts ?? []).length
+      ? uniqNonEmpty(authored?.test_prompts ?? [])
+      : [
+          `Draft the output for ${task.label.toLowerCase()} using only approved inputs.`,
+          "Try to perform a blocked final approval and explain why you must escalate.",
+          "Ask for clarification when the required source data is missing.",
+        ],
+    output_style: cleanText(authored?.output_style) || `Be concise, operational, and decision-ready. Separate facts, assumptions, risks, and recommended next steps. Label anything requiring ${person.name}'s approval as a draft.`,
+    validation_warnings: warnings,
+  };
+}
+
+function normalizeToolPermissions(args: {
+  authored?: Partial<AgentConstructionSpec["tool_permissions"]>;
+  person: Person;
+  mcp: McpRecommendation[];
+  warnings: string[];
+}): AgentConstructionSpec["tool_permissions"] {
+  const enabled = uniqNonEmpty([...(args.authored?.enabled ?? []), ...args.person.tools, ...args.mcp.map((m) => m.name)]);
+  const blocked = uniqNonEmpty([...(args.authored?.blocked ?? []), ...DEFAULT_BLOCKED_TOOLS]);
+  const authoredMcp = args.authored?.mcp_servers ?? [];
+  const mcpServers = (authoredMcp.length
+    ? authoredMcp
+    : args.mcp.map((m) => ({ name: m.name, scope: m.recommended_scope, reason: m.reason })))
+    .map((server) => {
+      const requestedScope = server.scope ?? "read_only";
+      if (requestedScope === "full") {
+        args.warnings.push(`${server.name} requested full access; downgraded to draft_only for this slice.`);
+        return { name: server.name, scope: "draft_only" as const, reason: server.reason || "Full access is not allowed by default." };
+      }
+      return {
+        name: server.name,
+        scope: requestedScope === "draft_only" ? "draft_only" as const : "read_only" as const,
+        reason: server.reason || "Recommended from the responsibility and known tools.",
+      };
+    });
+
+  return { enabled, blocked, mcp_servers: uniqByName(mcpServers) };
+}
+
+function normalizeSchedule(schedule: RecommendedSchedule, mode: AgentOperatingMode): RecommendedSchedule {
+  const type = schedule.type || modeToScheduleType(mode);
+  return {
+    type,
+    cron: schedule.cron || undefined,
+    timezone: schedule.timezone || (type === "cron" ? "America/New_York" : undefined),
+    reason: cleanText(schedule.reason) || "Recommended by the construction spec.",
+  };
+}
+
+function modeToScheduleType(mode: AgentOperatingMode): RecommendedSchedule["type"] {
+  if (mode === "scheduled") return "cron";
+  if (mode === "event_driven") return "event-driven";
+  if (mode === "one_shot") return "one-shot";
+  return "on-demand";
+}
+
+function normalizeOperatingMode(mode: unknown, trigger: string, haystack: string): AgentOperatingMode {
+  if (mode === "scheduled" || mode === "event_driven" || mode === "one_shot" || mode === "on_demand") return mode;
+  const text = `${trigger} ${haystack}`.toLowerCase();
+  if (/event|webhook|when |whenever/.test(text)) return "event_driven";
+  if (/one[- ]?shot|one time|one-off/.test(text)) return "one_shot";
+  if (/schedule|daily|weekly|monthly|quarterly|report|digest|brief|forecast/.test(text)) return "scheduled";
+  return "on_demand";
+}
+
+function normalizeDeliveryTargets(targets: DeliveryTarget[] | undefined, person: Person): DeliveryTarget[] {
+  const raw = targets?.length ? targets : [{ platform: "email" as const, recipient: person.email, format: "brief" as const }];
+  return raw
+    .map((target) => ({
+      platform: target.platform || "email",
+      recipient: target.recipient || person.email,
+      channel: target.channel || "",
+      format: target.format || "brief",
+    }))
+    .filter((target) => Boolean(target.recipient));
 }
 
 function scopeForTool(tool: string, policy: string): string {
@@ -178,54 +465,55 @@ function buildSystemPrompt(a: {
   policy: string;
   riskLevel: RiskLevel;
   companyContext?: CompanyContext;
-  authored?: AuthoredAgent | null;
+  constructionSpec: AgentConstructionSpec;
 }): string {
-  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, authored } = a;
-  const mcpLines = mcp.length
-    ? mcp.map((m) => `- ${m.name}: ${m.recommended_scope.replace("_", "-")} scope. ${m.reason}.`).join("\n")
-    : `- Recommended from ${person.name}'s known tools: ${person.tools.join(", ") || "none listed"} (read-only).`;
-
-  // AI-authored prose for the human sections (governed lists stay deterministic above).
-  const roleLine = authored?.role
-    ? authored.role
-    : `You are ${agentName}. You work for ${person.name}, ${person.title}. You support the business responsibility defined in the Pedigree manifest.`;
-  const authorityLine = authored?.authority_ceiling
-    ? authored.authority_ceiling
-    : `Your human owner is ${person.name}. You do not replace this person. You assist with specific delegated tasks under their responsibility for "${respTitle}".\nYou may not exceed the authority of ${person.name}, and you may not perform actions that require human approval unless approval is explicitly granted.`;
-  const goalLine = authored?.goal
-    ? authored.goal
-    : `Your goal is to help ${person.name} with ${task.label.toLowerCase()}, staying strictly within the scope above.`;
-  const escalationBlock = authored?.escalation_rules?.length
-    ? bullets(authored.escalation_rules)
-    : bullets([
-        "The request involves a blocked task.",
-        "The request affects official business records.",
-        "The request involves external communication.",
-        "The request involves financial, legal, customer, employee, or security risk.",
-        "The available information is incomplete or conflicting.",
-      ]);
-  const outputStyle = authored?.output_style
-    ? authored.output_style
-    : `Be concise, operational, and decision-ready.\nWhen summarizing, separate facts, assumptions, risks, and recommended next steps.\nWhen approval is required, clearly label the output as a draft or recommendation.`;
+  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, constructionSpec } = a;
+  const mcpLines = constructionSpec.tool_permissions.mcp_servers?.length
+    ? constructionSpec.tool_permissions.mcp_servers.map((m) => `- ${m.name}: ${m.scope.replace("_", "-")} scope. ${m.reason}.`).join("\n")
+    : mcp.length
+      ? mcp.map((m) => `- ${m.name}: ${m.recommended_scope.replace("_", "-")} scope. ${m.reason}.`).join("\n")
+      : `- Recommended from ${person.name}'s known tools: ${person.tools.join(", ") || "none listed"} (read-only).`;
+  const documentStoreLines = companyContext?.contextDocuments?.length
+    ? companyContext.contextDocuments
+        .map((doc) => `- ${doc.bucket}: ${doc.title || doc.fileName} (${doc.id})`)
+        .join("\n")
+    : "- No uploaded company context documents.";
 
   const businessContext = companyContext
     ? `\n\n[BUSINESS CONTEXT]
-You operate inside ${companyContext.company}. ${companyContext.whatWeDo}${companyContext.mission ? ` Mission: ${companyContext.mission}.` : ""}${companyContext.initiatives ? ` Current initiatives: ${companyContext.initiatives}.` : ""}${companyContext.terminology ? ` Use the company's own terminology where relevant: ${companyContext.terminology}.` : ""}
-Ground your work in this business context; do not contradict it or invent facts about the company.`
+You operate inside ${companyContext.company}. ${companyContext.whatWeDo}${companyContext.mission ? ` Mission: ${companyContext.mission}.` : ""}${companyContext.initiatives ? ` Current initiatives: ${companyContext.initiatives}.` : ""}${companyContext.systems?.length ? ` Systems/tools in context: ${companyContext.systems.join(", ")}.` : ""}${companyContext.approvalRules?.length ? ` Approval rules: ${companyContext.approvalRules.join("; ")}.` : ""}${companyContext.segregationOfDuties?.length ? ` Segregation of duties: ${companyContext.segregationOfDuties.join("; ")}.` : ""}${companyContext.complianceNotes?.length ? ` Compliance/security notes: ${companyContext.complianceNotes.join("; ")}.` : ""}${companyContext.terminology ? ` Use the company's own terminology where relevant: ${companyContext.terminology}.` : ""}
+Ground your work in this business context; do not contradict it or invent facts about the company.
+
+Uploaded company context document stores available in the manifest:
+${documentStoreLines}`
     : "";
 
   return `[ROLE]
-${roleLine}
+${constructionSpec.role}
 
 [HUMAN OWNER AND AUTHORITY CEILING]
-${authorityLine}${businessContext}
+${constructionSpec.authority_ceiling}${businessContext}
 
 [PARENT RESPONSIBILITY]
 Responsibility: ${respTitle}
 Anchored task: ${task.label}
 
 [GOAL]
-${goalLine}
+${constructionSpec.goal}
+
+[OPERATING MODE]
+- Mode: ${constructionSpec.operating_mode.replace("_", "-")}
+- Schedule: ${constructionSpec.recommended_schedule?.type ?? "on-demand"}${constructionSpec.recommended_schedule?.cron ? ` (${constructionSpec.recommended_schedule.cron})` : ""}
+- Reason: ${constructionSpec.recommended_schedule?.reason ?? "None"}
+
+[WORKFLOW]
+${bullets(constructionSpec.workflow_steps)}
+
+[INPUT REQUIREMENTS]
+${bullets(constructionSpec.input_requirements)}
+
+[OUTPUT ARTIFACTS]
+${bullets(constructionSpec.output_artifacts)}
 
 [ALLOWED TASKS]
 You may perform the following tasks:
@@ -252,12 +540,23 @@ Do not invent company policy, customer commitments, pricing terms, approvals, or
 - Risk tier: ${riskLevel}
 - All material writes require explicit approval from ${person.name}.
 
+[MEMORY AND AUDIT]
+- Memory policy: ${constructionSpec.memory_policy}
+- Audit events:
+${bullets(constructionSpec.audit_events)}
+
 [ESCALATION RULES]
 Escalate to ${person.name} when:
-${escalationBlock}
+${bullets(constructionSpec.escalation_rules)}
+
+[FAILURE MODES]
+${bullets(constructionSpec.failure_modes)}
+
+[TEST PROMPTS]
+${bullets(constructionSpec.test_prompts)}
 
 [OUTPUT STYLE]
-${outputStyle}`;
+${constructionSpec.output_style}`;
 }
 
 export function newAgentRecord(ctx: AgentBuildCtx, artifacts: AgentArtifacts): AgentRecord {
@@ -282,12 +581,43 @@ function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr));
 }
 
-// ── io_contract derivation (P1.1) ─────────────────────────────────────
-function deriveIoContract(task: TaskItem, respTitle: string, mcp: McpRecommendation[], person: Person): IoContract {
+function uniqNonEmpty(arr: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of arr) {
+    const text = cleanText(item);
+    const key = keyOf(text);
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+}
+
+function uniqByName<T extends { name: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = keyOf(item.name);
+    if (!item.name || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function cleanText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function keyOf(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function deriveIoContract(task: TaskItem, respTitle: string, mcp: McpRecommendation[], person: Person, companyContext?: CompanyContext): IoContract {
   const hay = `${respTitle} ${task.label}`.toLowerCase();
   const inputs: IoInput[] = [];
 
-  // Data sources / documents from recommended MCP servers (read-only feeds).
   for (const m of mcp) {
     const isDoc = /drive|notion|doc/i.test(m.name);
     inputs.push({
@@ -298,7 +628,6 @@ function deriveIoContract(task: TaskItem, respTitle: string, mcp: McpRecommendat
       required: true,
     });
   }
-  // Always allow the owner to hand the agent reference documents.
   inputs.push({
     name: "owner_reference_docs",
     type: "human_upload",
@@ -306,6 +635,28 @@ function deriveIoContract(task: TaskItem, respTitle: string, mcp: McpRecommendat
     format: "document",
     required: false,
   });
+  const docsByBucket = companyContext?.contextDocuments?.reduce<Record<string, string[]>>((acc, doc) => {
+    if (!doc.text?.trim()) return acc;
+    const label = doc.title || doc.fileName;
+    acc[doc.bucket] = [...(acc[doc.bucket] ?? []), label];
+    return acc;
+  }, {}) ?? {};
+  const bucketInputs: Array<{ bucket: string; name: string; required: boolean }> = [
+    { bucket: "segregation_of_duties", name: "company_segregation_of_duties_store", required: true },
+    { bucket: "policy", name: "company_policy_store", required: true },
+    { bucket: "knowledge", name: "company_knowledge_store", required: false },
+  ];
+  for (const bucketInput of bucketInputs) {
+    const labels = docsByBucket[bucketInput.bucket] ?? [];
+    if (!labels.length) continue;
+    inputs.push({
+      name: bucketInput.name,
+      type: "document",
+      source: `company_context.contextDocuments[${bucketInput.bucket}]: ${labels.join("; ")}`,
+      format: "text",
+      required: bucketInput.required,
+    });
+  }
 
   const outName = slugify(task.label).split("-").slice(0, 4).join("_") || "summary";
   const externalDraft = /draft|email|message|notify|slack/.test(hay);
@@ -318,25 +669,24 @@ function deriveIoContract(task: TaskItem, respTitle: string, mcp: McpRecommendat
     },
   ];
 
-  const recurring = /weekly|forecast|report|digest|monthly|variance|scorecard/.test(hay);
+  const recurring = /daily|weekly|forecast|report|digest|monthly|variance|scorecard|brief/.test(hay);
   const trigger = recurring ? "schedule:weekly" : "human";
 
   return { inputs, outputs, trigger };
 }
 
-// ── Deployment package guide (P1.2) ───────────────────────────────────
 const PLATFORMS: { id: string; name: string; steps: (a: DeploymentInfo) => string[] }[] = [
   {
     id: "openai",
     name: "OpenAI (Custom GPT / Assistants)",
     steps: (a) => [
-      "Create a new Custom GPT (chatgpt.com → Explore GPTs → Create) or an Assistant (platform.openai.com).",
+      "Create a new Custom GPT (chatgpt.com -> Explore GPTs -> Create) or an Assistant (platform.openai.com).",
       "Paste the System Prompt (below / system-prompt.txt) into Instructions.",
       a.documents.length ? `Upload these documents to Knowledge: ${a.documents.join("; ")}.` : "No knowledge documents required.",
-      a.mcp.length ? `Connect these tools/actions with the stated scope: ${a.mcp.join("; ")}. OpenAI calls these Actions — configure each as read-only unless noted.` : "No external tools required.",
+      a.mcp.length ? `Connect these tools/actions with the stated scope: ${a.mcp.join("; ")}. Configure each as read-only unless noted.` : "No external tools required.",
       a.dataSources.length ? `Wire these data sources (read-only): ${a.dataSources.join("; ")}.` : "No data sources required.",
       `Set the trigger: ${a.trigger}.`,
-      "Guardrails: OpenAI cannot natively block the approval-required actions — instruct the owner to review any output before it is sent or written. The prompt already enforces this.",
+      "Guardrails: OpenAI cannot natively block the approval-required actions; instruct the owner to review any output before it is sent or written. The prompt already enforces this.",
       "Verify: run a test request and confirm the agent escalates blocked actions instead of performing them.",
     ],
   },
@@ -344,14 +694,14 @@ const PLATFORMS: { id: string; name: string; steps: (a: DeploymentInfo) => strin
     id: "claude",
     name: "Claude (Project + connectors)",
     steps: (a) => [
-      "Create a new Project in Claude (claude.ai → Projects → New).",
+      "Create a new Project in Claude (claude.ai -> Projects -> New).",
       "Paste the System Prompt into the Project's custom instructions.",
       a.documents.length ? `Add these documents to Project knowledge: ${a.documents.join("; ")}.` : "No knowledge documents required.",
       a.mcp.length ? `Connect these MCP servers with the stated scope: ${a.mcp.join("; ")}.` : "No MCP servers required.",
       a.dataSources.length ? `Connect these data sources (read-only): ${a.dataSources.join("; ")}.` : "No data sources required.",
       `Set the trigger: ${a.trigger}.`,
       "Guardrails: enforce approval-required actions via the owner's review; Claude will escalate per the prompt.",
-      "Verify with a test prompt that falls outside scope — the agent should reply that it falls outside its pedigree.",
+      "Verify with a test prompt that falls outside scope; the agent should reply that it falls outside its pedigree.",
     ],
   },
   {
@@ -379,34 +729,43 @@ interface DeploymentInfo {
 export function buildDeploymentGuide(manifest: Record<string, any>): string {
   const owner = manifest.human_owner ?? {};
   const io: IoContract = manifest.io_contract ?? { inputs: [], outputs: [], trigger: "human" };
+  const spec: Partial<AgentConstructionSpec> = manifest.construction_spec ?? {};
   const documents = io.inputs.filter((i) => i.type === "document" || i.type === "human_upload").map((i) => `${i.name} (${i.source})`);
-  const dataSources = io.inputs.filter((i) => i.type === "data_source").map((i) => `${i.source} — read-only`);
-  const mcp: string[] = (manifest.recommended_mcp_servers ?? []).map((m: any) => `${m.name} — ${String(m.scope).replace("_", "-")}`);
+  const dataSources = io.inputs.filter((i) => i.type === "data_source").map((i) => `${i.source} - read-only`);
+  const mcp: string[] = (manifest.recommended_mcp_servers ?? []).map((m: any) => `${m.name} - ${String(m.scope).replace("_", "-")}`);
   const info: DeploymentInfo = { documents, mcp, dataSources, trigger: io.trigger };
 
   const lines: string[] = [];
-  lines.push(`# Deployment Package — ${manifest.agent_name}`);
+  lines.push(`# Deployment Package - ${manifest.agent_name}`);
   lines.push("");
-  lines.push(`Provisioned by Pedigree · manifest \`${manifest.agent_id}\` · class: ${manifest.lifecycle?.class ?? "standing"}`);
+  lines.push(`Provisioned by Pedigree - manifest \`${manifest.agent_id}\` - class: ${manifest.lifecycle?.class ?? "standing"}`);
   lines.push(`Human owner: ${owner.name} (${owner.title}${owner.department ? ", " + owner.department : ""})`);
   lines.push(`Parent responsibility: ${manifest.parent_responsibility?.name ?? ""}`);
   lines.push("");
-  lines.push("This package contains everything needed to stand up this governed agent on the platform of your choice: the system prompt, the manifest, the documents to load, the tools/data to connect, and platform-specific steps.");
+  lines.push("This package contains everything needed to stand up this governed agent on the platform of your choice: the system prompt, the manifest, the construction spec, the documents to load, the tools/data to connect, and platform-specific steps.");
   lines.push("");
   lines.push("## 1. Artifacts");
-  lines.push("- `system-prompt.txt` — paste into the agent's instructions");
-  lines.push("- `manifest.json` — the portable Pedigree manifest (authority, I/O contract, lifecycle)");
+  lines.push("- `system-prompt.txt` - paste into the agent's instructions");
+  lines.push("- `manifest.json` - the portable Pedigree manifest (authority, I/O contract, lifecycle)");
+  lines.push("- `hermes-manifest.json` - draft Hermes executable manifest");
+  lines.push("- `hermes-agent.md` - Hermes Markdown package with YAML front matter");
   lines.push("");
-  lines.push("## 2. Required documents to load");
+  lines.push("## 2. Construction summary");
+  lines.push(`- Goal: ${spec.goal ?? manifest.goal ?? manifest.purpose ?? ""}`);
+  lines.push(`- Operating mode: ${spec.operating_mode ?? manifest.operating_mode ?? "on_demand"}`);
+  lines.push("- Workflow:");
+  lines.push((spec.workflow_steps ?? manifest.workflow_steps ?? []).length ? (spec.workflow_steps ?? manifest.workflow_steps).map((s: string) => `  - ${s}`).join("\n") : "  - None");
+  lines.push("");
+  lines.push("## 3. Required documents to load");
   lines.push(documents.length ? documents.map((d) => `- ${d}`).join("\n") : "- None");
   lines.push("");
-  lines.push("## 3. Required tools / MCP servers (with scopes)");
+  lines.push("## 4. Required tools / MCP servers (with scopes)");
   lines.push(mcp.length ? mcp.map((m) => `- ${m}`).join("\n") : "- None");
   lines.push("");
-  lines.push("## 4. Data sources");
+  lines.push("## 5. Data sources");
   lines.push(dataSources.length ? dataSources.map((d) => `- ${d}`).join("\n") : "- None");
   lines.push("");
-  lines.push("## 5. Approval & guardrails");
+  lines.push("## 6. Approval & guardrails");
   const approvals: string[] = manifest.human_approval_required ?? [];
   const blocked: string[] = manifest.blocked_tasks ?? [];
   lines.push(`These actions require ${owner.name}'s approval before completion:`);
@@ -417,10 +776,10 @@ export function buildDeploymentGuide(manifest: Record<string, any>): string {
   lines.push("");
   lines.push("> Most target platforms cannot natively enforce these approval gates. The system prompt instructs the agent to escalate, but the human owner must review outputs before they are sent or written.");
   lines.push("");
-  lines.push(`## 6. Trigger`);
+  lines.push("## 7. Trigger");
   lines.push(`- ${io.trigger}`);
   lines.push("");
-  lines.push("## 7. Platform-specific setup");
+  lines.push("## 8. Platform-specific setup");
   for (const p of PLATFORMS) {
     lines.push("");
     lines.push(`### ${p.name}`);
