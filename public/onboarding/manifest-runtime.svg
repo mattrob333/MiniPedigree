@@ -1,0 +1,92 @@
+<svg width="1440" height="810" viewBox="0 0 1440 810" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(720 410) rotate(90) scale(450 680)">
+      <stop stop-color="#0EA5E9" stop-opacity="0.24"/>
+      <stop offset="0.58" stop-color="#07182D" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#020617"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#12263F"/>
+      <stop offset="1" stop-color="#06111F"/>
+    </linearGradient>
+    <filter id="cyanGlow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .label { fill: #E5F7FF; font: 700 30px Inter, Arial, sans-serif; }
+      .small { fill: #A8C1D8; font: 600 20px Inter, Arial, sans-serif; }
+      .mono { fill: #6EE7FF; font: 600 24px Consolas, monospace; }
+      .tiny { fill: #C8E6F7; font: 600 18px Inter, Arial, sans-serif; }
+      .muted { fill: #7892AA; font: 600 18px Inter, Arial, sans-serif; }
+      .stroke { stroke: #1FCBFF; stroke-width: 3; }
+      .dash { stroke: #1FCBFF; stroke-width: 4; stroke-dasharray: 10 13; stroke-linecap: round; }
+    </style>
+  </defs>
+  <rect width="1440" height="810" rx="34" fill="url(#glow)"/>
+  <rect x="94" y="77" width="478" height="558" rx="26" fill="url(#panel)" stroke="#1FCBFF" stroke-opacity="0.55" stroke-width="2"/>
+  <rect x="94" y="77" width="478" height="92" rx="26" fill="#0B1F36"/>
+  <text x="132" y="132" class="mono">agent-manifest.yaml</text>
+  <text x="132" y="226" class="mono">agent:</text>
+  <text x="164" y="272" class="tiny">name: Renewal Analyst</text>
+  <text x="164" y="314" class="tiny">runtime: pedigree-standard</text>
+  <text x="164" y="356" class="tiny">version: 1.0.0</text>
+  <text x="132" y="434" class="mono">tools:</text>
+  <text x="164" y="480" class="tiny">- crm</text>
+  <text x="164" y="522" class="tiny">- spreadsheet</text>
+  <text x="164" y="564" class="tiny">- search</text>
+  <text x="132" y="642" class="mono">delivery:</text>
+  <text x="164" y="688" class="tiny">- slack</text>
+  <text x="164" y="730" class="tiny">- email</text>
+
+  <path d="M572 292 C630 292 630 250 690 250" class="dash"/>
+  <path d="M572 444 C642 444 648 579 718 579" class="dash"/>
+  <path d="M572 444 C642 444 648 667 718 667" class="dash"/>
+
+  <rect x="688" y="104" width="590" height="374" rx="24" fill="#07182B" stroke="#1FCBFF" stroke-opacity="0.34" stroke-width="2"/>
+  <text x="907" y="158" class="label">Choose Runtime</text>
+
+  <rect x="735" y="199" width="159" height="151" rx="18" fill="#10213A" stroke="#1FCBFF" stroke-width="3" filter="url(#cyanGlow)"/>
+  <rect x="781" y="220" width="66" height="66" rx="8" fill="#F8FAFC"/>
+  <image href="../brand-logos/nousresearch-hermes.svg" x="785" y="224" width="58" height="58" preserveAspectRatio="xMidYMid meet"/>
+  <text x="815" y="316" text-anchor="middle" class="label" font-size="24">Hermes</text>
+
+  <rect x="922" y="199" width="159" height="151" rx="18" fill="#10213A" stroke="#1FCBFF" stroke-opacity="0.7" stroke-width="2"/>
+  <circle cx="1001" cy="254" r="34" fill="#E8F7FF"/>
+  <path d="M1001 230 L1022 239 V260 C1022 278 1001 287 1001 287 C1001 287 980 278 980 260 V239 Z" fill="#184B7C"/>
+  <text x="1001" y="265" text-anchor="middle" fill="white" font="800 26px Inter, Arial">P</text>
+  <text x="1001" y="316" text-anchor="middle" class="label" font-size="24">Pedigree</text>
+  <text x="1001" y="342" text-anchor="middle" class="small">Standard</text>
+
+  <rect x="1100" y="199" width="159" height="151" rx="18" fill="#10213A" stroke="#1FCBFF" stroke-opacity="0.34" stroke-width="2"/>
+  <image href="../brand-logos/openai.svg" x="1156" y="222" width="64" height="64" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1179" y="316" text-anchor="middle" class="label" font-size="24">OpenAI</text>
+
+  <rect x="828" y="378" width="159" height="126" rx="18" fill="#10213A" stroke="#5B6CFF" stroke-opacity="0.65" stroke-width="2"/>
+  <image href="../brand-logos/claude.svg" x="881" y="395" width="54" height="54" preserveAspectRatio="xMidYMid meet"/>
+  <text x="907" y="476" text-anchor="middle" class="tiny">Claude</text>
+
+  <rect x="1012" y="378" width="159" height="126" rx="18" fill="#10213A" stroke="#5B6CFF" stroke-opacity="0.65" stroke-width="2"/>
+  <path d="M1092 394 L1130 416 V460 L1092 482 L1054 460 V416 Z" stroke="#6B7CFF" stroke-width="5" fill="none"/>
+  <path d="M1092 394 V482 M1054 416 L1130 460 M1130 416 L1054 460" stroke="#6B7CFF" stroke-width="4"/>
+  <text x="1092" y="476" text-anchor="middle" class="tiny">Generic</text>
+
+  <path d="M815 350 V560" class="dash"/>
+  <path d="M1001 350 V560" class="dash"/>
+  <path d="M1092 504 V560" class="dash"/>
+
+  <rect x="700" y="566" width="202" height="145" rx="20" fill="#0E2742" stroke="#1FCBFF" stroke-opacity="0.65" stroke-width="2"/>
+  <text x="801" y="625" text-anchor="middle" class="label" font-size="24">Tools</text>
+  <text x="801" y="664" text-anchor="middle" class="muted">CRM, search, sheets</text>
+
+  <rect x="931" y="566" width="202" height="145" rx="20" fill="#0E2742" stroke="#22C55E" stroke-opacity="0.65" stroke-width="2"/>
+  <text x="1032" y="625" text-anchor="middle" class="label" font-size="24">Approvals</text>
+  <text x="1032" y="664" text-anchor="middle" class="muted">Governed release</text>
+
+  <rect x="1162" y="566" width="202" height="145" rx="20" fill="#0E2742" stroke="#5B6CFF" stroke-opacity="0.65" stroke-width="2"/>
+  <text x="1263" y="625" text-anchor="middle" class="label" font-size="24">Delivery</text>
+  <text x="1263" y="664" text-anchor="middle" class="muted">Slack and email</text>
+</svg>

@@ -65,6 +65,7 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
         <input ref={inputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); }} />
         <div
           className="home-dropzone"
+          data-tour="upload-team"
           style={dragOver ? { borderColor: "var(--cyan)", background: "var(--cyan-faint)" } : undefined}
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}

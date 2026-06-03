@@ -32,4 +32,12 @@ describe("brand logo mapping", () => {
     expect(findBrand("Microsoft Entra ID")?.id).toBe("microsoft-entra");
     expect(findBrand("Microsoft Intra ID")?.id).toBe("microsoft-entra");
   });
+
+  it("matches agent export format logos", () => {
+    expect(findBrand("HERMES Agent")?.id).toBe("nousresearch-hermes");
+    expect(findBrand("OpenAI Agent")?.id).toBe("openai");
+    expect(findBrand("Claude Agent")?.id).toBe("claude");
+    expect(findBrand("Microsoft Co-pilot Agent")?.id).toBe("microsoft-copilot");
+    expect(findBrand("OpenClaude Agent")?.id).toBe("openclaw");
+  });
 });
