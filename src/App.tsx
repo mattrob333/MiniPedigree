@@ -16,6 +16,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { WorkspacesHome, type DemoCompany } from "./components/WorkspacesHome";
 import { Icon } from "./components/Icon";
 import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
+import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
 import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
@@ -28,6 +29,15 @@ import {
   saveWorkspace, loadWorkspace, deleteWorkspace, listWorkspaces, newWorkspaceId,
   getLastWorkspaceId, setLastWorkspaceId, loadProfile, saveProfile, clearProfile,
 } from "./lib/persist";
+import {
+  completeOnboarding,
+  getInitialWorkspaceOnboardingStep,
+  recordOnboardingStep,
+  resetOnboarding,
+  shouldShowUploadOnboarding,
+  shouldShowWorkspaceOnboarding,
+  skipOnboarding,
+} from "./lib/onboarding";
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company";
 type Tab = "spreadsheet" | "orgmap" | "agents";
@@ -214,6 +224,8 @@ export default function App() {
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourStartStep, setTourStartStep] = useState<string | undefined>("upload-team");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -240,6 +252,7 @@ export default function App() {
     for (const p of people) counts.set(p.department, (counts.get(p.department) ?? 0) + 1);
     return counts.size > 1 ? "All" : [...counts.keys()][0] ?? "";
   }, [people]);
+  const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
   const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext }) => {
     setPeople(ws.people);
@@ -379,6 +392,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, metrics.agentsBuilt]);
 
+  useEffect(() => {
+    if (booting || !profile || tourOpen) return;
+    if (screen === "home" && shouldShowUploadOnboarding(tourUserKey)) {
+      setTourStartStep("upload-team");
+      setTourOpen(true);
+      return;
+    }
+    if (screen === "workspace" && currentWorkspaceId && shouldShowWorkspaceOnboarding(tourUserKey, currentWorkspaceId)) {
+      setTourStartStep(getInitialWorkspaceOnboardingStep(tourUserKey, currentWorkspaceId));
+      setTourOpen(true);
+    }
+  }, [booting, currentWorkspaceId, profile, screen, tourOpen, tourUserKey]);
+
   const createWorkspaceFromCsv = (text: string, fileName: string, nameOverride?: string) => {
     setUploadError(null);
     if (!text.trim()) {
@@ -505,6 +531,31 @@ export default function App() {
     pushToast("CSV exported", "Enriched spreadsheet downloaded", true);
   };
 
+  const onAdvanceTourFromHome = (nextStepId: string) => {
+    recordOnboardingStep(tourUserKey, "home", nextStepId);
+    setTourStartStep(nextStepId);
+    setTourOpen(false);
+    pushToast("Tour paused", "Upload a team or open a demo company to continue");
+  };
+
+  const onCompleteTour = () => {
+    completeOnboarding(tourUserKey, currentWorkspaceId ?? "home");
+    setTourOpen(false);
+    pushToast("Tour complete", "You're ready to build governed agents", true);
+  };
+
+  const onSkipTour = () => {
+    skipOnboarding(tourUserKey, currentWorkspaceId ?? "home");
+    setTourOpen(false);
+    pushToast("Tour skipped", "Restart it from Settings whenever you want");
+  };
+
+  const onRestartTour = () => {
+    resetOnboarding(tourUserKey, currentWorkspaceId ?? "home");
+    setTourStartStep(screen === "home" ? "upload-team" : "company-profile");
+    setTourOpen(true);
+  };
+
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
@@ -530,6 +581,7 @@ export default function App() {
         userInitials={profile ? profile.name.split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase() : undefined}
         userName={profile?.name}
         onSignOut={profile ? onSignOut : undefined}
+        onRestartOnboarding={profile ? onRestartTour : undefined}
       />
 
       {screen === "login" && <LoginScreen onSignIn={onSignIn} existingProfile={profile} />}
@@ -567,11 +619,11 @@ export default function App() {
                 <div className="subtitle">{companySubtitle}</div>
               </button>
               <div className="actions">
-                <button className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
-                <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
+                <button data-tour="company-profile" className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
+                <button data-tour="export" className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
                 <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
-                <button className={"btn " + (discoveryComplete ? "btn-ghost btn-sm" : "btn-primary")} onClick={() => onStartSession(selectedId ?? rootId)} title={discoveryComplete ? "Re-run discovery for a person to update them" : "Run a discovery pass to map responsibilities"}>
+                <button data-tour="map-responsibilities" className={"btn " + (discoveryComplete ? "btn-ghost btn-sm" : "btn-primary")} onClick={() => onStartSession(selectedId ?? rootId)} title={discoveryComplete ? "Re-run discovery for a person to update them" : "Run a discovery pass to map responsibilities"}>
                   <Icon name="sparkles" size={12} /> {discoveryStarted ? (discoveryComplete ? "Update Responsibilities" : "Continue Discovery") : "Map Responsibilities"}
                 </button>
               </div>
@@ -590,8 +642,8 @@ export default function App() {
             <div className="metrics funnel">
               <Metric label="People" value={metrics.peopleCount} delta={`${metrics.mappedPeople} mapped`} up={metrics.mappedPeople > 0} arrow />
               <Metric label="Responsibilities" value={metrics.respMapped} delta={metrics.respMapped > 0 ? "discovered" : "awaiting discovery"} up={metrics.respMapped > 0} arrow />
-              <Metric label="Delegatable Tasks" value={metrics.delegTasks} delta={metrics.delegTasks > 0 ? "automatable" : "—"} up={metrics.delegTasks > 0} arrow />
-              <Metric label="Agent Candidates" value={metrics.candidates} delta={metrics.candidates > 0 ? "ready to build" : "—"} up={metrics.candidates > 0} arrow />
+              <Metric tourId="delegatable-tasks" label="Delegatable Tasks" value={metrics.delegTasks} delta={metrics.delegTasks > 0 ? "automatable" : "—"} up={metrics.delegTasks > 0} arrow />
+              <Metric tourId="agent-candidates" label="Agent Candidates" value={metrics.candidates} delta={metrics.candidates > 0 ? "ready to build" : "—"} up={metrics.candidates > 0} arrow />
               <Metric label="Agents Built" value={metrics.agentsBuilt} delta={metrics.agentsBuilt > 0 ? "governed" : "none yet"} up={metrics.agentsBuilt > 0} />
             </div>
 
@@ -676,14 +728,23 @@ export default function App() {
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
       <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
+      <OnboardingTour
+        open={tourOpen}
+        startStepId={tourStartStep}
+        hasWorkspace={Boolean(currentWorkspaceId)}
+        onStepView={(step) => recordOnboardingStep(tourUserKey, currentWorkspaceId ?? "home", step.id)}
+        onAdvanceFromHome={onAdvanceTourFromHome}
+        onComplete={onCompleteTour}
+        onSkip={onSkipTour}
+      />
       <Toasts toasts={toasts} />
     </div>
   );
 }
 
-function Metric({ label, value, delta, extra, up, arrow }: { label: string; value: number; delta?: string; extra?: string; up?: boolean; arrow?: boolean }) {
+function Metric({ label, value, delta, extra, up, arrow, tourId }: { label: string; value: number; delta?: string; extra?: string; up?: boolean; arrow?: boolean; tourId?: string }) {
   return (
-    <div className="metric">
+    <div className="metric" data-tour={tourId}>
       {arrow && <span className="funnel-arrow" aria-hidden>›</span>}
       <div className="label">{label}</div>
       <div className="value">{value}{extra && <span style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{extra}</span>}</div>

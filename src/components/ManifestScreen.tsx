@@ -491,7 +491,7 @@ export function ManifestScreen({ agent, onBack, onSwitchToOrgMap, onToast }: Pro
         </div>
       </div>
 
-      <div className="manifest-format-dock" aria-label="Choose your output format">
+      <div className="manifest-format-dock" aria-label="Choose your output format" data-tour="agent-runtime-selector">
         <div className="manifest-format-copy">
           <div className="manifest-format-eyebrow">Choose your output format</div>
           <div className="manifest-format-title">Export this manifest as a runtime-ready agent</div>

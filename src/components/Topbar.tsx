@@ -14,6 +14,7 @@ interface TopbarProps {
   userInitials?: string;
   userName?: string;
   onSignOut?: () => void;
+  onRestartOnboarding?: () => void;
 }
 
 export function Topbar({
@@ -28,6 +29,7 @@ export function Topbar({
   userInitials,
   userName,
   onSignOut,
+  onRestartOnboarding,
 }: TopbarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -90,6 +92,7 @@ export function Topbar({
             setThemePref={setThemePref}
             resolvedTheme={resolvedTheme}
             onClose={() => setSettingsOpen(false)}
+            onRestartOnboarding={onRestartOnboarding}
           />
         )}
       </div>
@@ -129,11 +132,13 @@ function SettingsPopover({
   setThemePref,
   resolvedTheme,
   onClose,
+  onRestartOnboarding,
 }: {
   themePref: ThemePref;
   setThemePref: (p: ThemePref) => void;
   resolvedTheme: "light" | "dark";
   onClose: () => void;
+  onRestartOnboarding?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -187,6 +192,11 @@ function SettingsPopover({
           <span>Show minimap</span>
           <span className="tgl" data-on="true" />
         </div>
+        {onRestartOnboarding && (
+          <button className="account-action" onClick={() => { onClose(); onRestartOnboarding(); }}>
+            <Icon name="sparkles" size={12} /> Restart guided tour
+          </button>
+        )}
       </div>
       <div className="popover-foot">Pedigree Discover Lite - v0.1.0</div>
     </div>
