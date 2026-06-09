@@ -704,7 +704,7 @@ export default function App() {
       )}
 
       {screen === "manifest" && (
-        <ManifestScreen agent={activeAgent} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
+        <ManifestScreen agent={activeAgent} companyContext={companyContext} mcpLibrary={mcpLibrary} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
       )}
 
       {screen === "company" && profile && (
