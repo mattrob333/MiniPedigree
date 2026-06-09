@@ -1,5 +1,6 @@
-import type { AgentLifecycleClass, AgentRecord, CompanyContext, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
+import type { AgentLifecycleClass, AgentRecord, CompanyContext, GovernanceResolution, GovernanceRule, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
 import { recommendMcp } from "./mcpCatalog";
+import { applyGovernance, getGovernanceRules } from "./governance";
 
 export function slugify(s: string): string {
   return s
@@ -68,6 +69,8 @@ export interface AgentBuildCtx {
   companyContext?: CompanyContext;
   /** When present, the AI construction spec is merged into deterministic guardrails. */
   authored?: Partial<AgentConstructionSpec> | null;
+  /** Pre-extracted governance rules (e.g. server AI pass); defaults to the cached deterministic extraction. */
+  governanceRules?: GovernanceRule[];
 }
 
 export interface IoInput {
@@ -96,6 +99,7 @@ export interface AgentArtifacts {
   approval: string[];
   blocked: string[];
   mcp: McpRecommendation[];
+  governance: GovernanceResolution;
 }
 
 const GLOBAL_BLOCKED = [
@@ -122,13 +126,26 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
   const seedApproval = uniq(row.tasks.approval.filter(inResp).map((t) => t.label));
   const seedBlocked = uniq([...row.tasks.not_delegatable.filter(inResp).map((t) => t.label), ...GLOBAL_BLOCKED]);
 
-  const mergedGovernance = mergeGovernance({
+  const seedMerge = mergeGovernance({
     taskLabel: task.label,
     authored,
     seedAllowed,
     seedApproval,
     seedBlocked,
   });
+
+  // Stage B: governance compilation. Policy-derived rules may only promote
+  // (blocked > approval > allowed) — the same invariant as the authored merge.
+  const governanceRules = ctx.governanceRules ?? getGovernanceRules(companyContext);
+  const governance = applyGovernance(governanceRules, seedMerge, {
+    owner: person,
+    managerEmail: person.managerEmail,
+  });
+  const mergedGovernance = {
+    allowed: governance.allowed,
+    approval: governance.approval.map((a) => a.action),
+    blocked: governance.blocked.map((b) => b.action),
+  };
 
   const mcpText = [
     respTitle,
@@ -163,6 +180,15 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     mcp,
     ioContract,
   });
+  if (governance.audit_events.length) {
+    constructionSpec.audit_events = uniqNonEmpty([...constructionSpec.audit_events, ...governance.audit_events]);
+  }
+  if (governance.sod_findings.length) {
+    constructionSpec.validation_warnings = uniqNonEmpty([
+      ...(constructionSpec.validation_warnings ?? []),
+      ...governance.sod_findings.map((f) => `Segregation of duties (${f.resolution}): ${f.description}`),
+    ]);
+  }
 
   const manifest = {
     manifest_version: "pdq-manifest-v0.1",
@@ -201,6 +227,15 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     allowed_tasks: mergedGovernance.allowed,
     human_approval_required: mergedGovernance.approval,
     blocked_tasks: mergedGovernance.blocked,
+    // Structured governance resolution: every rule-derived constraint carries
+    // its rule_id + evidence so the manifest can answer "why is this blocked?".
+    governance: {
+      approval: governance.approval,
+      blocked: governance.blocked,
+      audit_events: governance.audit_events,
+      sod_findings: governance.sod_findings,
+      rule_provenance: governance.rule_provenance,
+    },
     capabilities: {
       tools: person.tools.map((t) => ({ name: t, scope: scopeForTool(t, policy) })),
     },
@@ -254,7 +289,7 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
 
   const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp, policy, riskLevel, companyContext, constructionSpec });
 
-  return { manifest, systemPrompt, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp };
+  return { manifest, systemPrompt, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp, governance };
 }
 
 function mergeGovernance(args: {
