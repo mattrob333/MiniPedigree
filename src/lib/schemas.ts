@@ -10,6 +10,9 @@ export const delegationClass = z.enum([
 
 export const riskLevel = z.enum(["low", "medium", "high", "critical"]);
 
+// Completion context — every field nullable; null means "not stated in transcript".
+export const taskReadiness = z.enum(["ready", "needs_clarification"]);
+
 export const parsedTaskSchema = z.object({
   name: z.string(),
   delegation_class: delegationClass,
@@ -17,6 +20,14 @@ export const parsedTaskSchema = z.object({
   requires_human_approval: z.boolean().default(false),
   reason: z.string().optional().default(""),
   evidence_quote: z.string().optional().default(""),
+  trigger: z.string().nullable().optional().default(null),
+  inputs: z.array(z.string()).nullable().optional().default(null),
+  outputs: z.array(z.string()).nullable().optional().default(null),
+  tools_mentioned: z.array(z.string()).nullable().optional().default(null),
+  definition_of_done: z.string().nullable().optional().default(null),
+  readiness: taskReadiness.nullable().optional().default(null),
+  open_questions: z.array(z.string()).nullable().optional().default(null),
+  candidate_pattern: z.string().nullable().optional().default(null),
 });
 
 export const parsedResponsibilitySchema = z.object({

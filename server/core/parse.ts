@@ -6,7 +6,7 @@ const SYSTEM_PROMPT = `You are Pedigree's Responsibility Parser and Task Decompo
 
 Transform raw discovery text into structured responsibility records for the provided people.
 
-Rules:
+Classification rules (these come first and are never influenced by completion-context extraction):
 1. Match people by name, email, title, and contextual clues. Use their exact email as person_email.
 2. Do not invent responsibilities unsupported by the transcript. If inferring, set confidence below 0.75.
 3. A responsibility is an area of accountability; a task is a specific repeated action.
@@ -16,10 +16,29 @@ Rules:
    - not_delegatable (final approvals, hiring/firing, legal/financial commitments, pricing, contracts, access grants)
    - unclear
    When uncertain, prefer human_approval_required over delegatable. Be governance-first.
-5. Assign risk_level: low | medium | high | critical.
-6. Preserve short evidence_quote snippets from the transcript.
-7. Recommend MCP servers only as read_only or draft_only suggestions; never write access.
-8. Return only structured JSON matching the schema.`;
+5. If the company profile includes approvalRules or segregationOfDuties, apply them to classification:
+   a task matching an approval rule is at least human_approval_required; a task creating a
+   segregation-of-duties conflict is not_delegatable or human_approval_required. Cite the
+   applied rule text in the task's reason field.
+6. Assign risk_level: low | medium | high | critical.
+7. Preserve short evidence_quote snippets from the transcript.
+8. Recommend MCP servers only as read_only or draft_only suggestions; never write access.
+
+Completion-context extraction (second, and it must NOT influence delegation_class — classify
+first using the rules above, then extract completion context independently). For each task,
+also extract, using null whenever the transcript does not state it (never invent):
+- trigger: what kicks the task off (cadence, event, or request), e.g. "every Friday", "when a deal closes".
+- inputs: named source data, documents, or systems the task reads from.
+- outputs: named artifacts, records, or messages the task produces.
+- tools_mentioned: tool/system names mentioned for this task.
+- definition_of_done: how the speaker knows the task is complete.
+- readiness: "ready" when trigger, inputs, outputs, and definition_of_done are all stated;
+  otherwise "needs_clarification".
+- open_questions: what you would need to ask to make this task executable.
+- candidate_pattern: a short slug for the workflow pattern, e.g. "weekly-report", "record-hygiene",
+  "draft-followups", "monitor-and-flag". Null if no pattern is evident.
+
+Return only structured JSON matching the schema.`;
 
 const responseSchema = {
   name: "parsed_discovery",
@@ -60,8 +79,16 @@ const responseSchema = {
                         requires_human_approval: { type: "boolean" },
                         reason: { type: "string" },
                         evidence_quote: { type: "string" },
+                        trigger: { type: ["string", "null"] },
+                        inputs: { type: ["array", "null"], items: { type: "string" } },
+                        outputs: { type: ["array", "null"], items: { type: "string" } },
+                        tools_mentioned: { type: ["array", "null"], items: { type: "string" } },
+                        definition_of_done: { type: ["string", "null"] },
+                        readiness: { type: ["string", "null"], enum: ["ready", "needs_clarification", null] },
+                        open_questions: { type: ["array", "null"], items: { type: "string" } },
+                        candidate_pattern: { type: ["string", "null"] },
                       },
-                      required: ["name", "delegation_class", "risk_level", "requires_human_approval", "reason", "evidence_quote"],
+                      required: ["name", "delegation_class", "risk_level", "requires_human_approval", "reason", "evidence_quote", "trigger", "inputs", "outputs", "tools_mentioned", "definition_of_done", "readiness", "open_questions", "candidate_pattern"],
                     },
                   },
                 },

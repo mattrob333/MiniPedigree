@@ -83,6 +83,7 @@ function discoveryToMap(
         confidence: r.confidence,
         evidence_quote: r.evidence_quote,
         tasks,
+        taskDetails: r.tasks,
       };
     });
 

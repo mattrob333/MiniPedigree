@@ -1,5 +1,7 @@
 import type {
   ParsedMap,
+  ParsedResponsibility,
+  ParsedTask,
   PedigreeRow,
   PedigreeState,
   Person,
@@ -62,13 +64,13 @@ export function applyParsed(
     const not_delegatable: TaskItem[] = [];
     const responsibilities = data.responsibilities.map((r) => {
       r.tasks.delegatable.forEach((t, i) =>
-        delegatable.push({ id: `${r.id}-d-${i}`, label: t, respId: r.id, respTitle: r.title }),
+        delegatable.push(toTaskItem(`${r.id}-d-${i}`, t, r)),
       );
       r.tasks.approval.forEach((t, i) =>
-        approval.push({ id: `${r.id}-a-${i}`, label: t, respId: r.id, respTitle: r.title }),
+        approval.push(toTaskItem(`${r.id}-a-${i}`, t, r)),
       );
       r.tasks.not_delegatable.forEach((t, i) =>
-        not_delegatable.push({ id: `${r.id}-n-${i}`, label: t, respId: r.id, respTitle: r.title }),
+        not_delegatable.push(toTaskItem(`${r.id}-n-${i}`, t, r)),
       );
       return {
         id: r.id,
@@ -101,6 +103,31 @@ export function applyParsed(
   }
 
   return next;
+}
+
+/** Build a TaskItem, carrying over per-task detail (risk, evidence, completion context) when parsed. */
+function toTaskItem(id: string, label: string, r: ParsedResponsibility): TaskItem {
+  const detail = r.taskDetails?.find((d) => d.name.trim().toLowerCase() === label.trim().toLowerCase());
+  const item: TaskItem = { id, label, respId: r.id, respTitle: r.title };
+  if (detail) {
+    item.riskLevel = detail.risk_level;
+    if (detail.evidence_quote) item.evidence = detail.evidence_quote;
+    item.completion = extractCompletion(detail);
+  }
+  return item;
+}
+
+function extractCompletion(detail: ParsedTask): TaskItem["completion"] {
+  return {
+    trigger: detail.trigger ?? null,
+    inputs: detail.inputs ?? null,
+    outputs: detail.outputs ?? null,
+    tools_mentioned: detail.tools_mentioned ?? null,
+    definition_of_done: detail.definition_of_done ?? null,
+    readiness: detail.readiness ?? null,
+    open_questions: detail.open_questions ?? null,
+    candidate_pattern: detail.candidate_pattern ?? null,
+  };
 }
 
 export function computeMetrics(people: Person[], pedigree: PedigreeState) {

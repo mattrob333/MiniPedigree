@@ -2,6 +2,7 @@ import type {
   ParsedMap,
   ParsedPerson,
   ParsedResponsibility,
+  ParsedTask,
   Person,
   DelegationClass,
   RiskLevel,
@@ -195,6 +196,32 @@ function bucketTasks(raw: string[]): ParsedResponsibility["tasks"] {
 }
 
 /**
+ * Deterministic per-task detail records. Completion-context fields are all null:
+ * the local fallback never invents triggers, inputs, or definitions of done.
+ */
+function detailTasks(raw: string[], evidence?: string): ParsedTask[] {
+  return raw.map((label) => {
+    const { cls, risk } = classifyTask(label);
+    return {
+      name: label,
+      delegation_class: cls,
+      risk_level: risk,
+      requires_human_approval: cls === "human_approval_required",
+      reason: "",
+      evidence_quote: evidence ?? "",
+      trigger: null,
+      inputs: null,
+      outputs: null,
+      tools_mentioned: null,
+      definition_of_done: null,
+      readiness: null,
+      open_questions: null,
+      candidate_pattern: null,
+    };
+  });
+}
+
+/**
  * Deterministically generate a parsed-discovery map for ANY set of people.
  * Combines role-based templates with task clauses extracted from the transcript
  * when a person is mentioned. Used as the demo / no-API-key fallback so the full
@@ -225,6 +252,7 @@ export function generateParsed(people: Person[], transcript: string): ParsedMap 
           confidence: 0.86,
           evidence_quote: mentioned[0],
           tasks: bucketTasks(extracted),
+          taskDetails: detailTasks(extracted, mentioned[0]),
         });
       }
     }
@@ -236,6 +264,7 @@ export function generateParsed(people: Person[], transcript: string): ParsedMap 
         title: r.title,
         confidence: mentioned.length ? 0.8 : 0.62,
         tasks: bucketTasks(r.tasks),
+        taskDetails: detailTasks(r.tasks),
       });
     }
 
