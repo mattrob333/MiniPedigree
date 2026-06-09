@@ -87,9 +87,39 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog },
         updated_at: stamped.updatedAt,
       });
+      if (ws.mcpLibrary?.length) {
+        await supabase.from("company_mcp_servers").upsert(ws.mcpLibrary.map((server) => ({
+          id: server.id,
+          workspace_id: ws.id,
+          name: server.name,
+          endpoint: server.endpoint ?? null,
+          approved_scopes: server.approved_scopes,
+          default_scope: server.default_scope,
+          owner_email: server.owner_email,
+          systems_matched: server.systems_matched,
+          notes: server.notes ?? null,
+          added_at: server.added_at,
+          updated_at: stamped.updatedAt,
+        })));
+      }
+      if (ws.registry?.length) {
+        await supabase.from("agent_registry").upsert(ws.registry.map((entry) => ({
+          agent_id: entry.agent_id,
+          workspace_id: ws.id,
+          owner_person_id: entry.owner_person_id,
+          task_id: entry.task_id,
+          resp_id: entry.resp_id,
+          runtime: entry.runtime,
+          status: entry.status,
+          stale: entry.stale,
+          ingredient_hashes: entry.ingredient_hashes,
+          versions: entry.versions,
+          updated_at: stamped.updatedAt,
+        })));
+      }
       const contextDocuments = ws.companyContext?.contextDocuments ?? [];
       if (contextDocuments.length) {
         await supabase.from("company_context_documents").upsert(contextDocuments.map((doc) => ({
@@ -117,9 +147,9 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
     try {
       const { data } = await supabase.from("workspaces").select("id,name,owner_email,snapshot").eq("id", id).maybeSingle();
       if (data?.snapshot) {
-        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"] };
+        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"]; mcpLibrary?: Workspace["mcpLibrary"]; registry?: Workspace["registry"]; auditLog?: Workspace["auditLog"] };
         if (snap.people?.length) {
-          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
+          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry, auditLog: snap.auditLog, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
         }
       }
     } catch (e) {

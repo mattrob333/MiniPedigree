@@ -6,6 +6,7 @@ import { discoveryParseHandler } from "./routes/discoveryParse.js";
 import { agentsGenerateHandler } from "./routes/agentsGenerate.js";
 import { transcribeHandler } from "./routes/transcribe.js";
 import { companyProfileParseHandler } from "./routes/companyProfileParse.js";
+import { syncDiffHandler } from "./routes/syncDiff.js";
 import { openaiEnabled, TRANSCRIPTION_PROVIDER } from "./openai.js";
 
 const app = express();
@@ -31,6 +32,7 @@ app.get("/api/health", (_req, res) => {
 app.post("/api/discovery/parse", discoveryParseHandler);
 app.post("/api/agents/generate", agentsGenerateHandler);
 app.post("/api/company/profile/parse", companyProfileParseHandler);
+app.post("/api/sync/diff", syncDiffHandler);
 app.post("/api/transcribe", upload.single("file"), transcribeHandler);
 
 const server = app.listen(PORT);

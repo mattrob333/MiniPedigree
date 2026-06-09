@@ -18,7 +18,8 @@ import { Icon } from "./components/Icon";
 import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
 import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
-import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile, WorkspaceSummary } from "./types";
+import { McpLibraryScreen } from "./components/McpLibraryScreen";
+import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, MappingSessionType, ParsedMap, PedigreeState, Person, StackAuditRecord, StackChangeProposal, UserProfile, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
@@ -29,6 +30,8 @@ import {
   saveWorkspace, loadWorkspace, deleteWorkspace, listWorkspaces, newWorkspaceId,
   getLastWorkspaceId, setLastWorkspaceId, loadProfile, saveProfile, clearProfile,
 } from "./lib/persist";
+import { refreshStaleness } from "./lib/registry";
+import { applyStackProposals } from "./lib/stackSync";
 import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
@@ -39,7 +42,7 @@ import {
   skipOnboarding,
 } from "./lib/onboarding";
 
-type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company";
+type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary";
 type Tab = "spreadsheet" | "orgmap" | "agents";
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
@@ -221,6 +224,9 @@ export default function App() {
   const [workspaceName, setWorkspaceName] = useState("Untitled Workspace");
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [companyContext, setCompanyContext] = useState<CompanyContext | undefined>(undefined);
+  const [mcpLibrary, setMcpLibrary] = useState<CompanyMcpServer[]>([]);
+  const [registry, setRegistry] = useState<AgentRegistryEntry[]>([]);
+  const [auditLog, setAuditLog] = useState<StackAuditRecord[]>([]);
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -254,12 +260,15 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[] }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
     setCurrentWorkspaceId(ws.id);
     setCompanyContext(ws.companyContext);
+    setMcpLibrary(ws.mcpLibrary ?? []);
+    setRegistry(ws.registry ?? []);
+    setAuditLog(ws.auditLog ?? []);
     setCompanyProfileOpen(false);
     setSelectedId(null);
     setDrawerOpen(false);
@@ -297,11 +306,11 @@ export default function App() {
     if (booting) return;
     if (currentWorkspaceId && people.length && profile) {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, createdAt: new Date().toISOString() },
         profile.email,
       );
     }
-  }, [people, pedigree, workspaceName, companyContext, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -351,7 +360,7 @@ export default function App() {
   const persistCompanyContext = (ctx: CompanyContext) => {
     setCompanyContext(ctx);
     if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, createdAt: new Date().toISOString() }, profile?.email);
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, createdAt: new Date().toISOString() }, profile?.email);
     }
   };
 
@@ -518,11 +527,28 @@ export default function App() {
     setScreen("profile");
   };
 
-  const onApplyOrgSync = (parsed: ParsedMap, changeset: Changeset, approvedIds: string[]) => {
-    const next = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
-    setPedigree(next);
+  const onApplyOrgSync = (parsed: ParsedMap, changeset: Changeset, approvedIds: string[], stackProposals: StackChangeProposal[]) => {
+    const approver = profile?.email ?? "unknown";
+    const merged = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
+    const decided = stackProposals.map((p) => ({
+      ...p,
+      decision: { by: approver, at: p.decision?.at ?? new Date().toISOString(), action: "applied" as const },
+    }));
+    const result = applyStackProposals({
+      proposals: decided,
+      approver,
+      people,
+      pedigree: merged,
+      companyContext,
+      registry,
+      auditLog,
+    });
+    setPedigree(result.pedigree);
+    if (result.companyContext) setCompanyContext(result.companyContext);
+    setRegistry(result.registry);
+    setAuditLog(result.auditLog);
     setOrgSyncOpen(false);
-    pushToast("Org Sync applied", `${approvedIds.length} people updated · ${changeset.summary.newResponsibilities} new resp, ${changeset.summary.newTasks} new tasks`, true);
+    pushToast("Org Sync applied", `${approvedIds.length} people updated · ${result.applied} stack change${result.applied === 1 ? "" : "s"} · audit recorded`, true);
   };
 
   const onExport = () => {
@@ -557,6 +583,17 @@ export default function App() {
   };
 
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
+
+  // Recompute registry staleness whenever an ingredient (person record, task,
+  // company context, governance docs, MCP library) changes.
+  useEffect(() => {
+    if (booting) return;
+    setRegistry((prev) => {
+      if (!prev.length) return prev;
+      const byId = new Map(allAgents.map((a) => [String((a.manifest as Record<string, unknown> | undefined)?.agent_id ?? a.id), a]));
+      return refreshStaleness(prev, byId, companyContext, mcpLibrary);
+    });
+  }, [allAgents, companyContext, mcpLibrary, booting]);
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
   const discoveryStarted = metrics.mappedPeople > 0;
@@ -620,6 +657,7 @@ export default function App() {
               </button>
               <div className="actions">
                 <button data-tour="company-profile" className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setScreen("mcplibrary")} title="Register the company's approved MCP servers — agent grants are resolved from this library"><Icon name="lock" size={12} /> MCP Library{mcpLibrary.length ? ` (${mcpLibrary.length})` : ""}</button>
                 <button data-tour="export" className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
                 <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
@@ -696,11 +734,23 @@ export default function App() {
       )}
 
       {screen === "manifest" && (
-        <ManifestScreen agent={activeAgent} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
+        <ManifestScreen agent={activeAgent} companyContext={companyContext} mcpLibrary={mcpLibrary} registry={registry} onRegistryChange={setRegistry} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
       )}
 
       {screen === "company" && profile && (
         <CompanyProfileScreen context={companyContext ?? { company: workspaceName, whatWeDo: "" }} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
+      )}
+
+      {screen === "mcplibrary" && profile && (
+        <McpLibraryScreen
+          library={mcpLibrary}
+          companyContext={companyContext}
+          people={people}
+          ownerEmail={profile.email}
+          onChange={setMcpLibrary}
+          onBack={() => setScreen("workspace")}
+          onToast={pushToast}
+        />
       )}
 
       {screen === "profile" && profileId && people.find((p) => p.id === profileId) && (
@@ -726,7 +776,7 @@ export default function App() {
         onApply={onApplyMapping}
       />
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
-      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
+      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} registry={registry} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
       <OnboardingTour
         open={tourOpen}

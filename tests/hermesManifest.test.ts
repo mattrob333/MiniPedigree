@@ -62,7 +62,8 @@ describe("Hermes manifest export", () => {
     expect(result.manifest.approval_required).toContain("Export forecast report");
     expect(result.manifest.blocked_tasks).toContain("Approve final forecast number");
     expect(result.manifest.schedule.type).toBe("cron");
-    expect(result.manifest.schedule.cron).toBe("TODO_CRON");
+    // Deterministic default schedule: Monday 9am ET, flagged for review.
+    expect(result.manifest.schedule.cron).toBe("0 9 * * 1");
     expect(result.manifest.tools.mcp_servers?.length).toBeGreaterThan(0);
     expect(result.manifest.system_prompt).toContain("[ROLE]");
   });

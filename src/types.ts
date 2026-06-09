@@ -47,6 +47,24 @@ export type DelegationClass =
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
+export type TaskReadiness = "ready" | "needs_clarification";
+
+/**
+ * Completion context extracted from the discovery transcript per task.
+ * Every field is nullable: null means "not stated in transcript" — the
+ * deterministic fallback never invents these.
+ */
+export interface TaskCompletionContext {
+  trigger: string | null;
+  inputs: string[] | null;
+  outputs: string[] | null;
+  tools_mentioned: string[] | null;
+  definition_of_done: string | null;
+  readiness: TaskReadiness | null;
+  open_questions: string[] | null;
+  candidate_pattern: string | null;
+}
+
 export interface Person {
   id: string;
   name: string;
@@ -77,6 +95,7 @@ export interface TaskItem {
   respTitle: string;
   riskLevel?: RiskLevel;
   evidence?: string;
+  completion?: TaskCompletionContext;
 }
 
 export interface PersonTasks {
@@ -116,7 +135,7 @@ export interface PedigreeRow {
 export type PedigreeState = Record<string, PedigreeRow>;
 
 // ── Parsed-discovery shape (per person) ───────────────────────────────
-export interface ParsedTask {
+export interface ParsedTask extends TaskCompletionContext {
   name: string;
   delegation_class: DelegationClass;
   risk_level: RiskLevel;
@@ -136,6 +155,8 @@ export interface ParsedResponsibility {
     approval: string[];
     not_delegatable: string[];
   };
+  /** Full per-task records (completion context, risk, evidence) keyed by task name. */
+  taskDetails?: ParsedTask[];
   unclear?: boolean;
 }
 
@@ -169,8 +190,113 @@ export interface Workspace {
   pedigree: PedigreeState;
   createdAt: string;
   companyContext?: CompanyContext; // per-workspace company profile (one per client)
+  mcpLibrary?: CompanyMcpServer[]; // the company's approved MCP tool surface
+  registry?: AgentRegistryEntry[]; // the Agent Stack state (versioned, append-only)
+  auditLog?: StackAuditRecord[];   // applied stack changes with approver + evidence
   ownerEmail?: string;
   updatedAt?: string;
+}
+
+// ── Company MCP Library — the approved tool surface for this company ──
+export type McpScope = "read_only" | "draft_only" | "read_write";
+
+export interface CompanyMcpServer {
+  id: string;
+  name: string;                      // "Salesforce", "Slack", ...
+  endpoint?: string;
+  approved_scopes: McpScope[];
+  default_scope: "read_only" | "draft_only";
+  owner_email: string;               // who approved this server for the company
+  systems_matched: string[];         // company-context system names this maps to
+  notes?: string;
+  added_at: string;
+}
+
+export interface McpGrant {
+  server_id: string;
+  name: string;
+  scope: McpScope;
+  source: "library" | "catalog_fallback";
+  reason: string;
+}
+
+// ── Governance rules extracted from context documents ─────────────────
+export type GovernanceRuleType = "blocked" | "approval" | "audit" | "sod_conflict";
+
+export interface GovernanceRule {
+  rule_id: string;
+  type: GovernanceRuleType;
+  condition: string;                 // human-readable matcher description
+  matcher: { keywords?: string[]; verbs?: string[]; amount_threshold?: number };
+  approver?: "owner" | "owner_manager" | string; // email for named approvers
+  source_doc: string;                // context document id (or "company_context.approvalRules", etc.)
+  evidence_quote: string;
+  extracted_at: string;
+  confidence: number;
+}
+
+export interface GovernanceResolution {
+  allowed: string[];
+  approval: { action: string; approver: string; rule_id?: string }[];
+  blocked: { action: string; rule_id?: string }[];
+  audit_events: string[];
+  sod_findings: { description: string; rule_id: string; resolution: "split" | "blocked" | "warned" }[];
+  rule_provenance: { rule_id: string; source_doc: string; evidence_quote: string }[];
+}
+
+// ── Agent Registry = stack state ───────────────────────────────────────
+export type AgentRegistryStatus = "draft" | "approved" | "deployed" | "retired";
+
+export interface AgentRegistryVersion {
+  version: number;
+  compiled: Record<string, unknown>; // serialized CompiledAgent
+  artifacts_manifest: string[];      // artifact paths emitted at compile time
+  created_at: string;
+}
+
+export interface AgentRegistryEntry {
+  agent_id: string;
+  owner_person_id: string;
+  task_id: string;
+  resp_id: string;
+  runtime: string;
+  status: AgentRegistryStatus;
+  stale: boolean;                    // ingredient hash drift detected
+  ingredient_hashes: Record<string, string>;
+  versions: AgentRegistryVersion[];  // append-only history
+}
+
+// ── Stack sync loop ────────────────────────────────────────────────────
+export type StackChangeType =
+  | "new_task"
+  | "task_changed"
+  | "ownership_transfer"
+  | "rule_changed"
+  | "agent_feedback"
+  | "retire_candidate";
+
+export interface StackChangeProposal {
+  id: string;
+  type: StackChangeType;
+  summary: string;
+  evidence_quote: string;
+  transcript_id: string;
+  confidence: number;
+  affected: { person_ids: string[]; agent_ids: string[]; rule_ids: string[] };
+  authority_expanding: boolean;      // drives the red-flag treatment in review UI
+  proposed_patch: unknown;           // typed per proposal type
+  decision?: { by: string; at: string; action: "applied" | "rejected" | "edited" };
+}
+
+export interface StackAuditRecord {
+  id: string;
+  proposal_id: string;
+  proposal_type: StackChangeType;
+  approver: string;
+  timestamp: string;
+  evidence_quote: string;
+  transcript_id: string;
+  summary: string;
 }
 
 export interface WorkspaceSummary {
