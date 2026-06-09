@@ -341,8 +341,9 @@ function buildConstructionSpec(args: {
   const defaultSchedule = operatingMode === "scheduled"
     ? {
         type: "cron" as const,
+        cron: "0 9 * * 1",
         timezone: "America/New_York",
-        reason: "The task appears recurring and should be reviewed before enabling a runtime schedule.",
+        reason: "The task appears recurring; defaulted to Monday 9am ET. Review before enabling a runtime schedule.",
       }
     : {
         type: modeToScheduleType(operatingMode),

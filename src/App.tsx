@@ -30,6 +30,7 @@ import {
   saveWorkspace, loadWorkspace, deleteWorkspace, listWorkspaces, newWorkspaceId,
   getLastWorkspaceId, setLastWorkspaceId, loadProfile, saveProfile, clearProfile,
 } from "./lib/persist";
+import { refreshStaleness } from "./lib/registry";
 import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
@@ -564,6 +565,17 @@ export default function App() {
   };
 
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
+
+  // Recompute registry staleness whenever an ingredient (person record, task,
+  // company context, governance docs, MCP library) changes.
+  useEffect(() => {
+    if (booting) return;
+    setRegistry((prev) => {
+      if (!prev.length) return prev;
+      const byId = new Map(allAgents.map((a) => [String((a.manifest as Record<string, unknown> | undefined)?.agent_id ?? a.id), a]));
+      return refreshStaleness(prev, byId, companyContext, mcpLibrary);
+    });
+  }, [allAgents, companyContext, mcpLibrary, booting]);
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
   const discoveryStarted = metrics.mappedPeople > 0;
@@ -704,7 +716,7 @@ export default function App() {
       )}
 
       {screen === "manifest" && (
-        <ManifestScreen agent={activeAgent} companyContext={companyContext} mcpLibrary={mcpLibrary} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
+        <ManifestScreen agent={activeAgent} companyContext={companyContext} mcpLibrary={mcpLibrary} registry={registry} onRegistryChange={setRegistry} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
       )}
 
       {screen === "company" && profile && (

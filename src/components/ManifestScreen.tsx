@@ -2,13 +2,15 @@ import { useState } from "react";
 import JSZip from "jszip";
 import { Icon } from "./Icon";
 import { BrandChip, BrandLogo } from "./BrandLogo";
-import type { AgentRecord, CompanyContext, CompanyMcpServer, McpRecommendation } from "@/types";
+import type { AgentRecord, AgentRegistryEntry, CompanyContext, CompanyMcpServer, McpRecommendation } from "@/types";
 import { copyText, initials } from "@/lib/util";
 import { downloadFile } from "@/lib/state";
 import { slugify, buildDeploymentGuide, type AgentConstructionSpec } from "@/lib/agent";
 import { buildHermesManifest } from "@/lib/hermesManifest";
 import { recommendMcp } from "@/lib/mcpCatalog";
 import { compileAgent, emitAllRuntimes, RUNTIME_ADAPTERS, type RuntimeAdapter, type RuntimeArtifact } from "@/lib/runtimes";
+import { validateCompiledAgent } from "@/lib/validate";
+import { findRegistryEntry, nextVersion, upsertCompiledVersion } from "@/lib/registry";
 
 function highlight(str: string): string {
   const escaped = str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -22,6 +24,8 @@ interface Props {
   agent: AgentRecord | null;
   companyContext?: CompanyContext;
   mcpLibrary?: CompanyMcpServer[];
+  registry?: AgentRegistryEntry[];
+  onRegistryChange?: (registry: AgentRegistryEntry[]) => void;
   onBack: () => void;
   onSwitchToOrgMap: () => void;
   onToast: (t1: string, t2?: string, green?: boolean) => void;
@@ -36,7 +40,7 @@ const RUNTIME_BRANDS: Record<string, string> = {
   generic: "LangGraph",
 };
 
-export function ManifestScreen({ agent, companyContext, mcpLibrary, onBack, onSwitchToOrgMap, onToast }: Props) {
+export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, onRegistryChange, onBack, onSwitchToOrgMap, onToast }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   if (!agent) return null;
@@ -65,7 +69,11 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, onBack, onSw
   const outputs = (constructionSpec.output_artifacts ?? manifest.output_artifacts ?? []) as string[];
   const failures = (constructionSpec.failure_modes ?? manifest.failure_modes ?? []) as string[];
   const testPrompts = (constructionSpec.test_prompts ?? manifest.test_prompts ?? []) as string[];
-  const validationWarnings = Array.from(new Set([...(manifest.validation_warnings ?? []), ...hermes.warnings]));
+  // Stage E: validation gates. Hard failures block export; warnings are shown.
+  const previewCompiled = compileAgent({ agent, runtime: "pedigree", companyContext, mcpLibrary });
+  const validation = validateCompiledAgent(previewCompiled, mcpLibrary ?? []);
+  const registryEntry = registry ? findRegistryEntry(registry, previewCompiled.agent_id) : undefined;
+  const validationWarnings = Array.from(new Set([...(manifest.validation_warnings ?? []), ...hermes.warnings, ...validation.warnings]));
 
   const downloadZip = async (filename: string, artifacts: RuntimeArtifact[], extra?: { path: string; content: string }[]) => {
     const zip = new JSZip();
@@ -83,15 +91,28 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, onBack, onSw
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // Stage D: all adapters render from the same CompiledAgent.
+  const guardExport = (): boolean => {
+    if (validation.ok) return true;
+    onToast("Export blocked by validation", validation.failures[0], false);
+    return false;
+  };
+
+  // Stage D + F: all adapters render from the same CompiledAgent; the full
+  // package export also writes the registry entry with a version bump.
   const exportPackage = async () => {
-    const compiled = compileAgent({ agent, runtime: "pedigree", companyContext, mcpLibrary });
+    if (!guardExport()) return;
+    const version = registry ? nextVersion(registry, previewCompiled.agent_id) : 1;
+    const compiled = compileAgent({ agent, runtime: "pedigree", companyContext, mcpLibrary, version });
     const { artifacts } = emitAllRuntimes(compiled);
     await downloadZip(`${slug}.deployment-package.zip`, artifacts, [{ path: "SETUP.md", content: setupGuide }]);
-    onToast("Deployment package exported", `${slug}.deployment-package.zip — all runtimes`, true);
+    if (registry && onRegistryChange) {
+      onRegistryChange(upsertCompiledVersion(registry, compiled, artifacts));
+    }
+    onToast("Deployment package exported", `${slug}.deployment-package.zip — all runtimes · registry v${version}`, true);
   };
 
   const exportAgentFormat = async (adapter: RuntimeAdapter) => {
+    if (!guardExport()) return;
     const compiled = compileAgent({ agent, runtime: adapter.id, companyContext, mcpLibrary });
     const artifacts = adapter.emit(compiled);
     const warnings = adapter.validate(compiled);
@@ -310,13 +331,31 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, onBack, onSw
 
           <pre className="codeblock" style={{ fontSize: 12.5 }}>{prompt}</pre>
 
+          {validation.failures.length > 0 && (
+            <div style={{ marginTop: 14, padding: "10px 12px", border: "1px solid var(--red)", borderRadius: 8, fontSize: 12 }}>
+              <div style={{ color: "var(--red)", fontWeight: 600, marginBottom: 6 }}>
+                <Icon name="warning" size={12} stroke="var(--red)" /> Export blocked — fix these before deploying
+              </div>
+              {validation.failures.map((f) => (
+                <div key={f} style={{ color: "var(--red)", marginTop: 2 }}>• {f}</div>
+              ))}
+            </div>
+          )}
+          {registryEntry && (
+            <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-3)" }}>
+              <Icon name="history" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
+              Registry: v{Math.max(...registryEntry.versions.map((v) => v.version))} · status {registryEntry.status}
+              {registryEntry.stale && <span className="tag yellow" style={{ marginLeft: 6 }}>stale — ingredients changed, recompile recommended</span>}
+            </div>
+          )}
+
           <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn" onClick={() => doCopy(prompt, "prompt")}><Icon name="copy" size={12} /> Copy prompt</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.prompt.txt`, prompt, "text/plain")}><Icon name="download" size={12} /> Export prompt</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.manifest.json`, json, "application/json")}><Icon name="download" size={12} /> Export manifest</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.hermes.md`, hermes.markdown, "text/markdown")}><Icon name="download" size={12} /> Export Hermes Agent</button>
             <span style={{ flex: 1 }} />
-            <button className="btn btn-primary" onClick={exportPackage}><Icon name="download" size={12} /> Export Deployment Package</button>
+            <button className="btn btn-primary" disabled={!validation.ok} onClick={exportPackage} title={validation.ok ? "Export all runtime artifacts and write the registry version" : validation.failures[0]}><Icon name="download" size={12} /> Export Deployment Package</button>
           </div>
 
           {/* Deployment Package (P1.2) */}
@@ -357,8 +396,9 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, onBack, onSw
             <button
               key={adapter.id}
               className={`manifest-format-button ${adapter.id === "hermes" ? "primary" : ""}`}
+              disabled={!validation.ok}
               onClick={() => void exportAgentFormat(adapter)}
-              title={adapter.description}
+              title={validation.ok ? adapter.description : validation.failures[0]}
             >
               <BrandLogo name={RUNTIME_BRANDS[adapter.id] ?? adapter.label} size={26} />
               <span className="manifest-format-label">{adapter.label}</span>
