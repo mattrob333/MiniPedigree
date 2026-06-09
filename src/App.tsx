@@ -19,7 +19,7 @@ import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
 import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
 import { McpLibraryScreen } from "./components/McpLibraryScreen";
-import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, MappingSessionType, ParsedMap, PedigreeState, Person, StackAuditRecord, UserProfile, WorkspaceSummary } from "./types";
+import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, MappingSessionType, ParsedMap, PedigreeState, Person, StackAuditRecord, StackChangeProposal, UserProfile, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
@@ -31,6 +31,7 @@ import {
   getLastWorkspaceId, setLastWorkspaceId, loadProfile, saveProfile, clearProfile,
 } from "./lib/persist";
 import { refreshStaleness } from "./lib/registry";
+import { applyStackProposals } from "./lib/stackSync";
 import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
@@ -526,11 +527,28 @@ export default function App() {
     setScreen("profile");
   };
 
-  const onApplyOrgSync = (parsed: ParsedMap, changeset: Changeset, approvedIds: string[]) => {
-    const next = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
-    setPedigree(next);
+  const onApplyOrgSync = (parsed: ParsedMap, changeset: Changeset, approvedIds: string[], stackProposals: StackChangeProposal[]) => {
+    const approver = profile?.email ?? "unknown";
+    const merged = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
+    const decided = stackProposals.map((p) => ({
+      ...p,
+      decision: { by: approver, at: p.decision?.at ?? new Date().toISOString(), action: "applied" as const },
+    }));
+    const result = applyStackProposals({
+      proposals: decided,
+      approver,
+      people,
+      pedigree: merged,
+      companyContext,
+      registry,
+      auditLog,
+    });
+    setPedigree(result.pedigree);
+    if (result.companyContext) setCompanyContext(result.companyContext);
+    setRegistry(result.registry);
+    setAuditLog(result.auditLog);
     setOrgSyncOpen(false);
-    pushToast("Org Sync applied", `${approvedIds.length} people updated · ${changeset.summary.newResponsibilities} new resp, ${changeset.summary.newTasks} new tasks`, true);
+    pushToast("Org Sync applied", `${approvedIds.length} people updated · ${result.applied} stack change${result.applied === 1 ? "" : "s"} · audit recorded`, true);
   };
 
   const onExport = () => {
@@ -758,7 +776,7 @@ export default function App() {
         onApply={onApplyMapping}
       />
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
-      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
+      <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} registry={registry} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
       <OnboardingTour
         open={tourOpen}
