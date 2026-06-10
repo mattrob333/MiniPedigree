@@ -79,6 +79,21 @@ export interface Person {
   notes?: string;
 }
 
+// ── Provenance: where every responsibility/task came from ─────────────
+// "evidenced" = backed by a transcript/document quote; "ai_inferred" = the
+// parser inferred it (e.g. role templates) with no direct evidence;
+// "human_confirmed" = a reviewer explicitly confirmed it.
+export type ProvenanceState = "evidenced" | "ai_inferred" | "human_confirmed";
+
+export interface ItemProvenance {
+  state: ProvenanceState;
+  confidence?: number;        // 0..1 from the parser
+  evidence_quote?: string;    // the source excerpt behind "evidenced"
+  source?: string;            // session label / transcript reference
+  confirmed_by?: string;
+  confirmed_at?: string;
+}
+
 export interface ResponsibilityRow {
   id: string;
   title: string;
@@ -86,6 +101,7 @@ export interface ResponsibilityRow {
   source?: string; // e.g. "Leadership Session", "Department Session · Dr. Claire Donovan"
   assignedByName?: string; // manager who assigned this responsibility (lineage)
   confidence?: number;
+  provenance?: ItemProvenance;
 }
 
 export interface TaskItem {
@@ -96,6 +112,7 @@ export interface TaskItem {
   riskLevel?: RiskLevel;
   evidence?: string;
   completion?: TaskCompletionContext;
+  provenance?: ItemProvenance;
 }
 
 export interface PersonTasks {
@@ -118,6 +135,7 @@ export interface AgentRecord {
   person: Person;
   task: TaskItem;
   createdAt: string;
+  generatedBy?: string; // email of the user who generated this agent
   manifest?: Record<string, unknown>;
   systemPrompt?: string;
 }
@@ -193,6 +211,7 @@ export interface Workspace {
   mcpLibrary?: CompanyMcpServer[]; // the company's approved MCP tool surface
   registry?: AgentRegistryEntry[]; // the Agent Stack state (versioned, append-only)
   auditLog?: StackAuditRecord[];   // applied stack changes with approver + evidence
+  events?: WorkspaceAuditEvent[];  // append-only workspace audit trail
   ownerEmail?: string;
   updatedAt?: string;
 }
@@ -368,10 +387,41 @@ export interface CompanyContext {
   updatedAt?: string;
 }
 
+// Local workspace roles (UX backlog P0-5 minimum viable RBAC).
+// Editor: map, classify, generate. Reviewer: confirm provenance, approve
+// manifests. SSO/SAML-backed identity is a stated roadmap item — these roles
+// gate actions locally and are labeled as such in the UI.
+export type UserRole = "editor" | "reviewer";
+
 export interface UserProfile {
   email: string;
   name: string;
   company: string;
   companyContext: CompanyContext;
   createdAt: string;
+  role?: UserRole;
+}
+
+// ── Workspace audit trail (UX backlog P1-3) ────────────────────────────
+// Append-only in-app event log: who generated/confirmed/approved/exported
+// what, when, based on which evidence. Local-first; schema mirrors the
+// planned production audit pipeline.
+export type WorkspaceAuditEventType =
+  | "agent_generated"
+  | "provenance_confirmed"
+  | "manifest_approved"
+  | "export_validated"
+  | "package_exported"
+  | "stack_change_applied"
+  | "agent_retired";
+
+export interface WorkspaceAuditEvent {
+  id: string;
+  type: WorkspaceAuditEventType;
+  actor: string;              // email of the human who acted
+  timestamp: string;
+  summary: string;            // human-readable description
+  subject_id?: string;        // agent id / task id / proposal id
+  evidence?: string;          // source quote where applicable
+  details?: Record<string, unknown>;
 }

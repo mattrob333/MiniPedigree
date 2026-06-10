@@ -1,5 +1,6 @@
 import type { AgentRecord, PedigreeRow, PedigreeState, Person, TaskItem } from "@/types";
 import { Icon } from "./Icon";
+import { ProvenanceBadge } from "./ProvenanceBadge";
 import { StatusBadge } from "./StatusBadge";
 import { getDepartmentColor } from "@/lib/departments";
 import { isMapped, recommendSessionType, SESSION_LABEL, teamMapped } from "@/lib/sessions";
@@ -96,6 +97,7 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div className="dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cyan)" }} />
                           <div className="label" style={{ flex: 1 }}>{r.title}</div>
+                          <ProvenanceBadge provenance={r.provenance} compact />
                           <div className="meta">{respTasks.length}t · {r.id}</div>
                         </div>
                         {(r.source || r.assignedByName) && (
@@ -126,6 +128,7 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
                       <div key={t.id} className={"task-row" + (created ? " created" : "")}>
                         <div className="marker">{created ? <Icon name="checkmark" size={10} /> : "T"}</div>
                         <div className="label">{t.label}</div>
+                        <ProvenanceBadge provenance={t.provenance} compact />
                         <div className="meta">{t.respId}</div>
                         {created ? (
                           <button className="btn btn-sm btn-ghost" onClick={() => { const a = agents.find((x) => x.taskId === t.id); if (a) onOpenAgent(a); }}>Open agent <Icon name="external" size={11} /></button>
@@ -142,7 +145,7 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
               <section className="drawer-section">
                 <div className="sh">Approval required<span className="count">{tasks.approval.length}</span></div>
                 {tasks.approval.length === 0 ? <div className="drawer-empty">None.</div> : tasks.approval.map((t) => (
-                  <div key={t.id} className="list-item-line"><Icon name="warning" size={12} stroke="var(--yellow)" className="icon" /><span style={{ flex: 1 }}>{t.label}</span><span className="tag yellow">approval</span></div>
+                  <div key={t.id} className="list-item-line"><Icon name="warning" size={12} stroke="var(--yellow)" className="icon" /><span style={{ flex: 1 }}>{t.label}</span><ProvenanceBadge provenance={t.provenance} compact /><span className="tag yellow">approval</span></div>
                 ))}
               </section>
 
@@ -150,7 +153,7 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
               <section className="drawer-section">
                 <div className="sh">Not delegatable<span className="count">{tasks.not_delegatable.length}</span></div>
                 {tasks.not_delegatable.length === 0 ? <div className="drawer-empty">None.</div> : tasks.not_delegatable.map((t) => (
-                  <div key={t.id} className="list-item-line"><Icon name="lock" size={12} stroke="var(--text-4)" className="icon" /><span style={{ flex: 1 }}>{t.label}</span><span className="tag">human-only</span></div>
+                  <div key={t.id} className="list-item-line"><Icon name="lock" size={12} stroke="var(--text-4)" className="icon" /><span style={{ flex: 1 }}>{t.label}</span><ProvenanceBadge provenance={t.provenance} compact /><span className="tag">human-only</span></div>
                 ))}
               </section>
 

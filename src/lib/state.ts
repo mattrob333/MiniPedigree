@@ -9,6 +9,7 @@ import type {
   TaskItem,
 } from "@/types";
 import { suggestedAgentName } from "./parse";
+import { deriveProvenance, deriveResponsibilityProvenance } from "./provenance";
 import Papa from "papaparse";
 
 export function initialPedigreeState(people: Person[]): PedigreeState {
@@ -64,13 +65,13 @@ export function applyParsed(
     const not_delegatable: TaskItem[] = [];
     const responsibilities = data.responsibilities.map((r) => {
       r.tasks.delegatable.forEach((t, i) =>
-        delegatable.push(toTaskItem(`${r.id}-d-${i}`, t, r)),
+        delegatable.push(toTaskItem(`${r.id}-d-${i}`, t, r, opts.sessionLabel)),
       );
       r.tasks.approval.forEach((t, i) =>
-        approval.push(toTaskItem(`${r.id}-a-${i}`, t, r)),
+        approval.push(toTaskItem(`${r.id}-a-${i}`, t, r, opts.sessionLabel)),
       );
       r.tasks.not_delegatable.forEach((t, i) =>
-        not_delegatable.push(toTaskItem(`${r.id}-n-${i}`, t, r)),
+        not_delegatable.push(toTaskItem(`${r.id}-n-${i}`, t, r, opts.sessionLabel)),
       );
       return {
         id: r.id,
@@ -79,6 +80,7 @@ export function applyParsed(
         source: opts.sessionLabel,
         assignedByName: managerName(person),
         confidence: r.confidence,
+        provenance: deriveResponsibilityProvenance(r, opts.sessionLabel),
       };
     });
 
@@ -106,7 +108,7 @@ export function applyParsed(
 }
 
 /** Build a TaskItem, carrying over per-task detail (risk, evidence, completion context) when parsed. */
-function toTaskItem(id: string, label: string, r: ParsedResponsibility): TaskItem {
+function toTaskItem(id: string, label: string, r: ParsedResponsibility, sessionLabel?: string): TaskItem {
   const detail = r.taskDetails?.find((d) => d.name.trim().toLowerCase() === label.trim().toLowerCase());
   const item: TaskItem = { id, label, respId: r.id, respTitle: r.title };
   if (detail) {
@@ -114,6 +116,11 @@ function toTaskItem(id: string, label: string, r: ParsedResponsibility): TaskIte
     if (detail.evidence_quote) item.evidence = detail.evidence_quote;
     item.completion = extractCompletion(detail);
   }
+  item.provenance = deriveProvenance({
+    evidence: detail?.evidence_quote || r.evidence_quote,
+    confidence: r.confidence,
+    source: sessionLabel,
+  });
   return item;
 }
 

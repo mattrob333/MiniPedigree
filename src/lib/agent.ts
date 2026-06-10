@@ -158,6 +158,7 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
 
   const slug = slugify(agentName) || "pedigree-agent";
   const traceId = `pdg-${slug}-001`;
+  const respProvenance = row.responsibilities.find((r) => r.id === task.respId)?.provenance;
   const ioContract = deriveIoContract(task, respTitle, mcp, person, companyContext);
   const lifecycle = {
     class: lifecycleClass,
@@ -206,8 +207,9 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     parent_responsibility: {
       id: task.respId,
       name: respTitle,
+      ...(respProvenance ? { provenance: respProvenance } : {}),
     },
-    task: { id: task.id, label: task.label },
+    task: { id: task.id, label: task.label, ...(task.provenance ? { provenance: task.provenance } : {}) },
     purpose: constructionSpec.purpose,
     goal: constructionSpec.goal,
     operating_mode: constructionSpec.operating_mode,

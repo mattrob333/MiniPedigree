@@ -2,15 +2,18 @@ import { useState } from "react";
 import JSZip from "jszip";
 import { Icon } from "./Icon";
 import { BrandChip, BrandLogo } from "./BrandLogo";
-import type { AgentRecord, AgentRegistryEntry, CompanyContext, CompanyMcpServer, McpRecommendation } from "@/types";
+import type { AgentRecord, AgentRegistryEntry, CompanyContext, CompanyMcpServer, ItemProvenance, McpRecommendation, PedigreeRow, UserRole, WorkspaceAuditEvent } from "@/types";
 import { copyText, initials } from "@/lib/util";
 import { downloadFile } from "@/lib/state";
 import { slugify, buildDeploymentGuide, type AgentConstructionSpec } from "@/lib/agent";
 import { buildHermesManifest } from "@/lib/hermesManifest";
 import { recommendMcp } from "@/lib/mcpCatalog";
-import { compileAgent, emitAllRuntimes, RUNTIME_ADAPTERS, type RuntimeAdapter, type RuntimeArtifact } from "@/lib/runtimes";
-import { validateCompiledAgent } from "@/lib/validate";
-import { findRegistryEntry, nextVersion, upsertCompiledVersion } from "@/lib/registry";
+import { compileAgent, emitAllRuntimes, RUNTIME_ADAPTERS, type RuntimeAdapter, type RuntimeArtifact, type RuntimeTargetId } from "@/lib/runtimes";
+import { governancePreservedChecks, preservationPassed, validateCompiledAgent } from "@/lib/validate";
+import { findRegistryEntry, nextVersion, setRegistryStatus, upsertCompiledVersion } from "@/lib/registry";
+import { enforcementProfile, enforcementSummary, ENFORCEMENT_LEGEND } from "@/lib/enforcement";
+import { buildGovernanceSummaryHtml } from "@/lib/governanceSummary";
+import { ProvenanceBadge, RiskBadge } from "./ProvenanceBadge";
 
 function highlight(str: string): string {
   const escaped = str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -22,13 +25,23 @@ function highlight(str: string): string {
 
 interface Props {
   agent: AgentRecord | null;
+  row?: PedigreeRow | null;
   companyContext?: CompanyContext;
   mcpLibrary?: CompanyMcpServer[];
   registry?: AgentRegistryEntry[];
+  role?: UserRole;
+  currentUserEmail?: string;
   onRegistryChange?: (registry: AgentRegistryEntry[]) => void;
+  onAuditEvents?: (events: WorkspaceAuditEvent[]) => void;
   onBack: () => void;
   onSwitchToOrgMap: () => void;
   onToast: (t1: string, t2?: string, green?: boolean) => void;
+}
+
+let eventSeq = 0;
+function auditEvent(type: WorkspaceAuditEvent["type"], actor: string, summary: string, subjectId: string, details?: Record<string, unknown>): WorkspaceAuditEvent {
+  eventSeq += 1;
+  return { id: `EVT-${Date.now().toString(36)}-${eventSeq}`, type, actor, timestamp: new Date().toISOString(), summary, subject_id: subjectId, ...(details ? { details } : {}) };
 }
 
 const RUNTIME_BRANDS: Record<string, string> = {
@@ -40,9 +53,10 @@ const RUNTIME_BRANDS: Record<string, string> = {
   generic: "LangGraph",
 };
 
-export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, onRegistryChange, onBack, onSwitchToOrgMap, onToast }: Props) {
+export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registry, role, currentUserEmail, onRegistryChange, onAuditEvents, onBack, onSwitchToOrgMap, onToast }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [enforcementRuntime, setEnforcementRuntime] = useState<RuntimeTargetId>("hermes");
   if (!agent) return null;
 
   const { person, task, respTitle, respId, policy, riskLevel } = agent;
@@ -75,6 +89,28 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
   const registryEntry = registry ? findRegistryEntry(registry, previewCompiled.agent_id) : undefined;
   const validationWarnings = Array.from(new Set([...(manifest.validation_warnings ?? []), ...hermes.warnings, ...validation.warnings]));
 
+  // "Governance preserved" pre-export checks (P0-4): visible, and gate the download.
+  const preservation = governancePreservedChecks(agent, row ?? undefined);
+  const exportOk = validation.ok && preservationPassed(preservation);
+  const exportBlockReason = !validation.ok ? validation.failures[0] : preservation.find((c) => c.status === "fail")?.detail;
+
+  // Enforcement reality (P0-2): per-control tags that change with runtime target.
+  const enforcement = enforcementProfile(enforcementRuntime);
+  const enfSummary = enforcementSummary(enforcement);
+
+  // Provenance + approval (P0-1 / P0-5): an AI-inferred task cannot be approved.
+  const taskProvenance = (manifest.task?.provenance ?? agent.task.provenance) as ItemProvenance | undefined;
+  const canApprove = role === "reviewer" && (!agent.generatedBy || agent.generatedBy !== currentUserEmail);
+  const approveBlockedByProvenance = (taskProvenance?.state ?? "ai_inferred") === "ai_inferred";
+  const isApproved = registryEntry?.status === "approved" || registryEntry?.status === "deployed";
+
+  const approveManifest = () => {
+    if (!registry || !onRegistryChange || !registryEntry) return;
+    onRegistryChange(setRegistryStatus(registry, previewCompiled.agent_id, "approved"));
+    onAuditEvents?.([auditEvent("manifest_approved", currentUserEmail ?? "unknown", `Approved manifest for ${agent.name} (v${Math.max(...registryEntry.versions.map((v) => v.version))}).`, previewCompiled.agent_id)]);
+    onToast("Manifest approved", `${agent.name} approved by ${currentUserEmail}`, true);
+  };
+
   const downloadZip = async (filename: string, artifacts: RuntimeArtifact[], extra?: { path: string; content: string }[]) => {
     const zip = new JSZip();
     const folder = zip.folder(slug) ?? zip;
@@ -92,10 +128,18 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
   };
 
   const guardExport = (): boolean => {
-    if (validation.ok) return true;
-    onToast("Export blocked by validation", validation.failures[0], false);
+    if (exportOk) return true;
+    onToast("Export blocked by validation", exportBlockReason, false);
     return false;
   };
+
+  const validationEvent = () => auditEvent(
+    "export_validated",
+    currentUserEmail ?? "unknown",
+    `Pre-export validation for ${agent.name}: ${preservation.filter((c) => c.status === "pass").length}/${preservation.length} governance checks passed, ${validation.failures.length} failures, ${validation.warnings.length} warnings.`,
+    previewCompiled.agent_id,
+    { checks: preservation.map((c) => ({ id: c.id, status: c.status })) },
+  );
 
   // Stage D + F: all adapters render from the same CompiledAgent; the full
   // package export also writes the registry entry with a version bump.
@@ -104,10 +148,18 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
     const version = registry ? nextVersion(registry, previewCompiled.agent_id) : 1;
     const compiled = compileAgent({ agent, runtime: "pedigree", companyContext, mcpLibrary, version });
     const { artifacts } = emitAllRuntimes(compiled);
-    await downloadZip(`${slug}.deployment-package.zip`, artifacts, [{ path: "SETUP.md", content: setupGuide }]);
+    const extras = [
+      { path: "SETUP.md", content: setupGuide },
+      { path: "GOVERNANCE-SUMMARY.html", content: buildGovernanceSummaryHtml(compiled) },
+    ];
+    await downloadZip(`${slug}.deployment-package.zip`, artifacts, extras);
     if (registry && onRegistryChange) {
       onRegistryChange(upsertCompiledVersion(registry, compiled, artifacts));
     }
+    onAuditEvents?.([
+      validationEvent(),
+      auditEvent("package_exported", currentUserEmail ?? "unknown", `Exported deployment package for ${agent.name} (registry v${version}, all runtimes).`, previewCompiled.agent_id, { version }),
+    ]);
     onToast("Deployment package exported", `${slug}.deployment-package.zip — all runtimes · registry v${version}`, true);
   };
 
@@ -119,13 +171,26 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
     if (artifacts.length === 1) {
       downloadFile(`${slug}.${adapter.id}.${artifacts[0].path}`, artifacts[0].content, artifacts[0].mime);
     } else {
-      await downloadZip(`${slug}.${adapter.id}-package.zip`, artifacts, [{ path: "SETUP.md", content: setupGuide }]);
+      await downloadZip(`${slug}.${adapter.id}-package.zip`, artifacts, [
+        { path: "SETUP.md", content: setupGuide },
+        { path: "GOVERNANCE-SUMMARY.html", content: buildGovernanceSummaryHtml(compiled) },
+      ]);
     }
+    onAuditEvents?.([
+      validationEvent(),
+      auditEvent("package_exported", currentUserEmail ?? "unknown", `Exported ${adapter.label} package for ${agent.name}.`, previewCompiled.agent_id, { runtime: adapter.id }),
+    ]);
     onToast(
       "Agent format exported",
       warnings.length ? `${adapter.label} downloaded · ${warnings[0].message}` : `${adapter.label} downloaded`,
       true,
     );
+  };
+
+  const exportGovernanceSummary = () => {
+    const compiled = compileAgent({ agent, runtime: enforcementRuntime, companyContext, mcpLibrary });
+    downloadFile(`${slug}.governance-summary.html`, buildGovernanceSummaryHtml(compiled), "text/html");
+    onToast("Governance summary exported", "One-page approver summary (print-ready HTML)", true);
   };
 
   const doCopy = async (text: string, label: string) => {
@@ -176,7 +241,7 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
                 <div className="k">Parent Responsibility</div>
                 <div className="v">{respTitle} <span className="tag cyan" style={{ marginLeft: 6 }}>{respId}</span></div>
                 <div className="k">Task</div>
-                <div className="v">{task.label}</div>
+                <div className="v" style={{ display: "flex", alignItems: "center", gap: 8 }}>{task.label} <ProvenanceBadge provenance={taskProvenance} /></div>
                 <div className="k">Org Unit</div>
                 <div className="v"><span className="mono">{person.department}</span></div>
               </div>
@@ -206,7 +271,7 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
           <div className="manifest-card">
             <div className="manifest-card-head">
               <Icon name="shield" size={11} style={{ marginRight: 6 }} /> Policy & Guardrails
-              <span className="right"><span className="tag yellow">{riskLevel} risk</span></span>
+              <span className="right"><RiskBadge level={riskLevel} /></span>
             </div>
             <div className="manifest-card-body">
               <div className="manifest-kv">
@@ -331,21 +396,102 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
 
           <pre className="codeblock" style={{ fontSize: 12.5 }}>{prompt}</pre>
 
-          {validation.failures.length > 0 && (
-            <div style={{ marginTop: 14, padding: "10px 12px", border: "1px solid var(--red)", borderRadius: 8, fontSize: 12 }}>
-              <div style={{ color: "var(--red)", fontWeight: 600, marginBottom: 6 }}>
-                <Icon name="warning" size={12} stroke="var(--red)" /> Export blocked — fix these before deploying
-              </div>
-              {validation.failures.map((f) => (
-                <div key={f} style={{ color: "var(--red)", marginTop: 2 }}>• {f}</div>
-              ))}
+          {/* P0-4: "Governance preserved" — the invariant made a visible step. */}
+          <div className="manifest-card" style={{ marginTop: 14 }}>
+            <div className="manifest-card-head">
+              <Icon name="shield" size={11} style={{ marginRight: 6 }} /> Governance preserved — pre-export checks
+              <span className="right">
+                <span className={`tag ${exportOk ? "" : "yellow"}`} style={exportOk ? { color: "var(--green)", borderColor: "var(--green)" } : {}}>
+                  {preservation.filter((c) => c.status === "pass").length}/{preservation.length} passed
+                </span>
+              </span>
             </div>
-          )}
+            <div className="manifest-card-body" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {preservation.map((c) => (
+                <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5 }}>
+                  <Icon
+                    name={c.status === "pass" ? "checkmark" : c.status === "fail" ? "close" : "warning"}
+                    size={12}
+                    stroke={c.status === "pass" ? "var(--green)" : c.status === "fail" ? "var(--red)" : "var(--yellow)"}
+                  />
+                  <span style={{ color: c.status === "fail" ? "var(--red)" : "var(--text-1)" }}>{c.label}</span>
+                  {c.detail && <span style={{ fontSize: 12, color: c.status === "fail" ? "var(--red)" : "var(--text-4)" }}>— {c.detail}</span>}
+                </div>
+              ))}
+              {validation.failures.map((f) => (
+                <div key={f} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5 }}>
+                  <Icon name="close" size={12} stroke="var(--red)" />
+                  <span style={{ color: "var(--red)" }}>{f}</span>
+                </div>
+              ))}
+              {!exportOk && (
+                <div style={{ marginTop: 4, fontSize: 12, color: "var(--red)" }}>
+                  Export is blocked until the failed checks above are resolved. The validation result is recorded as an audit event on every export attempt.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* P0-2: Enforcement reality — which controls are enforced where. */}
+          <div className="manifest-card" style={{ marginTop: 12 }}>
+            <div className="manifest-card-head">
+              <Icon name="lock" size={11} style={{ marginRight: 6 }} /> Enforcement reality
+              <span className="right" style={{ display: "flex", gap: 4 }}>
+                {RUNTIME_ADAPTERS.map((a) => (
+                  <button key={a.id} className={`btn btn-sm ${enforcementRuntime === a.id ? "btn-primary" : "btn-ghost"}`} onClick={() => setEnforcementRuntime(a.id)}>{a.label}</button>
+                ))}
+              </span>
+            </div>
+            <div className="manifest-card-body">
+              <div style={{ fontSize: 12.5, marginBottom: 8, color: "var(--text-2)" }}>
+                <strong style={{ color: "var(--text-1)" }}>{enfSummary.enforceable} of {enfSummary.total}</strong> controls in this manifest are runtime-enforceable on the <span className="mono">{enforcementRuntime}</span> path · {enfSummary.advisory} prompt-advisory · {enfSummary.notYet} not yet enforceable.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {enforcement.map((e) => (
+                  <div key={e.control} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5 }}>
+                    <span style={{ width: 130, flexShrink: 0 }}>{e.control}</span>
+                    <span
+                      className="tag"
+                      style={{
+                        color: e.status === "enforceable" ? "var(--green)" : e.status === "advisory" ? "var(--yellow)" : "var(--text-4)",
+                        borderColor: e.status === "enforceable" ? "var(--green)" : e.status === "advisory" ? "var(--yellow)" : "var(--border-2)",
+                        flexShrink: 0,
+                      }}
+                    >{ENFORCEMENT_LEGEND[e.status].label}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-4)" }}>{e.note}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-4)", borderTop: "1px solid var(--border-1)", paddingTop: 8 }}>
+                {Object.values(ENFORCEMENT_LEGEND).map((l) => (
+                  <div key={l.label} style={{ marginTop: 2 }}><strong style={{ color: "var(--text-3)" }}>{l.label}:</strong> {l.description}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {registryEntry && (
-            <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--text-3)" }}>
-              <Icon name="history" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />
+            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-3)" }}>
+              <Icon name="history" size={11} />
               Registry: v{Math.max(...registryEntry.versions.map((v) => v.version))} · status {registryEntry.status}
-              {registryEntry.stale && <span className="tag yellow" style={{ marginLeft: 6 }}>stale — ingredients changed, recompile recommended</span>}
+              {registryEntry.stale && <span className="tag yellow">stale — ingredients changed, recompile recommended</span>}
+              <span style={{ flex: 1 }} />
+              {!isApproved && (
+                <button
+                  className="btn btn-sm btn-outline-cyan"
+                  disabled={!canApprove || approveBlockedByProvenance}
+                  title={
+                    !canApprove
+                      ? (role !== "reviewer" ? "Approval requires the Reviewer role" : "An editor cannot approve their own manifest")
+                      : approveBlockedByProvenance
+                        ? "The anchored task is still AI-inferred — confirm its provenance in the Review inbox first"
+                        : "Approve this manifest version"
+                  }
+                  onClick={approveManifest}
+                >
+                  <Icon name="checkmark" size={11} /> Approve manifest
+                </button>
+              )}
             </div>
           )}
 
@@ -354,8 +500,9 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
             <button className="btn" onClick={() => downloadFile(`${slug}.prompt.txt`, prompt, "text/plain")}><Icon name="download" size={12} /> Export prompt</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.manifest.json`, json, "application/json")}><Icon name="download" size={12} /> Export manifest</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.hermes.md`, hermes.markdown, "text/markdown")}><Icon name="download" size={12} /> Export Hermes Agent</button>
+            <button className="btn" onClick={exportGovernanceSummary} title="One-page, print-ready summary for the non-technical approver"><Icon name="doc" size={12} /> Governance Summary</button>
             <span style={{ flex: 1 }} />
-            <button className="btn btn-primary" disabled={!validation.ok} onClick={exportPackage} title={validation.ok ? "Export all runtime artifacts and write the registry version" : validation.failures[0]}><Icon name="download" size={12} /> Export Deployment Package</button>
+            <button className="btn btn-primary" disabled={!exportOk} onClick={exportPackage} title={exportOk ? "Export all runtime artifacts and write the registry version" : exportBlockReason}><Icon name="download" size={12} /> Export Deployment Package</button>
           </div>
 
           {/* Deployment Package (P1.2) */}
@@ -396,9 +543,9 @@ export function ManifestScreen({ agent, companyContext, mcpLibrary, registry, on
             <button
               key={adapter.id}
               className={`manifest-format-button ${adapter.id === "hermes" ? "primary" : ""}`}
-              disabled={!validation.ok}
+              disabled={!exportOk}
               onClick={() => void exportAgentFormat(adapter)}
-              title={validation.ok ? adapter.description : validation.failures[0]}
+              title={exportOk ? adapter.description : exportBlockReason}
             >
               <BrandLogo name={RUNTIME_BRANDS[adapter.id] ?? adapter.label} size={26} />
               <span className="manifest-format-label">{adapter.label}</span>

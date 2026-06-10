@@ -11,7 +11,9 @@ import type {
   TaskItem,
 } from "@/types";
 import { extractGovernanceRulesDeterministic, significantKeywords } from "./governance";
+import { deriveProvenance } from "./provenance";
 import { markStale } from "./registry";
+import type { ItemProvenance } from "@/types";
 
 // ── Phase 6: the living stack ──────────────────────────────────────────
 // New transcript → diff against (a) responsibility map, (b) Agent Registry,
@@ -330,7 +332,10 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
 
     switch (proposal.type) {
       case "new_task": {
-        pedigree = addTaskToPerson(pedigree, patch.personId, patch.respTitle, patch.label, patch.delegation_class, patch.completion);
+        pedigree = addTaskToPerson(
+          pedigree, patch.personId, patch.respTitle, patch.label, patch.delegation_class, patch.completion,
+          deriveProvenance({ evidence: proposal.evidence_quote, confidence: proposal.confidence, source: "Stack Sync" }),
+        );
         break;
       }
       case "task_changed": {
@@ -339,7 +344,10 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
       }
       case "ownership_transfer": {
         pedigree = removeTask(pedigree, patch.fromPersonId, patch.taskId);
-        pedigree = addTaskToPerson(pedigree, patch.toPersonId, patch.respTitle, patch.label, "human_approval_required", undefined);
+        pedigree = addTaskToPerson(
+          pedigree, patch.toPersonId, patch.respTitle, patch.label, "human_approval_required", undefined,
+          deriveProvenance({ evidence: proposal.evidence_quote, confidence: proposal.confidence, source: "Stack Sync" }),
+        );
         break;
       }
       case "rule_changed": {
@@ -389,6 +397,7 @@ function addTaskToPerson(
   label: string,
   cls: ParsedTask["delegation_class"],
   completion: TaskItem["completion"],
+  provenance?: ItemProvenance,
 ): PedigreeState {
   const prev = pedigree[personId] ?? {
     status: "needs-discovery" as const,
@@ -413,6 +422,7 @@ function addTaskToPerson(
     respId: resp.id,
     respTitle: resp.title,
     ...(completion ? { completion } : {}),
+    ...(provenance ? { provenance } : {}),
   };
   const tasks = {
     delegatable: [...prev.tasks.delegatable],

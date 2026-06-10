@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Icon } from "./Icon";
-import type { UserProfile } from "@/types";
+import type { UserProfile, UserRole } from "@/types";
 
 interface Props {
   onSignIn: (profile: UserProfile) => void;
@@ -18,6 +18,7 @@ export function LoginScreen({ onSignIn, existingProfile }: Props) {
   const [mission, setMission] = useState(existingProfile?.companyContext.mission ?? "");
   const [initiatives, setInitiatives] = useState(existingProfile?.companyContext.initiatives ?? "");
   const [terminology, setTerminology] = useState(existingProfile?.companyContext.terminology ?? "");
+  const [role, setRole] = useState<UserRole>(existingProfile?.role ?? "editor");
   const [err, setErr] = useState<string | null>(null);
 
   const submit = () => {
@@ -36,6 +37,7 @@ export function LoginScreen({ onSignIn, existingProfile }: Props) {
         terminology: terminology.trim() || undefined,
       },
       createdAt: new Date().toISOString(),
+      role,
     });
   };
 
@@ -77,6 +79,13 @@ export function LoginScreen({ onSignIn, existingProfile }: Props) {
               <div className="lbl">Company</div>
               <input className="input" value={company} placeholder="Acme Health" onChange={(e) => setCompany(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
             </div>
+          </div>
+          <div className="form-field">
+            <div className="lbl">Workspace role <span className="dim" style={{ textTransform: "none", letterSpacing: 0 }}>(local roles — SSO/SAML-backed identity is on the roadmap)</span></div>
+            <select className="select" value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+              <option value="editor">Editor — map, classify, and generate agents</option>
+              <option value="reviewer">Reviewer — confirm provenance and approve manifests</option>
+            </select>
           </div>
           <div className="form-field">
             <div className="lbl">What does your company do?</div>

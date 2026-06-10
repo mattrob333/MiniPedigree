@@ -1,4 +1,4 @@
-import type { CompanyMcpServer, McpScope } from "@/types";
+import type { AgentRecord, CompanyMcpServer, McpScope, PedigreeRow } from "@/types";
 import type { CompiledAgent } from "./runtimes/types";
 import { getRuntimeAdapter } from "./runtimes";
 
@@ -99,4 +99,89 @@ export function validateCompiledAgent(compiled: CompiledAgent, library: CompanyM
 
 function keyOf(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// ── "Governance preserved" pre-export checks (UX backlog P0-4) ─────────
+// The invariant the product sells, made a visible step: blocked stays
+// blocked, approval gates persist, nothing got demoted during enrichment.
+// Hard fail blocks the download; warns are shown but exportable.
+
+export interface PreservationCheck {
+  id: string;
+  label: string;
+  status: "pass" | "fail" | "warn";
+  detail?: string;
+}
+
+export function governancePreservedChecks(agent: AgentRecord, row: PedigreeRow | undefined): PreservationCheck[] {
+  const manifest = (agent.manifest ?? {}) as Record<string, any>;
+  const allowed = new Set<string>(((manifest.allowed_tasks ?? []) as string[]).map(keyOf));
+  const approval = new Set<string>(((manifest.human_approval_required ?? []) as string[]).map(keyOf));
+  const blocked = new Set<string>(((manifest.blocked_tasks ?? []) as string[]).map(keyOf));
+  const checks: PreservationCheck[] = [];
+
+  const respId = agent.respId;
+  const seedBlocked = (row?.tasks.not_delegatable ?? []).filter((t) => t.respId === respId).map((t) => t.label);
+  const seedApproval = (row?.tasks.approval ?? []).filter((t) => t.respId === respId).map((t) => t.label);
+  const seedAllowed = new Set([agent.task.label, ...(row?.tasks.delegatable ?? []).filter((t) => t.respId === respId).map((t) => t.label)].map(keyOf));
+
+  // 1. Every blocked task in the workspace appears as blocked in the manifest.
+  const droppedBlocked = seedBlocked.filter((label) => !blocked.has(keyOf(label)));
+  checks.push({
+    id: "blocked_preserved",
+    label: "Every blocked task remains blocked in the manifest",
+    status: droppedBlocked.length ? "fail" : "pass",
+    detail: droppedBlocked.length ? `Missing from blocked list: ${droppedBlocked.join("; ")}` : `${seedBlocked.length} blocked task(s) verified`,
+  });
+
+  // 2. Every approval-required task retains its gate (approval or stricter).
+  const droppedApproval = seedApproval.filter((label) => !approval.has(keyOf(label)) && !blocked.has(keyOf(label)));
+  checks.push({
+    id: "approval_preserved",
+    label: "Every approval-required task retains its gate",
+    status: droppedApproval.length ? "fail" : "pass",
+    detail: droppedApproval.length ? `Lost their gate: ${droppedApproval.join("; ")}` : `${seedApproval.length} gate(s) verified`,
+  });
+
+  // 3. No demotion: nothing classified approval/blocked shows up as allowed.
+  const demoted = [...seedBlocked, ...seedApproval].filter((label) => allowed.has(keyOf(label)));
+  checks.push({
+    id: "no_demotion",
+    label: "No approval-required or blocked task was reclassified as allowed",
+    status: demoted.length ? "fail" : "pass",
+    detail: demoted.length ? `Demoted to allowed: ${demoted.join("; ")}` : undefined,
+  });
+
+  // 4. Authority expansion during workflow enrichment is surfaced, not silent.
+  const expanded = ((manifest.allowed_tasks ?? []) as string[]).filter((label) => !seedAllowed.has(keyOf(label)));
+  checks.push({
+    id: "no_silent_expansion",
+    label: "No silent authority expansion during enrichment",
+    status: expanded.length ? "warn" : "pass",
+    detail: expanded.length ? `Added beyond discovery seeds (review before export): ${expanded.join("; ")}` : undefined,
+  });
+
+  // 5. Owner is populated.
+  const ownerEmail = String(manifest.human_owner?.email ?? agent.person.email ?? "");
+  checks.push({
+    id: "owner_populated",
+    label: "Human owner is populated",
+    status: ownerEmail ? "pass" : "fail",
+    detail: ownerEmail || "Manifest has no human owner email",
+  });
+
+  // 6. Escalation path exists.
+  const escalation = (manifest.construction_spec?.escalation_rules ?? []) as string[];
+  checks.push({
+    id: "escalation_exists",
+    label: "Escalation path exists",
+    status: escalation.length ? "pass" : "warn",
+    detail: escalation.length ? `${escalation.length} escalation rule(s)` : "No escalation rules defined",
+  });
+
+  return checks;
+}
+
+export function preservationPassed(checks: PreservationCheck[]): boolean {
+  return !checks.some((c) => c.status === "fail");
 }

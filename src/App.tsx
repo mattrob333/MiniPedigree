@@ -19,7 +19,11 @@ import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
 import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
 import { McpLibraryScreen } from "./components/McpLibraryScreen";
-import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, MappingSessionType, ParsedMap, PedigreeState, Person, StackAuditRecord, StackChangeProposal, UserProfile, WorkspaceSummary } from "./types";
+import { ReviewInbox } from "./components/ReviewInbox";
+import { AuditTrail } from "./components/AuditTrail";
+import { RiskBadge } from "./components/ProvenanceBadge";
+import { buildReviewQueue, confirmReviewItems, type ReviewQueueItem } from "./lib/provenance";
+import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, MappingSessionType, ParsedMap, PedigreeState, Person, StackAuditRecord, StackChangeProposal, UserProfile, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
@@ -43,7 +47,7 @@ import {
 } from "./lib/onboarding";
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary";
-type Tab = "spreadsheet" | "orgmap" | "agents";
+type Tab = "spreadsheet" | "orgmap" | "agents" | "review" | "audit";
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
 const CONNECTED_CONTEXT_PREFIX = "connected-context:";
@@ -227,6 +231,7 @@ export default function App() {
   const [mcpLibrary, setMcpLibrary] = useState<CompanyMcpServer[]>([]);
   const [registry, setRegistry] = useState<AgentRegistryEntry[]>([]);
   const [auditLog, setAuditLog] = useState<StackAuditRecord[]>([]);
+  const [events, setEvents] = useState<WorkspaceAuditEvent[]>([]);
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -260,7 +265,7 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[] }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[] }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
@@ -269,6 +274,7 @@ export default function App() {
     setMcpLibrary(ws.mcpLibrary ?? []);
     setRegistry(ws.registry ?? []);
     setAuditLog(ws.auditLog ?? []);
+    setEvents(ws.events ?? []);
     setCompanyProfileOpen(false);
     setSelectedId(null);
     setDrawerOpen(false);
@@ -306,11 +312,11 @@ export default function App() {
     if (booting) return;
     if (currentWorkspaceId && people.length && profile) {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, createdAt: new Date().toISOString() },
         profile.email,
       );
     }
-  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -360,7 +366,7 @@ export default function App() {
   const persistCompanyContext = (ctx: CompanyContext) => {
     setCompanyContext(ctx);
     if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, createdAt: new Date().toISOString() }, profile?.email);
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, events, createdAt: new Date().toISOString() }, profile?.email);
     }
   };
 
@@ -499,6 +505,16 @@ export default function App() {
     const buildCtx = { ...baseCtx, authored };
     const artifacts = buildAgentArtifacts(buildCtx);
     const agent = newAgentRecord(buildCtx, artifacts);
+    agent.generatedBy = profile?.email;
+    setEvents((prev) => [...prev, {
+      id: `EVT-${Date.now().toString(36)}-gen`,
+      type: "agent_generated" as const,
+      actor: profile?.email ?? "unknown",
+      timestamp: new Date().toISOString(),
+      summary: `Generated ${agent.name} for ${ctx.person.name} (${authored ? "AI construction" : "standard template"}).`,
+      subject_id: String((agent.manifest as Record<string, unknown>)?.agent_id ?? agent.id),
+      ...(ctx.task.evidence ? { evidence: ctx.task.evidence } : {}),
+    }]);
     setPedigree((prev) => {
       const nextRow = { ...prev[ctx.person.id] };
       nextRow.agents = [...nextRow.agents, agent];
@@ -548,7 +564,13 @@ export default function App() {
     setRegistry(result.registry);
     setAuditLog(result.auditLog);
     setOrgSyncOpen(false);
-    pushToast("Org Sync applied", `${approvedIds.length} people updated · ${result.applied} stack change${result.applied === 1 ? "" : "s"} · audit recorded`, true);
+    // P1-2: make the downstream manifest impact visible, not a separate hunt.
+    const impactedAgents = Array.from(new Set(decided.flatMap((p) => p.affected.agent_ids)));
+    pushToast(
+      "Org Sync applied",
+      `${approvedIds.length} people updated · ${result.applied} stack change${result.applied === 1 ? "" : "s"}${impactedAgents.length ? ` · ${impactedAgents.length} agent${impactedAgents.length === 1 ? "" : "s"} marked needs re-review (Agents tab)` : ""} · audit recorded`,
+      true,
+    );
   };
 
   const onExport = () => {
@@ -583,6 +605,15 @@ export default function App() {
   };
 
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
+  const reviewQueueCount = useMemo(() => buildReviewQueue(people, pedigree).length, [people, pedigree]);
+  const userRole = profile?.role ?? "editor";
+
+  const onConfirmReview = (items: ReviewQueueItem[]) => {
+    const result = confirmReviewItems(pedigree, items, profile?.email ?? "unknown");
+    setPedigree(result.pedigree);
+    setEvents((prev) => [...prev, ...result.events]);
+    pushToast("Provenance confirmed", `${items.length} item${items.length === 1 ? "" : "s"} human-confirmed · audit recorded`, true);
+  };
 
   // Recompute registry staleness whenever an ingredient (person record, task,
   // company context, governance docs, MCP library) changes.
@@ -703,6 +734,12 @@ export default function App() {
               <button className={"tab" + (metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => metrics.agentsBuilt > 0 && setTab("agents")} title={metrics.agentsBuilt === 0 ? "Available after first agent is generated" : "Generated agents"}>
                 <Icon name="robot" size={12} /> Agents <span className="count">{metrics.agentsBuilt}</span>
               </button>
+              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Org-wide review queue: everything pending provenance confirmation">
+                <Icon name="shield" size={12} /> Review <span className="count">{reviewQueueCount}</span>
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Append-only audit trail: who generated, confirmed, approved, exported">
+                <Icon name="history" size={12} /> Audit <span className="count">{events.length + auditLog.length}</span>
+              </button>
               <span style={{ flex: 1 }} />
               <span className="kbd-hint">Tab <span className="k">1</span> Spreadsheet · <span className="k">2</span> Org Map</span>
             </div>
@@ -715,7 +752,9 @@ export default function App() {
             {tab === "orgmap" && (
               <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
             )}
-            {tab === "agents" && <AgentsList agents={allAgents} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "agents" && <AgentsList agents={allAgents} people={people} registry={registry} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} role={userRole} onConfirm={onConfirmReview} />}
+            {tab === "audit" && <AuditTrail events={events} stackAuditLog={auditLog} workspaceName={workspaceName} />}
 
             <Drawer
               open={drawerOpen}
@@ -734,7 +773,20 @@ export default function App() {
       )}
 
       {screen === "manifest" && (
-        <ManifestScreen agent={activeAgent} companyContext={companyContext} mcpLibrary={mcpLibrary} registry={registry} onRegistryChange={setRegistry} onBack={() => setScreen("workspace")} onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }} onToast={pushToast} />
+        <ManifestScreen
+          agent={activeAgent}
+          row={activeAgent ? pedigree[activeAgent.person.id] ?? null : null}
+          companyContext={companyContext}
+          mcpLibrary={mcpLibrary}
+          registry={registry}
+          role={userRole}
+          currentUserEmail={profile?.email}
+          onRegistryChange={setRegistry}
+          onAuditEvents={(evts) => setEvents((prev) => [...prev, ...evts])}
+          onBack={() => setScreen("workspace")}
+          onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }}
+          onToast={pushToast}
+        />
       )}
 
       {screen === "company" && profile && (
@@ -1192,29 +1244,40 @@ function PanelSources({ sources }: { sources?: CompanyResearchSource[] }) {
   );
 }
 
-function AgentsList({ agents, onOpen }: { agents: AgentRecord[]; onOpen: (a: AgentRecord) => void }) {
+function AgentsList({ agents, people, registry, onOpen }: { agents: AgentRecord[]; people: Person[]; registry: AgentRegistryEntry[]; onOpen: (a: AgentRecord) => void }) {
   const standing = agents.filter((a) => (a.lifecycle ?? "standing") === "standing");
   const task = agents.filter((a) => a.lifecycle === "task");
+  const peopleIds = new Set(people.map((p) => p.id));
+  const registryById = new Map(registry.map((e) => [e.agent_id, e]));
 
-  const Card = ({ a }: { a: AgentRecord }) => (
-    <div className="manifest-card" style={{ marginBottom: 0, cursor: "pointer" }} onClick={() => onOpen(a)}>
-      <div className="manifest-card-head">
-        <Icon name="robot" size={11} style={{ marginRight: 6 }} /> {a.id}
-        <span className="right" style={{ display: "flex", gap: 4 }}>
-          <span className="tag">{a.lifecycle === "task" ? "task" : "standing"}</span>
-          <span className="badge generated"><span className="dot" />generated</span>
-        </span>
-      </div>
-      <div className="manifest-card-body">
-        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>{a.name}</div>
-        <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 8 }}>{a.person.name} · {a.person.title}</div>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          <span className="tag cyan">{a.respTitle}</span>
-          <span className="tag yellow">{a.riskLevel} risk</span>
+  // P1-2: an agent must never silently retain a departed owner or stale
+  // ingredients — surface "needs re-review" where agents are browsed.
+  const Card = ({ a }: { a: AgentRecord }) => {
+    const manifestId = String((a.manifest as Record<string, unknown> | undefined)?.agent_id ?? a.id);
+    const entry = registryById.get(manifestId);
+    const orphaned = !peopleIds.has(a.person.id);
+    const needsReReview = orphaned || entry?.stale === true;
+    return (
+      <div className="manifest-card" style={{ marginBottom: 0, cursor: "pointer", ...(needsReReview ? { border: "1px solid var(--yellow)" } : {}) }} onClick={() => onOpen(a)}>
+        <div className="manifest-card-head">
+          <Icon name="robot" size={11} style={{ marginRight: 6 }} /> {a.id}
+          <span className="right" style={{ display: "flex", gap: 4 }}>
+            <span className="tag">{a.lifecycle === "task" ? "task" : "standing"}</span>
+            {orphaned && <span className="tag" style={{ color: "var(--red)", borderColor: "var(--red)" }}>orphaned owner</span>}
+            {needsReReview ? <span className="tag yellow">needs re-review</span> : <span className="badge generated"><span className="dot" />generated</span>}
+          </span>
+        </div>
+        <div className="manifest-card-body">
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>{a.name}</div>
+          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 8 }}>{a.person.name} · {a.person.title}{orphaned ? " · no longer in the org map" : ""}</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            <span className="tag cyan">{a.respTitle}</span>
+            <RiskBadge level={a.riskLevel} />
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const Section = ({ title, hint, list }: { title: string; hint: string; list: AgentRecord[] }) => (
     <section style={{ marginBottom: 24 }}>

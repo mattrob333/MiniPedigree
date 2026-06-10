@@ -87,7 +87,7 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events },
         updated_at: stamped.updatedAt,
       });
       if (ws.mcpLibrary?.length) {
@@ -147,9 +147,9 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
     try {
       const { data } = await supabase.from("workspaces").select("id,name,owner_email,snapshot").eq("id", id).maybeSingle();
       if (data?.snapshot) {
-        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"]; mcpLibrary?: Workspace["mcpLibrary"]; registry?: Workspace["registry"]; auditLog?: Workspace["auditLog"] };
+        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"]; mcpLibrary?: Workspace["mcpLibrary"]; registry?: Workspace["registry"]; auditLog?: Workspace["auditLog"]; events?: Workspace["events"] };
         if (snap.people?.length) {
-          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry, auditLog: snap.auditLog, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
+          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry, auditLog: snap.auditLog, events: snap.events, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
         }
       }
     } catch (e) {
