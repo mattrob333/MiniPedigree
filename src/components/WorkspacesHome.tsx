@@ -20,14 +20,24 @@ const HRIS_INTEGRATIONS = [
   {
     name: "Workday",
     label: "Workday HRIS",
-    description: "Import people, managers, departments, titles, and known systems directly from Workday.",
+    description: "Planned: import people, managers, departments, titles, and known systems once the Workday connector ships.",
   },
   {
     name: "Oracle",
     label: "Oracle HRIS",
-    description: "Sync workforce structure from Oracle HCM once the connector is available.",
+    description: "Planned: sync workforce structure from Oracle HCM once the connector ships.",
   },
 ];
+
+const CONNECTOR_REQUEST_KEY = "pedigree.connector-requests.v1";
+
+function readConnectorRequests(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(CONNECTOR_REQUEST_KEY) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+}
 
 interface Props {
   userName: string;
@@ -43,6 +53,17 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState<string | null>(null);
+  const [connectorRequests, setConnectorRequests] = useState<string[]>(readConnectorRequests);
+
+  const requestConnector = (name: string) => {
+    const next = Array.from(new Set([...connectorRequests, name]));
+    setConnectorRequests(next);
+    try {
+      localStorage.setItem(CONNECTOR_REQUEST_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
 
   const readFile = (file: File) => {
     const r = new FileReader();
@@ -82,21 +103,34 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
           </div>
         )}
 
-        {/* HRIS integrations */}
+        {/* HRIS integrations — roadmap only; no live connector ships today. */}
         <div className="home-section-head" style={{ marginTop: 22 }}>
-          <Icon name="build" size={12} /> HRIS integrations <span className="dim" style={{ fontSize: 11 }}>connectors coming soon</span>
+          <Icon name="build" size={12} /> HRIS integrations <span className="dim" style={{ fontSize: 12 }}>roadmap — no live connector yet</span>
         </div>
         <div className="integration-grid">
-          {HRIS_INTEGRATIONS.map((integration) => (
-            <div key={integration.name} className="integration-card coming-soon" aria-disabled="true">
-              <BrandLogo name={integration.name} size={34} />
-              <div className="integration-copy">
-                <div className="integration-name">{integration.label}</div>
-                <div className="integration-desc">{integration.description}</div>
+          {HRIS_INTEGRATIONS.map((integration) => {
+            const requested = connectorRequests.includes(integration.name);
+            return (
+              <div key={integration.name} className="integration-card coming-soon" aria-disabled="true">
+                <BrandLogo name={integration.name} size={34} />
+                <div className="integration-copy">
+                  <div className="integration-name">{integration.label}</div>
+                  <div className="integration-desc">{integration.description}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                  <span className="coming-soon-badge">Roadmap</span>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ pointerEvents: "auto" }}
+                    disabled={requested}
+                    onClick={(e) => { e.stopPropagation(); requestConnector(integration.name); }}
+                  >
+                    {requested ? <><Icon name="checkmark" size={11} /> Request noted</> : "Request this connector"}
+                  </button>
+                </div>
               </div>
-              <span className="coming-soon-badge">Coming soon</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Your companies */}

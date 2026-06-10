@@ -905,3 +905,58 @@
   .integration-card { align-items: flex-start; }
   .coming-soon-badge { margin-left: auto; }
 }
+
+/* ============================================================
+   P0 typography & contrast pass (UX backlog P0-6 / P0.5)
+   Loaded last on purpose: raises the readable floor on primary
+   review and export screens — 14px body, 12px metadata minimum —
+   for WCAG 2.1 AA and conference-room projectors.
+   ============================================================ */
+
+/* Body-level text on primary screens */
+.task-row .label,
+.resp-row .lab,
+.list-item-line,
+.manifest-kv .v,
+.sheet td,
+.drawer-head .rel-line,
+.modal-body,
+.integration-desc { font-size: 13.5px; }
+
+/* Metadata floor: 12px */
+.tag,
+.badge,
+.btn-sm,
+.sub,
+.hint,
+.count,
+.tab .count,
+.metric .label,
+.metric .delta,
+.sheet thead th,
+.sheet td .mono,
+.row-index,
+.brand-text .tag,
+.topbar .env,
+.topbar .user,
+.legend .lh,
+.legend .row,
+.zoom-level,
+.org-node-head .title,
+.org-node-head .dept,
+.drawer-head .id-line,
+.drawer-head .meta .dept,
+.drawer-section .sh,
+.drawer-section .sh .count,
+.task-row .meta,
+.resp-row .stats,
+.modal-foot .left,
+.form-field .lbl,
+.form-field .hint,
+.form-readout .k,
+.manifest-head .sub,
+.manifest-card-head,
+.coming-soon-badge,
+.lineage,
+.resp-source,
+.kbd-hint { font-size: 12px; }

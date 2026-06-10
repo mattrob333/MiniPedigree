@@ -17,12 +17,13 @@
   --border-3:    #34425a;
   --border-cyan: #1e6a7e;
 
-  /* text */
+  /* text — tuned for WCAG 2.1 AA on the dark glass surfaces:
+     --text-3 ≥ 4.5:1 on --bg-2, --text-4 ≥ 4.5:1 on --bg-1 */
   --text-1:      #e6edf3;
-  --text-2:      #b8c1cc;
-  --text-3:      #8693a3;
-  --text-4:      #5a6675;
-  --text-5:      #3f4956;
+  --text-2:      #bdc6d1;
+  --text-3:      #94a2b3;
+  --text-4:      #7d8a9c;
+  --text-5:      #5a6675;
 
   /* status / accents */
   --cyan:        #38d5ff;
@@ -93,12 +94,12 @@
   --border-3:    #b8c1cd;
   --border-cyan: #4ab2cf;
 
-  /* text */
+  /* text — --text-4 raised to pass AA (4.5:1) on white surfaces */
   --text-1:      #0d1521;
   --text-2:      #2c3645;
-  --text-3:      #56616f;
-  --text-4:      #7c8693;
-  --text-5:      #aab2bd;
+  --text-3:      #515c6b;
+  --text-4:      #5f6b7a;
+  --text-5:      #8e98a4;
 
   /* status / accents — slightly deeper to read on white */
   --cyan:        #0891b2;
@@ -146,7 +147,7 @@ html, body, #root {
   background: var(--bg-0);
   color: var(--text-1);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "ss01", "cv11";
