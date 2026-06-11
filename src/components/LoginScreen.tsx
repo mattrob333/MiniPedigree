@@ -85,6 +85,9 @@ export function LoginScreen({ onSignIn, existingProfile }: Props) {
             <select className="select" value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
               <option value="editor">Editor — map, classify, and generate agents</option>
               <option value="reviewer">Reviewer — confirm provenance and approve manifests</option>
+              <option value="operator">Operator — admin: apply authority changes, manage meetings & roles</option>
+              <option value="governance_reviewer">Governance Reviewer — approve/reject authority-affecting proposals</option>
+              <option value="member">Member — see and curate your own work (My Pedigree)</option>
             </select>
           </div>
           <div className="form-field">

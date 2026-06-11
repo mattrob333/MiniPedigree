@@ -1,6 +1,17 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import type { CompanyContext, MappingSessionType, ParsedMap, PedigreeState, Person, SessionScope } from "@/types";
+import type {
+  CompanyContext,
+  MappingSessionType,
+  ParsedMap,
+  PedigreeState,
+  Person,
+  PlannedSessionStatus,
+  QuestionBacklogItem,
+  SessionBrief,
+  SessionNote,
+  SessionScope,
+} from "@/types";
 import {
   SESSION_LABEL,
   buildDemoSessionText,
@@ -11,10 +22,24 @@ import {
   recommendSessionType,
   sessionPrompt,
 } from "@/lib/sessions";
-import { parseDiscovery } from "@/lib/api";
-import { transcribeAudio } from "@/lib/api";
+import { parseDiscovery, requestSessionBrief, transcribeAudio } from "@/lib/api";
+import { computeReadiness } from "@/lib/readiness";
+import { ReadinessPanel } from "./CompanyProfileScreen";
+import { SessionBriefView } from "./SessionBriefView";
+import { GuidedCaptureView } from "./GuidedCaptureView";
+import { applyQuestionOutcomes, emptyCaptureState, serializeGuidedSession, type GuidedCaptureState } from "@/lib/guidedCapture";
 import { initials } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
+
+export interface ApplyMappingArgs {
+  scopeIds: string[];
+  sessionType: MappingSessionType;
+  sessionLabel: string;
+  parsed: ParsedMap;
+  plannedSessionId?: string;
+  brief?: SessionBrief;          // with outcomes applied (guided capture)
+  parkedNotes?: SessionNote[];
+}
 
 interface Props {
   open: boolean;
@@ -22,19 +47,18 @@ interface Props {
   people: Person[];
   pedigree: PedigreeState;
   companyContext?: CompanyContext;
+  /** When launched from the Discovery Plan, the planned session id (status flows back). */
+  plannedSessionId?: string;
+  questionBacklog?: QuestionBacklogItem[];
   onClose: () => void;
-  onApply: (args: {
-    scopeIds: string[];
-    sessionType: MappingSessionType;
-    sessionLabel: string;
-    parsed: ParsedMap;
-  }) => void;
+  onApply: (args: ApplyMappingArgs) => void;
+  onPlanEvent?: (sessionId: string, status: PlannedSessionStatus, briefId?: string) => void;
 }
 
 type Step = 1 | 2 | 3 | 4;
-type InputTab = "paste" | "record" | "upload";
+type InputTab = "guided" | "paste" | "record" | "upload";
 
-export function MappingSessionWizard({ open, person, people, pedigree, companyContext, onClose, onApply }: Props) {
+export function MappingSessionWizard({ open, person, people, pedigree, companyContext, plannedSessionId, questionBacklog = [], onClose, onApply, onPlanEvent }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [scope, setScope] = useState<SessionScope>("self_and_reports");
   const [text, setText] = useState("");
@@ -44,6 +68,10 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
   const [err, setErr] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedMap | null>(null);
   const [parseSource, setParseSource] = useState<"ai" | "local">("local");
+  const [brief, setBrief] = useState<SessionBrief | null>(null);
+  const [briefBusy, setBriefBusy] = useState(false);
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const [capture, setCapture] = useState<GuidedCaptureState>(emptyCaptureState());
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -59,7 +87,10 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
       setText("");
       setParsed(null);
       setErr(null);
-      setTab("paste");
+      setTab("guided");
+      setBrief(null);
+      setScriptOpen(false);
+      setCapture(emptyCaptureState());
     }
   }, [open, person, sessionType]);
 
@@ -67,6 +98,11 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
   const scopeIds = useMemo(
     () => (person ? getScopePersonIds(scope, person, people, pedigree) : []),
     [scope, person, people, pedigree],
+  );
+
+  const readiness = useMemo(
+    () => computeReadiness(companyContext, companyContext?.contextDocuments ?? [], people),
+    [companyContext, people],
   );
 
   const agg = useMemo(() => {
@@ -91,8 +127,38 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
   const scopedPeople = people.filter((p) => scopeIds.includes(p.id));
   const deptColor = getDepartmentColor(person.department);
   const alreadyMapped = isMapped(pedigree[person.id]?.status);
+  const sessionId = plannedSessionId ?? `PS-${sessionType}-${person.id}`;
 
-  const insertDemo = () => setText(buildDemoSessionText(person, reports, sessionType));
+  const insertDemo = () => { setTab("paste"); setText(buildDemoSessionText(person, reports, sessionType)); };
+
+  const generateBrief = async () => {
+    setBriefBusy(true);
+    setErr(null);
+    try {
+      const claimedElsewhere = people
+        .filter((p) => !scopeIds.includes(p.id))
+        .flatMap((p) => (pedigree[p.id]?.responsibilities ?? []).map((r) => ({ person_id: p.id, person_name: p.name, title: r.title })))
+        .filter((claim) => scopedPeople.some((sp) => sp.department === people.find((p) => p.id === claim.person_id)?.department))
+        .slice(0, 4);
+      const { brief: generated } = await requestSessionBrief({
+        session: { id: sessionId, type: sessionType, anchor_person_id: person.id, scope_ids: scopeIds },
+        participants: scopedPeople,
+        companyContext,
+        pedigree,
+        backlog: questionBacklog,
+        claimedElsewhere,
+      });
+      setBrief(generated);
+      onPlanEvent?.(sessionId, "briefed", generated.id);
+    } finally {
+      setBriefBusy(false);
+    }
+  };
+
+  const openGuidedTab = () => {
+    setTab("guided");
+    if (!brief && !briefBusy) void generateBrief();
+  };
 
   const startRecording = async () => {
     setErr(null);
@@ -103,7 +169,7 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
       mr.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        await runTranscription(new File([new Blob(chunksRef.current, { type: "audio/webm" })], "rec.webm", { type: "audio/webm" }));
+        await runTranscription(new File([new Blob(chunksRef.current, { type: "audio/webm" })], "rec.webm", { type: "audio/webm" }), tab === "guided");
       };
       mr.start();
       mediaRef.current = mr;
@@ -113,13 +179,13 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
     }
   };
   const stopRecording = () => { mediaRef.current?.stop(); setRecording(false); };
-  const runTranscription = async (file: File) => {
+  const runTranscription = async (file: File, stayGuided = false) => {
     setBusy("Transcribing…");
     setErr(null);
     try {
       const { transcript } = await transcribeAudio(file);
       setText((t) => (t ? t + "\n\n" : "") + transcript);
-      setTab("paste");
+      if (!stayGuided) setTab("paste");
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -127,13 +193,21 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
     }
   };
 
+  const guidedNotesCount = capture.notes.filter((n) => n.text.trim()).length + capture.parked.length;
+  const guidedActive = tab === "guided" && brief && guidedNotesCount > 0;
+  const parseInput = guidedActive
+    ? serializeGuidedSession(brief!, [...capture.notes, ...capture.parked], scopedPeople, text || undefined)
+    : text;
+
   const runParse = async () => {
     setBusy("Parsing session…");
     setErr(null);
     try {
-      const r = await parseDiscovery(scopedPeople, text, scopeIds, companyContext);
+      onPlanEvent?.(sessionId, "captured", brief?.id);
+      const r = await parseDiscovery(scopedPeople, parseInput, scopeIds, companyContext);
       setParsed(r.parsed);
       setParseSource(r.source);
+      onPlanEvent?.(sessionId, "parsed", brief?.id);
       setStep(4);
     } catch (e) {
       setErr((e as Error).message);
@@ -142,18 +216,32 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
     }
   };
 
+  const apply = () => {
+    const finalBrief = brief && guidedNotesCount > 0 ? applyQuestionOutcomes(brief, capture) : brief ?? undefined;
+    onApply({
+      scopeIds,
+      sessionType,
+      sessionLabel: SESSION_LABEL[sessionType] + " · " + person.name,
+      parsed: parsed!,
+      plannedSessionId: sessionId,
+      ...(finalBrief ? { brief: finalBrief } : {}),
+      ...(capture.parked.length ? { parkedNotes: capture.parked } : {}),
+    });
+  };
+
   const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const canParse = guidedActive ? true : Boolean(text.trim());
 
   const STEPS: [Step, string][] = [
     [1, "Scope"],
     [2, "Participants"],
-    [3, "Input"],
+    [3, "Run Session"],
     [4, "Review"],
   ];
 
   return (
     <div className="modal-scrim" onClick={onClose}>
-      <div className="modal" style={{ width: 760 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" style={{ width: 820 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head" style={{ borderTop: `3px solid ${deptColor.accent}` }}>
           <div className="h">
             <h3><Icon name="sparkles" size={16} stroke="var(--cyan)" /> {alreadyMapped ? "Update Responsibilities" : "Responsibility Discovery"} — {person.name}</h3>
@@ -176,7 +264,8 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
 
           {step === 1 && (
             <div>
-              <div className="form-readout" style={{ marginBottom: 12 }}>
+              <ReadinessPanel readiness={readiness} compact />
+              <div className="form-readout" style={{ marginBottom: 12, marginTop: 10 }}>
                 <div>
                   <div className="k">Recommended Session Type</div>
                   <div style={{ marginTop: 4 }}>{SESSION_LABEL[sessionType]}</div>
@@ -221,13 +310,17 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
               <div className="form-field">
                 <div className="lbl">People being mapped ({scopedPeople.length})</div>
                 <div className="scope-list">
-                  {scopedPeople.map((p) => (
-                    <div key={p.id} className="scope-person">
-                      <span className="avatar">{initials(p.name)}</span>
-                      <div><div style={{ color: "var(--text-1)" }}>{p.name}</div><div className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>{p.title} · {p.department}</div></div>
-                      {p.id === person.id && <span className="tag owner-tag">owner</span>}
-                    </div>
-                  ))}
+                  {scopedPeople.map((p) => {
+                    const openQs = questionBacklog.filter((b) => b.person_id === p.id && !b.resolved_by_session_id).length;
+                    return (
+                      <div key={p.id} className="scope-person">
+                        <span className="avatar">{initials(p.name)}</span>
+                        <div><div style={{ color: "var(--text-1)" }}>{p.name}</div><div className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>{p.title} · {p.department}</div></div>
+                        {openQs > 0 && <span className="tag yellow" title="Open questions from earlier sessions — they will appear in the brief">{openQs} open question{openQs === 1 ? "" : "s"}</span>}
+                        {p.id === person.id && <span className="tag owner-tag">owner</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -236,12 +329,44 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
           {step === 3 && (
             <div>
               <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
-                {([["paste", "Paste Text"], ["record", "Record Audio"], ["upload", "Upload Audio"]] as [InputTab, string][]).map(([k, label]) => (
-                  <button key={k} className="btn btn-sm" style={tab === k ? { borderColor: "var(--border-cyan)", color: "var(--cyan)" } : undefined} onClick={() => setTab(k)}>{label}</button>
+                {([["guided", "Guided Capture"], ["paste", "Paste Text"], ["record", "Record Audio"], ["upload", "Upload Audio"]] as [InputTab, string][]).map(([k, label]) => (
+                  <button key={k} className="btn btn-sm" style={tab === k ? { borderColor: "var(--border-cyan)", color: "var(--cyan)" } : undefined} onClick={() => (k === "guided" ? openGuidedTab() : setTab(k))}>
+                    {k === "guided" && <Icon name="target" size={11} style={{ marginRight: 4 }} />}{label}
+                  </button>
                 ))}
                 <span style={{ flex: 1 }} />
                 <button className="btn btn-sm btn-ghost" onClick={insertDemo}><Icon name="play" size={11} /> Insert Demo Session</button>
               </div>
+
+              {tab === "guided" && (
+                <div>
+                  {briefBusy && !brief && (
+                    <div className="form-readout" style={{ marginBottom: 10 }}>
+                      <div><div className="k">Preparing the session brief…</div><div style={{ marginTop: 4, fontSize: 12, color: "var(--text-3)" }}>Grounding questions in the company profile, KPIs, and open questions.</div></div>
+                    </div>
+                  )}
+                  {brief && (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => setScriptOpen((v) => !v)}>
+                          <Icon name={scriptOpen ? "chevron-down" : "chevron-right"} size={11} /> {scriptOpen ? "Hide" : "Review / edit"} question script ({brief.questions.length})
+                        </button>
+                        <span style={{ flex: 1 }} />
+                        {recording
+                          ? <button className="btn btn-sm" onClick={stopRecording}><Icon name="stop" size={11} /> Stop recording</button>
+                          : <button className="btn btn-sm btn-ghost" onClick={startRecording} title="Record alongside notes — both feed the parse"><Icon name="mic" size={11} /> Record too</button>}
+                      </div>
+                      {scriptOpen && (
+                        <div style={{ marginBottom: 10 }}>
+                          <SessionBriefView brief={brief} participants={scopedPeople} onChange={setBrief} onRegenerate={generateBrief} busy={briefBusy} />
+                        </div>
+                      )}
+                      {!scriptOpen && <GuidedCaptureView brief={brief} participants={scopedPeople} state={capture} onChange={setCapture} />}
+                    </>
+                  )}
+                  {err && <div className="hint" style={{ color: "var(--red)" }}><Icon name="warning" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />{err}</div>}
+                </div>
+              )}
 
               {tab === "record" && (
                 <div className="form-readout" style={{ marginBottom: 10 }}>
@@ -253,15 +378,17 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
                 <div className="form-field"><div className="lbl">Audio file</div><input type="file" className="input" accept="audio/*,.mp3,.m4a,.wav,.webm" onChange={(e) => { const f = e.target.files?.[0]; if (f) runTranscription(f); }} /></div>
               )}
 
-              <div className="form-field">
-                <div className="lbl" style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>{SESSION_LABEL[sessionType]} prompt{busy && <span style={{ color: "var(--cyan)" }}> · {busy}</span>}</span>
-                  <span style={{ color: "var(--text-4)", fontSize: 10 }}>{wordCount} words</span>
+              {tab !== "guided" && (
+                <div className="form-field">
+                  <div className="lbl" style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>{SESSION_LABEL[sessionType]} prompt{busy && <span style={{ color: "var(--cyan)" }}> · {busy}</span>}</span>
+                    <span style={{ color: "var(--text-4)", fontSize: 10 }}>{wordCount} words</span>
+                  </div>
+                  <pre className="codeblock" style={{ fontSize: 11.5, maxHeight: 120, overflow: "auto", marginBottom: 8 }}>{sessionPrompt(sessionType)}</pre>
+                  <textarea className="textarea" rows={9} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste or transcribe the session here, or click Insert Demo Session…" style={{ minHeight: 150 }} />
+                  {err && <div className="hint" style={{ color: "var(--red)" }}><Icon name="warning" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />{err}</div>}
                 </div>
-                <pre className="codeblock" style={{ fontSize: 11.5, maxHeight: 120, overflow: "auto", marginBottom: 8 }}>{sessionPrompt(sessionType)}</pre>
-                <textarea className="textarea" rows={9} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste or transcribe the session here, or click Insert Demo Session…" style={{ minHeight: 150 }} />
-                {err && <div className="hint" style={{ color: "var(--red)" }}><Icon name="warning" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />{err}</div>}
-              </div>
+              )}
             </div>
           )}
 
@@ -276,7 +403,7 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
                 ))}
               </div>
               <div style={{ fontSize: 11, color: "var(--text-4)", marginBottom: 10 }}>
-                {SESSION_LABEL[sessionType]} · {scopedPeople.length} people covered · parsed by {parseSource === "ai" ? "GPT" : "local engine"}
+                {SESSION_LABEL[sessionType]} · {scopedPeople.length} people covered · parsed by {parseSource === "ai" ? "GPT" : "local engine"}{guidedActive ? ` · ${guidedNotesCount} guided notes (attribution authoritative)` : ""}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {scopedPeople.map((p) => {
@@ -323,11 +450,11 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
           <div className="right">
             {step > 1 && step < 4 && <button className="btn" onClick={() => setStep((s) => (s - 1) as Step)}>Back</button>}
             {step === 1 && <button className="btn btn-primary" onClick={() => setStep(2)}>Next: Participants</button>}
-            {step === 2 && <button className="btn btn-primary" onClick={() => setStep(3)}>Next: Input</button>}
-            {step === 3 && <button className="btn btn-primary" disabled={!text.trim() || !!busy} onClick={runParse}><Icon name="sparkles" size={12} /> Parse Session</button>}
+            {step === 2 && <button className="btn btn-primary" onClick={() => { setStep(3); openGuidedTab(); }}>Next: Run Session</button>}
+            {step === 3 && <button className="btn btn-primary" disabled={!canParse || (guidedActive ? false : !text.trim()) || !!busy} onClick={runParse}><Icon name="sparkles" size={12} /> Parse Session</button>}
             {step === 4 && <>
               <button className="btn" onClick={() => setStep(3)}>Edit Input</button>
-              <button className="btn btn-primary" onClick={() => onApply({ scopeIds, sessionType, sessionLabel: SESSION_LABEL[sessionType] + " · " + person.name, parsed: parsed! })}>
+              <button className="btn btn-primary" onClick={apply}>
                 <Icon name="checkmark" size={12} /> Apply Mapping
               </button>
             </>}

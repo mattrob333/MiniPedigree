@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { Icon } from "./Icon";
 import { BrandChip } from "./BrandLogo";
-import type { CompanyContext, CompanyResearchSource } from "@/types";
+import type { CompanyContext, CompanyKpi, CompanyResearchSource, Person } from "@/types";
 import { parseCompanyProfile } from "@/lib/api";
 import { companyContextSchema } from "@/lib/schemas";
+import { computeReadiness, READINESS_DIMENSION_LABEL, READINESS_DIMENSION_WHY, READINESS_MAX, readinessTier } from "@/lib/readiness";
 
 interface Props {
   context: CompanyContext;
+  people?: Person[];
   onSave: (ctx: CompanyContext) => void;
   onBack: () => void;
 }
@@ -57,7 +59,7 @@ function saveableProfile(profile: CompanyContext, url: string, notes: string): C
   };
 }
 
-export function CompanyProfileScreen({ context, onSave, onBack }: Props) {
+export function CompanyProfileScreen({ context, people = [], onSave, onBack }: Props) {
   const initial = useMemo(() => normalizeContext(context), [context]);
   const [url, setUrl] = useState(initial.url ?? "");
   const [notes, setNotes] = useState(notesFromContext(initial));
@@ -65,6 +67,10 @@ export function CompanyProfileScreen({ context, onSave, onBack }: Props) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [mode, setMode] = useState<"ai" | "demo" | "manual" >(initial.researchedAt ? "ai" : "manual");
+  const readiness = useMemo(
+    () => computeReadiness(profile, profile.contextDocuments ?? [], people),
+    [profile, people],
+  );
 
   const filled = [
     profile.whatWeDo,
@@ -165,10 +171,102 @@ export function CompanyProfileScreen({ context, onSave, onBack }: Props) {
                 <button className="btn btn-primary" onClick={saveProfile}><Icon name="checkmark" size={12} /> Save Company Profile</button>
               </div>
             </div>
+
+            <KpiEditor kpis={profile.kpis ?? []} departments={[...new Set(people.map((p) => p.department).filter((d) => d && d !== "—"))]} onChange={(kpis) => setProfile((p) => ({ ...p, kpis }))} />
+
+            <ReadinessPanel readiness={readiness} />
           </section>
 
           <CompanyProfilePreview profile={profile} mode={mode} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── KPI editor (guided discovery: "who owns the number?" probes) ───────
+function KpiEditor({ kpis, departments, onChange }: { kpis: CompanyKpi[]; departments: string[]; onChange: (kpis: CompanyKpi[]) => void }) {
+  const [draft, setDraft] = useState<CompanyKpi>({ department: departments[0] ?? "", metric: "", cadence: "" });
+  const addKpi = () => {
+    if (!draft.metric.trim() || !draft.department.trim()) return;
+    onChange([...kpis, { ...draft, metric: draft.metric.trim() }]);
+    setDraft({ department: draft.department, metric: "", cadence: "" });
+  };
+  return (
+    <div className="profile-section" style={{ marginTop: 14 }}>
+      <div className="ps-head"><Icon name="target" size={13} stroke="var(--cyan)" /> KPIs <span className="tag">{kpis.length}</span>
+        <span className="dim" style={{ fontSize: 11, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>per-department metrics leadership actually tracks — KPI ownership is responsibility ownership</span>
+      </div>
+      {kpis.length > 0 && (
+        <table className="kpi-table">
+          <thead><tr><th>Department</th><th>Metric</th><th>Cadence</th><th /></tr></thead>
+          <tbody>
+            {kpis.map((kpi, i) => (
+              <tr key={`${kpi.department}-${kpi.metric}-${i}`}>
+                <td>{kpi.department}</td>
+                <td>{kpi.metric}</td>
+                <td>{kpi.cadence || "—"}</td>
+                <td><button className="btn btn-sm btn-ghost" aria-label={`Remove ${kpi.metric}`} onClick={() => onChange(kpis.filter((_, idx) => idx !== i))}><Icon name="close" size={11} /></button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="kpi-add-row">
+        {departments.length ? (
+          <select className="select" value={draft.department} onChange={(e) => setDraft((d) => ({ ...d, department: e.target.value }))}>
+            {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        ) : (
+          <input className="input" placeholder="Department" value={draft.department} onChange={(e) => setDraft((d) => ({ ...d, department: e.target.value }))} />
+        )}
+        <input className="input" placeholder='Metric, e.g. "Pipeline coverage"' value={draft.metric} onChange={(e) => setDraft((d) => ({ ...d, metric: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addKpi()} />
+        <input className="input" placeholder="Cadence (weekly...)" style={{ maxWidth: 140 }} value={draft.cadence} onChange={(e) => setDraft((d) => ({ ...d, cadence: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addKpi()} />
+        <button className="btn btn-sm btn-outline-cyan" onClick={addKpi} disabled={!draft.metric.trim() || !draft.department.trim()}>Add KPI</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Context readiness: what good context is, operationally ─────────────
+export function ReadinessPanel({ readiness, compact }: { readiness: ReturnType<typeof computeReadiness>; compact?: boolean }) {
+  const tier = readinessTier(readiness);
+  const tierColor = tier === "high" ? "var(--green)" : tier === "medium" ? "var(--yellow)" : "var(--red)";
+  const gaps = readiness.dimensions.filter((d) => d.score < 2 && d.gap);
+  if (compact) {
+    return (
+      <div className="readiness-banner" role="status">
+        <span className="readiness-score" style={{ color: tierColor }}>Readiness {readiness.overall}/{READINESS_MAX}</span>
+        {gaps.length > 0 ? (
+          <span className="readiness-gap-hint">
+            {tier === "low" ? "Questions will be generic — " : ""}filling {Math.min(gaps.length, 3)} gap{gaps.length === 1 ? "" : "s"} will materially improve extraction: {gaps.slice(0, 3).map((g) => READINESS_DIMENSION_LABEL[g.id]).join(", ")}
+          </span>
+        ) : (
+          <span className="readiness-gap-hint">Context is in great shape — session questions will be specific to this company.</span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="profile-section" style={{ marginTop: 14 }}>
+      <div className="ps-head">
+        <Icon name="check-circle" size={13} stroke={tierColor} /> Context readiness
+        <span className="tag" style={{ color: tierColor, borderColor: tierColor }}>{readiness.overall}/{READINESS_MAX}</span>
+        <span className="dim" style={{ fontSize: 11, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>discovery quality is the ceiling on everything downstream</span>
+      </div>
+      <div className="readiness-grid">
+        {readiness.dimensions.map((d) => (
+          <div className={`readiness-dim s${d.score}`} key={d.id} title={READINESS_DIMENSION_WHY[d.id]}>
+            <div className="readiness-dim-head">
+              <span className="readiness-dim-label">{READINESS_DIMENSION_LABEL[d.id]}</span>
+              <span className="readiness-dots" aria-label={`score ${d.score} of 2`}>
+                {[0, 1].map((i) => <span key={i} className={"dot" + (d.score > i ? " on" : "")} />)}
+              </span>
+            </div>
+            {d.gap && <div className="readiness-gap">{d.gap}</div>}
+            {d.fix_hint && <div className="readiness-fix"><Icon name="arrow-right" size={10} /> {d.fix_hint}</div>}
+          </div>
+        ))}
       </div>
     </div>
   );

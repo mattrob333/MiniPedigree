@@ -3,7 +3,7 @@ import { Icon } from "./Icon";
 import type { ThemePref } from "@/lib/useTheme";
 
 interface TopbarProps {
-  screen: "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary";
+  screen: "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member";
   workspaceName: string;
   agentName?: string;
   themePref: ThemePref;

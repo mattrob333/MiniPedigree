@@ -22,8 +22,11 @@ import { McpLibraryScreen } from "./components/McpLibraryScreen";
 import { ReviewInbox } from "./components/ReviewInbox";
 import { AuditTrail } from "./components/AuditTrail";
 import { RiskBadge } from "./components/ProvenanceBadge";
+import { DiscoveryPlanPanel } from "./components/DiscoveryPlanPanel";
+import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
+import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
 import { buildReviewQueue, confirmReviewItems, type ReviewQueueItem } from "./lib/provenance";
-import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, MappingSessionType, ParsedMap, PedigreeState, Person, StackAuditRecord, StackChangeProposal, UserProfile, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
+import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
@@ -36,6 +39,15 @@ import {
 } from "./lib/persist";
 import { refreshStaleness } from "./lib/registry";
 import { applyStackProposals } from "./lib/stackSync";
+import type { ApplyMappingArgs } from "./components/MappingSessionWizard";
+import { adaptPlan, generatePlan, setSessionStatus } from "./lib/discoveryPlan";
+import { ingestBriefOutcomes, ingestParserOpenQuestions, openBacklog, resolveBacklogFromParse, resolveBacklogItem } from "./lib/questionBacklog";
+import { computeReadiness } from "./lib/readiness";
+import { deriveAuthorityFromRules, enforceLeaverInvariant, flagAgentsForMover, mergeApprovalAuthority, suspendAgentsForLeaver } from "./lib/authority";
+import { getGovernanceRules } from "./lib/governance";
+import { pendingSignals } from "./lib/signalLedger";
+import { buildRecommendations } from "./lib/optimizer";
+import { canAdminister } from "./lib/rbac";
 import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
@@ -46,8 +58,8 @@ import {
   skipOnboarding,
 } from "./lib/onboarding";
 
-type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary";
-type Tab = "spreadsheet" | "orgmap" | "agents" | "review" | "audit";
+type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member";
+type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
 const CONNECTED_CONTEXT_PREFIX = "connected-context:";
@@ -232,6 +244,12 @@ export default function App() {
   const [registry, setRegistry] = useState<AgentRegistryEntry[]>([]);
   const [auditLog, setAuditLog] = useState<StackAuditRecord[]>([]);
   const [events, setEvents] = useState<WorkspaceAuditEvent[]>([]);
+  const [discoveryPlan, setDiscoveryPlan] = useState<DiscoveryPlan | null>(null);
+  const [sessionBriefs, setSessionBriefs] = useState<SessionBrief[]>([]);
+  const [questionBacklog, setQuestionBacklog] = useState<QuestionBacklogItem[]>([]);
+  const [meetings, setMeetings] = useState<RegisteredMeeting[]>([]);
+  const [signalLedger, setSignalLedger] = useState<StackSignal[]>([]);
+  const [memberPersonId, setMemberPersonId] = useState<string | null>(null);
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -265,7 +283,7 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[] }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[] }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
@@ -275,6 +293,13 @@ export default function App() {
     setRegistry(ws.registry ?? []);
     setAuditLog(ws.auditLog ?? []);
     setEvents(ws.events ?? []);
+    // The discovery plan is a first-class object: generate it the moment
+    // people are loaded; regenerate non-destructively when one exists.
+    setDiscoveryPlan(generatePlan(ws.people, ws.pedigree, ws.companyContext, ws.discoveryPlan));
+    setSessionBriefs(ws.sessionBriefs ?? []);
+    setQuestionBacklog(ws.questionBacklog ?? []);
+    setMeetings(ws.meetings ?? []);
+    setSignalLedger(ws.signalLedger ?? []);
     setCompanyProfileOpen(false);
     setSelectedId(null);
     setDrawerOpen(false);
@@ -312,11 +337,11 @@ export default function App() {
     if (booting) return;
     if (currentWorkspaceId && people.length && profile) {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, createdAt: new Date().toISOString() },
         profile.email,
       );
     }
-  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -366,14 +391,28 @@ export default function App() {
   const persistCompanyContext = (ctx: CompanyContext) => {
     setCompanyContext(ctx);
     if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, events, createdAt: new Date().toISOString() }, profile?.email);
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, createdAt: new Date().toISOString() }, profile?.email);
     }
   };
 
   const onSaveCompanyProfile = (ctx: CompanyContext) => {
     persistCompanyContext(ctx);
+    // The free win: governance rules that name an authority holder write
+    // approval authority onto matching people (trust-ordered, evidence-bound).
+    const writes = deriveAuthorityFromRules(getGovernanceRules(ctx), people);
+    if (writes.length) {
+      setPeople((prev) => prev.map((person) => {
+        const mine = writes.filter((w) => w.person_id === person.id);
+        if (!mine.length) return person;
+        let authority = person.authority ?? { system_grants: [], approval_authority: [], sod_roles: [], updated_at: new Date().toISOString() };
+        for (const write of mine) authority = mergeApprovalAuthority(authority, person.id, write.authority).profile;
+        return { ...person, authority };
+      }));
+    }
+    // Re-rank the plan: bottleneck/goal mentions change the session order.
+    setDiscoveryPlan((prev) => generatePlan(people, pedigree, ctx, prev ?? undefined));
     setScreen("workspace");
-    pushToast("Company profile saved", "Grounds discovery and agent generation for this company", true);
+    pushToast("Company profile saved", `Grounds discovery and agent generation${writes.length ? ` · ${writes.length} rule-derived authority grant${writes.length === 1 ? "" : "s"} recorded` : ""}`, true);
   };
 
   const onUploadContextFiles = async (files: FileList | null, bucket: CompanyContextDocumentBucket) => {
@@ -435,9 +474,10 @@ export default function App() {
     const id = newWorkspaceId(name);
     const ped = initialPedigreeState(result.people);
     const ctx: CompanyContext = { company: name, whatWeDo: "" };
-    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt: new Date().toISOString() }, profile?.email);
+    const plan = generatePlan(result.people, ped, ctx);
+    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, discoveryPlan: plan, createdAt: new Date().toISOString() }, profile?.email);
     setLastWorkspaceId(profile?.email, id);
-    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx });
+    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, discoveryPlan: plan });
     refreshWorkspaces();
     const warn = result.warnings.length ? ` · ${result.warnings.length} warning(s)` : "";
     pushToast("Company created", `${result.people.length} people loaded${warn}`);
@@ -455,20 +495,122 @@ export default function App() {
     }
   };
 
-  const onStartSession = (personId: string | undefined) => {
+  const [wizardPlannedSessionId, setWizardPlannedSessionId] = useState<string | undefined>(undefined);
+
+  const onStartSession = (personId: string | undefined, plannedSessionId?: string) => {
     if (!personId) return;
+    setWizardPlannedSessionId(plannedSessionId);
     setWizardPersonId(personId);
   };
 
-  const onApplyMapping = (args: { scopeIds: string[]; sessionType: MappingSessionType; sessionLabel: string; parsed: ParsedMap }) => {
+  const onPlanEvent = (sessionId: string, status: Parameters<typeof setSessionStatus>[2], briefId?: string) => {
+    setDiscoveryPlan((prev) => (prev ? setSessionStatus(prev, sessionId, status, briefId) : prev));
+  };
+
+  // Stage 5 of the guided-discovery loop: apply → coverage update → question
+  // ledger → plan adaptation. This is what makes session 3 smarter than session 1.
+  const onApplyMapping = (args: ApplyMappingArgs) => {
     const next = applyParsed(people, args.parsed, pedigree, {
       scopeIds: args.scopeIds,
       sessionLabel: args.sessionLabel,
       people,
     });
     setPedigree(next);
+
+    // Question ledger: resolve answered items, ingest new open questions and
+    // unanswered/parked brief questions.
+    let backlog = resolveBacklogFromParse(questionBacklog, args.parsed, args.scopeIds, args.plannedSessionId ?? args.sessionLabel);
+    backlog = ingestParserOpenQuestions(backlog, args.parsed, args.scopeIds);
+    if (args.brief) {
+      backlog = ingestBriefOutcomes(backlog, args.brief, args.parkedNotes ?? [], args.brief.coverage_targets[0] ?? args.scopeIds[0]);
+      setSessionBriefs((prev) => [...prev.filter((b) => b.id !== args.brief!.id), args.brief!]);
+    }
+    setQuestionBacklog(backlog);
+
+    // Plan: session applied → re-prioritize, propose targeted deep-dives,
+    // flag thin sessions for a re-run.
+    setDiscoveryPlan((prev) => {
+      if (!prev) return prev;
+      const applied = args.plannedSessionId ? setSessionStatus(prev, args.plannedSessionId, "applied", args.brief?.id) : prev;
+      return adaptPlan({ plan: applied, people, pedigree: next, questionBacklog: backlog });
+    });
+
     setWizardPersonId(null);
-    pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}`, true);
+    setWizardPlannedSessionId(undefined);
+    const newQuestions = openBacklog(backlog).length - openBacklog(questionBacklog).length;
+    pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}${newQuestions > 0 ? ` · ${newQuestions} open question${newQuestions === 1 ? "" : "s"} queued for the next brief` : ""}`, true);
+  };
+
+  // Joiner/mover/leaver: authority is only meaningful if it ends.
+  const onLifecycleChange = (personId: string, status: PersonLifecycleStatus) => {
+    const person = people.find((p) => p.id === personId);
+    if (!person) return;
+    setPeople((prev) => prev.map((p) => (p.id === personId ? { ...p, lifecycle: status } : p)));
+    if (status === "offboarded") {
+      const { registry: nextRegistry, suspended } = suspendAgentsForLeaver(registry, personId);
+      setRegistry(nextRegistry);
+      setEvents((prev) => [...prev, {
+        id: `EVT-${Date.now().toString(36)}-lifecycle`,
+        type: "person_lifecycle_changed",
+        actor: profile?.email ?? "unknown",
+        timestamp: new Date().toISOString(),
+        summary: `${person.name} offboarded — ${suspended.length} agent${suspended.length === 1 ? "" : "s"} suspended. Reassignment proposals appear in the digest.`,
+        subject_id: personId,
+      }]);
+      pushToast(`${person.name} offboarded`, suspended.length ? `${suspended.length} owned agent${suspended.length === 1 ? "" : "s"} suspended — no agent stays deployed with an offboarded owner` : "No owned agents to suspend", true);
+    } else if (status === "transitioning") {
+      setRegistry((prev) => flagAgentsForMover(prev, personId));
+      setEvents((prev) => [...prev, {
+        id: `EVT-${Date.now().toString(36)}-lifecycle`,
+        type: "person_lifecycle_changed",
+        actor: profile?.email ?? "unknown",
+        timestamp: new Date().toISOString(),
+        summary: `${person.name} marked transitioning — authority profile stale, owned agents flagged for re-review.`,
+        subject_id: personId,
+      }]);
+      pushToast(`${person.name} transitioning`, "Owned agents flagged owner_role_changed", true);
+    } else {
+      pushToast(`${person.name} active`, "Lifecycle restored");
+    }
+  };
+
+  const onPersonChange = (person: Person) => {
+    setPeople((prev) => prev.map((p) => (p.id === person.id ? person : p)));
+    setEvents((prev) => [...prev, {
+      id: `EVT-${Date.now().toString(36)}-authority`,
+      type: "authority_changed",
+      actor: profile?.email ?? "unknown",
+      timestamp: new Date().toISOString(),
+      summary: `Authority profile updated for ${person.name} (${person.authority?.system_grants.length ?? 0} grants, ${person.authority?.approval_authority.length ?? 0} approval domains).`,
+      subject_id: person.id,
+    }]);
+  };
+
+  const onDigestStateChange = (patch: DigestStatePatch) => {
+    if (patch.meetings) setMeetings(patch.meetings);
+    if (patch.ledger) setSignalLedger(patch.ledger);
+    if (patch.pedigree) setPedigree(patch.pedigree);
+    if (patch.registry) setRegistry(patch.registry);
+    if (patch.backlog) setQuestionBacklog(patch.backlog);
+    if (patch.companyContext) setCompanyContext(patch.companyContext);
+    if (patch.auditLog) setAuditLog(patch.auditLog);
+    if (patch.events?.length) setEvents((prev) => [...prev, ...patch.events!]);
+  };
+
+  const onMemberStateChange = (patch: MemberStatePatch) => {
+    if (patch.ledger) setSignalLedger(patch.ledger);
+    if (patch.pedigree) setPedigree(patch.pedigree);
+    if (patch.registry) setRegistry(patch.registry);
+    if (patch.backlog) setQuestionBacklog(patch.backlog);
+    if (patch.people) setPeople(patch.people);
+    if (patch.events?.length) setEvents((prev) => [...prev, ...patch.events!]);
+  };
+
+  const openMyPedigree = () => {
+    const me = people.find((p) => p.email.toLowerCase() === (profile?.email ?? "").toLowerCase());
+    setMemberPersonId(me?.id ?? people[0]?.id ?? null);
+    if (me || people.length) setScreen("member");
+    else pushToast("No people loaded", "Upload a team first");
   };
 
   const onGenerateAgent = async (ctx: GenerateCtx) => {
@@ -616,15 +758,29 @@ export default function App() {
   };
 
   // Recompute registry staleness whenever an ingredient (person record, task,
-  // company context, governance docs, MCP library) changes.
+  // company context, governance docs, MCP library) changes — and enforce the
+  // leaver invariant: no agent stays deployed under an offboarded owner.
   useEffect(() => {
     if (booting) return;
     setRegistry((prev) => {
       if (!prev.length) return prev;
       const byId = new Map(allAgents.map((a) => [String((a.manifest as Record<string, unknown> | undefined)?.agent_id ?? a.id), a]));
-      return refreshStaleness(prev, byId, companyContext, mcpLibrary);
+      const refreshed = refreshStaleness(prev, byId, companyContext, mcpLibrary);
+      const { registry: enforced, suspended } = enforceLeaverInvariant(refreshed, people);
+      return suspended.length ? enforced : refreshed;
     });
-  }, [allAgents, companyContext, mcpLibrary, booting]);
+  }, [allAgents, companyContext, mcpLibrary, people, booting]);
+
+  const readiness = useMemo(
+    () => computeReadiness(companyContext, companyContext?.contextDocuments ?? [], people),
+    [companyContext, people],
+  );
+  const planPendingCount = discoveryPlan?.sessions.filter((s) => s.status !== "applied").length ?? 0;
+  const digestPendingCount = pendingSignals(signalLedger).length;
+  const recommendations = useMemo(
+    () => buildRecommendations({ ledger: signalLedger, registry, people, pedigree, mcpLibrary }),
+    [signalLedger, registry, people, pedigree, mcpLibrary],
+  );
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
   const discoveryStarted = metrics.mappedPeople > 0;
@@ -689,6 +845,7 @@ export default function App() {
               <div className="actions">
                 <button data-tour="company-profile" className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("mcplibrary")} title="Register the company's approved MCP servers — agent grants are resolved from this library"><Icon name="lock" size={12} /> MCP Library{mcpLibrary.length ? ` (${mcpLibrary.length})` : ""}</button>
+                <button className="btn btn-sm btn-ghost" onClick={openMyPedigree} title="Your own slice of the stack: confirm tasks, see your agents in plain language, answer questions, request agents"><Icon name="user" size={12} /> My Pedigree</button>
                 <button data-tour="export" className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
                 <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
@@ -731,11 +888,17 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "orgmap"} onClick={() => setTab("orgmap")}>
                 <Icon name="network" size={12} /> Org Map <span className="count">{people.length}</span>
               </button>
+              <button className="tab" role="tab" aria-selected={tab === "plan"} onClick={() => setTab("plan")} title="The discovery campaign: session cascade, coverage, and the question backlog">
+                <Icon name="target" size={12} /> Plan <span className="count">{planPendingCount}</span>
+              </button>
               <button className={"tab" + (metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => metrics.agentsBuilt > 0 && setTab("agents")} title={metrics.agentsBuilt === 0 ? "Available after first agent is generated" : "Generated agents"}>
                 <Icon name="robot" size={12} /> Agents <span className="count">{metrics.agentsBuilt}</span>
               </button>
               <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Org-wide review queue: everything pending provenance confirmation">
                 <Icon name="shield" size={12} /> Review <span className="count">{reviewQueueCount}</span>
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "digest"} onClick={() => setTab("digest")} title="The maintenance loop: meeting signals, weekly digest, freshness">
+                <Icon name="transcript" size={12} /> Digest <span className="count">{digestPendingCount}</span>
               </button>
               <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Append-only audit trail: who generated, confirmed, approved, exported">
                 <Icon name="history" size={12} /> Audit <span className="count">{events.length + auditLog.length}</span>
@@ -752,8 +915,37 @@ export default function App() {
             {tab === "orgmap" && (
               <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
             )}
-            {tab === "agents" && <AgentsList agents={allAgents} people={people} registry={registry} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "plan" && (
+              <DiscoveryPlanPanel
+                plan={discoveryPlan}
+                people={people}
+                pedigree={pedigree}
+                backlog={questionBacklog}
+                readiness={readiness}
+                onStartSession={(personId, plannedSessionId) => onStartSession(personId, plannedSessionId)}
+                onOpenCompanyProfile={() => setScreen("company")}
+                onResolveBacklogItem={(itemId) => setQuestionBacklog((prev) => resolveBacklogItem(prev, itemId, "manual"))}
+                onSelectPerson={onSelect}
+              />
+            )}
+            {tab === "agents" && <AgentsList agents={allAgents} people={people} registry={registry} recommendations={recommendations} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
             {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} role={userRole} onConfirm={onConfirmReview} />}
+            {tab === "digest" && (
+              <DigestScreen
+                people={people}
+                pedigree={pedigree}
+                registry={registry}
+                meetings={meetings}
+                ledger={signalLedger}
+                backlog={questionBacklog}
+                auditLog={auditLog}
+                companyContext={companyContext}
+                role={userRole}
+                approverEmail={profile?.email ?? "unknown"}
+                onChange={onDigestStateChange}
+                onToast={pushToast}
+              />
+            )}
             {tab === "audit" && <AuditTrail events={events} stackAuditLog={auditLog} workspaceName={workspaceName} />}
 
             <Drawer
@@ -762,11 +954,14 @@ export default function App() {
               state={selectedPerson ? pedigree[selectedPerson.id] : null}
               people={people}
               pedigree={pedigree}
+              role={userRole}
               onClose={() => setDrawerOpen(false)}
               onCreateAgent={(ctx) => setCreateAgentCtx(ctx)}
               onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
               onStartSession={onStartSession}
               onOpenProfile={onOpenProfile}
+              onPersonChange={onPersonChange}
+              onLifecycleChange={onLifecycleChange}
             />
           </div>
         </div>
@@ -790,7 +985,33 @@ export default function App() {
       )}
 
       {screen === "company" && profile && (
-        <CompanyProfileScreen context={companyContext ?? { company: workspaceName, whatWeDo: "" }} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
+        <CompanyProfileScreen context={companyContext ?? { company: workspaceName, whatWeDo: "" }} people={people} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
+      )}
+
+      {screen === "member" && memberPersonId && people.find((p) => p.id === memberPersonId) && (
+        <>
+          {/* Preview-as picker: local roles, so the member view is honest about identity */}
+          {people.find((p) => p.email.toLowerCase() === (profile?.email ?? "").toLowerCase())?.id !== memberPersonId && (
+            <div className="member-preview-bar">
+              <Icon name="info" size={12} /> Viewing as
+              <select className="select" style={{ maxWidth: 240 }} value={memberPersonId} onChange={(e) => setMemberPersonId(e.target.value)} aria-label="Preview member workspace as">
+                {people.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.title}</option>)}
+              </select>
+              <span className="dim">your sign-in email doesn't match a person record; per-member logins arrive with SSO (roadmap)</span>
+            </div>
+          )}
+          <MemberWorkspace
+            person={people.find((p) => p.id === memberPersonId)!}
+            people={people}
+            pedigree={pedigree}
+            registry={registry}
+            ledger={signalLedger}
+            backlog={questionBacklog}
+            onChange={onMemberStateChange}
+            onBack={() => setScreen("workspace")}
+            onToast={pushToast}
+          />
+        </>
       )}
 
       {screen === "mcplibrary" && profile && (
@@ -824,8 +1045,11 @@ export default function App() {
         people={people}
         pedigree={pedigree}
         companyContext={companyContext}
-        onClose={() => setWizardPersonId(null)}
+        plannedSessionId={wizardPlannedSessionId}
+        questionBacklog={questionBacklog}
+        onClose={() => { setWizardPersonId(null); setWizardPlannedSessionId(undefined); }}
         onApply={onApplyMapping}
+        onPlanEvent={onPlanEvent}
       />
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
       <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} registry={registry} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
@@ -1244,11 +1468,12 @@ function PanelSources({ sources }: { sources?: CompanyResearchSource[] }) {
   );
 }
 
-function AgentsList({ agents, people, registry, onOpen }: { agents: AgentRecord[]; people: Person[]; registry: AgentRegistryEntry[]; onOpen: (a: AgentRecord) => void }) {
+function AgentsList({ agents, people, registry, recommendations, onOpen }: { agents: AgentRecord[]; people: Person[]; registry: AgentRegistryEntry[]; recommendations: import("./lib/optimizer").Recommendation[]; onOpen: (a: AgentRecord) => void }) {
   const standing = agents.filter((a) => (a.lifecycle ?? "standing") === "standing");
   const task = agents.filter((a) => a.lifecycle === "task");
   const peopleIds = new Set(people.map((p) => p.id));
   const registryById = new Map(registry.map((e) => [e.agent_id, e]));
+  const suspended = registry.filter((e) => e.status === "suspended");
 
   // P1-2: an agent must never silently retain a departed owner or stale
   // ingredients — surface "needs re-review" where agents are browsed.
@@ -1263,6 +1488,7 @@ function AgentsList({ agents, people, registry, onOpen }: { agents: AgentRecord[
           <Icon name="robot" size={11} style={{ marginRight: 6 }} /> {a.id}
           <span className="right" style={{ display: "flex", gap: 4 }}>
             <span className="tag">{a.lifecycle === "task" ? "task" : "standing"}</span>
+            {entry?.status === "suspended" && <span className="tag" style={{ color: "var(--red)", borderColor: "var(--red)" }}>suspended</span>}
             {orphaned && <span className="tag" style={{ color: "var(--red)", borderColor: "var(--red)" }}>orphaned owner</span>}
             {needsReReview ? <span className="tag yellow">needs re-review</span> : <span className="badge generated"><span className="dot" />generated</span>}
           </span>
@@ -1298,6 +1524,43 @@ function AgentsList({ agents, people, registry, onOpen }: { agents: AgentRecord[
 
   return (
     <div className="sheet-wrap" style={{ padding: 20 }}>
+      {/* Inventory optimizer: standing recommendations from the signal ledger.
+          Advisory only — acting on one routes through the normal flows. */}
+      {recommendations.length > 0 && (
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Stack recommendations</h3>
+            <span className="tag">{recommendations.length}</span>
+            <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>composed from meeting signals — every score carries its evidence</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+            {recommendations.slice(0, 6).map((rec) => (
+              <div className="manifest-card" key={rec.id} style={{ marginBottom: 0 }}>
+                <div className="manifest-card-head">
+                  <Icon name={rec.kind === "build_candidate" ? "sparkles" : rec.kind === "retirement" ? "warning" : "info"} size={11} style={{ marginRight: 6 }} />
+                  {rec.kind.replace(/_/g, " ")}
+                  <span className="right"><span className="tag cyan" title={Object.entries(rec.score_breakdown).map(([k, v]) => `${k}: ${typeof v === "number" ? v.toFixed(2) : v}`).join(" · ")}>score {rec.score.toFixed(1)}</span></span>
+                </div>
+                <div className="manifest-card-body">
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 4 }}>{rec.title}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>{rec.detail}</div>
+                  {rec.evidence.slice(0, 2).map((quote, i) => (
+                    <blockquote key={i} style={{ margin: "4px 0", padding: "4px 8px", borderLeft: "2px solid var(--border-1)", fontSize: 11.5, color: "var(--text-4)", fontStyle: "italic" }}>“{quote}”</blockquote>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {suspended.length > 0 && (
+        <div className="manifest-card" style={{ marginBottom: 20, border: "1px solid var(--red)" }}>
+          <div className="manifest-card-body" style={{ fontSize: 12.5 }}>
+            <Icon name="warning" size={12} style={{ marginRight: 6, verticalAlign: -2 }} />
+            {suspended.length} agent{suspended.length === 1 ? " is" : "s are"} <strong>suspended</strong> (owner offboarded or paused). Export packages are invalid until each is reassigned and recompiled under the new owner's authority ceiling.
+          </div>
+        </div>
+      )}
       <Section title="Standing agents" hint="persistent, tied to a recurring responsibility" list={standing} />
       <Section title="Task agents (active / recent)" hint="ephemeral but governed — audit log retained on teardown" list={task} />
     </div>

@@ -1,9 +1,12 @@
-import type { AgentRecord, PedigreeRow, PedigreeState, Person, TaskItem } from "@/types";
+import { useState } from "react";
+import type { AgentRecord, AuthorityGrantScope, PedigreeRow, PedigreeState, Person, PersonLifecycleStatus, TaskItem, UserRole } from "@/types";
 import { Icon } from "./Icon";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { StatusBadge } from "./StatusBadge";
 import { getDepartmentColor } from "@/lib/departments";
 import { isMapped, recommendSessionType, SESSION_LABEL, teamMapped } from "@/lib/sessions";
+import { mergeSystemGrant } from "@/lib/authority";
+import { canAdminister } from "@/lib/rbac";
 
 export interface CreateAgentCtx {
   person: Person;
@@ -17,14 +20,17 @@ interface DrawerProps {
   state: PedigreeRow | null;
   people: Person[];
   pedigree: PedigreeState;
+  role?: UserRole;
   onClose: () => void;
   onCreateAgent: (ctx: CreateAgentCtx) => void;
   onOpenAgent: (a: AgentRecord) => void;
   onStartSession: (personId: string) => void;
   onOpenProfile: (personId: string) => void;
+  onPersonChange?: (person: Person) => void;
+  onLifecycleChange?: (personId: string, status: PersonLifecycleStatus) => void;
 }
 
-export function Drawer({ open, person, state, people, pedigree, onClose, onCreateAgent, onOpenAgent, onStartSession, onOpenProfile }: DrawerProps) {
+export function Drawer({ open, person, state, people, pedigree, role = "editor", onClose, onCreateAgent, onOpenAgent, onStartSession, onOpenProfile, onPersonChange, onLifecycleChange }: DrawerProps) {
   const mgr = person ? people.find((p) => p.id === person.managerId) : undefined;
   const reports = person ? people.filter((p) => p.managerId === person.id) : [];
   const respList = state?.responsibilities ?? [];
@@ -157,6 +163,9 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
                 ))}
               </section>
 
+              {/* Authority profile — what this human actually holds */}
+              <AuthorityPanel person={person} isOperator={canAdminister(role)} onPersonChange={onPersonChange} onLifecycleChange={onLifecycleChange} />
+
               {/* Agent candidates */}
               <section className="drawer-section">
                 <div className="sh">Agent candidates<span className="count">{agents.length}</span></div>
@@ -189,6 +198,116 @@ export function Drawer({ open, person, state, people, pedigree, onClose, onCreat
         )}
       </aside>
     </>
+  );
+}
+
+// Operator entry/review for the authority profile (amendment §2.5): direct
+// grant entry, reviewing asserted claims, and the joiner/mover/leaver
+// lifecycle. An agent can only inherit what its owner verifiably holds.
+function AuthorityPanel({ person, isOperator, onPersonChange, onLifecycleChange }: {
+  person: Person;
+  isOperator: boolean;
+  onPersonChange?: (person: Person) => void;
+  onLifecycleChange?: (personId: string, status: PersonLifecycleStatus) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [system, setSystem] = useState("");
+  const [scope, setScope] = useState<AuthorityGrantScope>("read_only");
+  const profile = person.authority;
+  const grants = profile?.system_grants ?? [];
+  const approvals = profile?.approval_authority ?? [];
+  const lifecycle = person.lifecycle ?? "active";
+
+  const reviewGrant = (systemName: string) => {
+    if (!profile || !onPersonChange) return;
+    onPersonChange({
+      ...person,
+      authority: {
+        ...profile,
+        system_grants: profile.system_grants.map((g) =>
+          g.system === systemName && g.status === "asserted"
+            ? { ...g, status: "reviewed" as const, provenance: { source: "operator" as const, operator_id: "operator" } }
+            : g,
+        ),
+        updated_at: new Date().toISOString(),
+      },
+    });
+  };
+
+  const addGrant = () => {
+    if (!system.trim() || !onPersonChange) return;
+    const base = profile ?? { system_grants: [], approval_authority: [], sod_roles: [], updated_at: new Date().toISOString() };
+    const res = mergeSystemGrant(base, person.id, {
+      system: system.trim(), scope,
+      provenance: { source: "operator", operator_id: "operator" },
+      status: "reviewed",
+    });
+    onPersonChange({ ...person, authority: res.profile });
+    setSystem("");
+    setAdding(false);
+  };
+
+  return (
+    <section className="drawer-section">
+      <div className="sh">
+        Authority profile
+        <span className="count">{grants.length + approvals.length}</span>
+        {lifecycle !== "active" && <span className="tag" style={{ marginLeft: "auto", color: "var(--red)", borderColor: "var(--red)" }}>{lifecycle}</span>}
+      </div>
+      {grants.length === 0 && approvals.length === 0 ? (
+        <div className="drawer-empty">No verified grants — agents for this person compile capped at read-only. Add the access they actually hold.</div>
+      ) : (
+        <>
+          {grants.map((g) => (
+            <div className="list-item-line" key={g.system}>
+              <Icon name="lock" size={12} stroke="var(--text-4)" className="icon" />
+              <span style={{ flex: 1 }}>{g.system}</span>
+              <span className="tag cyan">{g.scope}</span>
+              {g.status === "asserted" ? (
+                isOperator && onPersonChange
+                  ? <button className="btn btn-sm btn-ghost" onClick={() => reviewGrant(g.system)} title="Promote this claim to reviewed — agents can then compile against it">Review</button>
+                  : <span className="tag yellow" title={`source: ${g.provenance.source}`}>asserted</span>
+              ) : (
+                <span className="tag" style={{ color: "var(--green)" }} title={`source: ${g.provenance.source}`}>{g.status}</span>
+              )}
+            </div>
+          ))}
+          {approvals.map((a) => (
+            <div className="list-item-line" key={a.domain}>
+              <Icon name="check-circle" size={12} stroke="var(--text-4)" className="icon" />
+              <span style={{ flex: 1 }}>Approves: {a.domain}{a.limit?.amount !== undefined ? ` (up to $${a.limit.amount.toLocaleString()})` : ""}</span>
+              <span className={"tag " + (a.status === "asserted" ? "yellow" : "")} title={`source: ${a.provenance.source}`}>{a.status}</span>
+            </div>
+          ))}
+        </>
+      )}
+      {isOperator && onPersonChange && (
+        adding ? (
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <input className="input" placeholder="System" value={system} onChange={(e) => setSystem(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGrant()} />
+            <select className="select" style={{ maxWidth: 120 }} value={scope} onChange={(e) => setScope(e.target.value as AuthorityGrantScope)} aria-label="Scope">
+              {(["none", "read_only", "draft_only", "read_write", "admin"] as const).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button className="btn btn-sm btn-outline-cyan" onClick={addGrant} disabled={!system.trim()}>Add</button>
+          </div>
+        ) : (
+          <button className="btn btn-sm btn-ghost" style={{ marginTop: 6 }} onClick={() => setAdding(true)}><Icon name="plus" size={11} /> Add grant</button>
+        )
+      )}
+      {isOperator && onLifecycleChange && (
+        <div style={{ display: "flex", gap: 6, marginTop: 10, alignItems: "center" }}>
+          <span className="dim" style={{ fontSize: 10.5 }}>Lifecycle:</span>
+          {(["active", "transitioning", "offboarded"] as const).map((status) => (
+            <button
+              key={status}
+              className={"btn btn-sm " + (lifecycle === status ? "btn-outline-cyan" : "btn-ghost")}
+              onClick={() => status !== lifecycle && onLifecycleChange(person.id, status)}
+              title={status === "offboarded" ? "Suspends every agent this person owns — no exceptions" : status === "transitioning" ? "Marks the authority profile stale; owned agents flagged for re-review" : undefined}
+            >{status}</button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
