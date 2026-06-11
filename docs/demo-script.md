@@ -43,7 +43,7 @@ server the parses get richer, but every beat below works without one.
 - Header CTA now reads the next step. Open the **Discovery** tab: the
   campaign cascades from the CEO down, ordered by the bottlenecks the context
   named. Each card shows purpose, why-now, expected output.
-- Click **Prepare session** on **Leadership — Avery Collins**.
+- Click **Open session brief** on **Leadership — Avery Collins**.
 
 ## Beat 4 — Session Workspace: Brief → Transcript → Review (3 min)
 - **Brief**: the facilitator's agenda — the "How to run this meeting" steps,
