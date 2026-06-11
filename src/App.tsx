@@ -296,7 +296,6 @@ export default function App() {
   const metrics = useMemo(() => computeMetrics(people, pedigree), [people, pedigree]);
   const selectedPerson = useMemo(() => people.find((p) => p.id === selectedId), [people, selectedId]);
   const recommended = useMemo(() => computeNextRecommendedSessions(people, pedigree), [people, pedigree]);
-  const rootId = useMemo(() => people.find((p) => !p.managerId)?.id ?? people[0]?.id, [people]);
   const topDepartment = useMemo(() => {
     const counts = new Map<string, number>();
     for (const p of people) counts.set(p.department, (counts.get(p.department) ?? 0) + 1);
@@ -875,7 +874,6 @@ export default function App() {
   };
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
-  const discoveryStarted = metrics.mappedPeople > 0;
   const discoveryComplete = metrics.peopleCount > 0 && metrics.mappedPeople === metrics.peopleCount;
   const companyTitle = companyContext?.company?.trim() || workspaceName;
   const companySubtitle = companyContext?.whatWeDo?.trim()
