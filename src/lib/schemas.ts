@@ -45,6 +45,19 @@ export const mcpRecommendationSchema = z.object({
   risk_level: riskLevel,
 });
 
+// Authority assertions — claims about access/approval ceilings made in the
+// session. Review-gated proposals, never direct writes to the person record.
+export const authorityAssertionSchema = z.object({
+  kind: z.enum(["system_access", "approval", "sod_role"]),
+  system: z.string().nullable().optional().default(null),
+  scope: z.enum(["none", "read_only", "draft_only", "read_write", "admin"]).nullable().optional().default(null),
+  domain: z.string().nullable().optional().default(null),
+  limit_description: z.string().nullable().optional().default(null),
+  flow: z.string().nullable().optional().default(null),
+  role: z.enum(["preparer", "approver"]).nullable().optional().default(null),
+  evidence_quote: z.string().default(""),
+});
+
 export const peopleUpdateSchema = z.object({
   person_email: z.string(),
   matched_name: z.string().optional().default(""),
@@ -52,6 +65,7 @@ export const peopleUpdateSchema = z.object({
   summary: z.string().optional().default(""),
   responsibilities: z.array(parsedResponsibilitySchema).default([]),
   recommended_mcp_servers: z.array(mcpRecommendationSchema).default([]),
+  authority_assertions: z.array(authorityAssertionSchema).default([]),
 });
 
 export const parsedDiscoverySchema = z.object({
@@ -86,6 +100,14 @@ export const companyContextDocumentSchema = z.object({
   text: z.string().default(""),
   uploadedAt: z.string(),
   sourceId: z.string().optional().default(""),
+  classification: z.enum(["public", "internal", "confidential", "regulated"]).optional().default("internal"),
+});
+
+export const companyKpiSchema = z.object({
+  department: z.string(),
+  metric: z.string(),
+  cadence: z.string().optional().default(""),
+  owner_hint: z.string().optional().default(""),
 });
 
 export const companyContextSchema = z.object({
@@ -112,6 +134,7 @@ export const companyContextSchema = z.object({
   governanceRisks: z.array(z.string()).optional().default([]),
   departments: z.array(z.string()).optional().default([]),
   unknowns: z.array(z.string()).optional().default([]),
+  kpis: z.array(companyKpiSchema).optional().default([]),
   researchSources: z.array(companyResearchSourceSchema).optional().default([]),
   contextDocuments: z.array(companyContextDocumentSchema).optional().default([]),
   confidence: z.number().min(0).max(1).optional().default(0.35),

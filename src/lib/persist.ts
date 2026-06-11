@@ -87,7 +87,7 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig },
         updated_at: stamped.updatedAt,
       });
       if (ws.mcpLibrary?.length) {
@@ -120,6 +120,38 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
           updated_at: stamped.updatedAt,
         })));
       }
+      if (ws.meetings?.length) {
+        await supabase.from("registered_meetings").upsert(ws.meetings.map((meeting) => ({
+          id: meeting.id,
+          workspace_id: ws.id,
+          name: meeting.name,
+          cadence: meeting.cadence,
+          usual_participant_ids: meeting.usual_participant_ids,
+          department: meeting.department ?? null,
+          source: meeting.source,
+          source_ref: meeting.source_ref ?? null,
+          signal_profile: meeting.signal_profile ?? null,
+          active: meeting.active,
+          updated_at: stamped.updatedAt,
+        })));
+      }
+      if (ws.signalLedger?.length) {
+        await supabase.from("stack_signals").upsert(ws.signalLedger.map((signal) => ({
+          id: signal.id,
+          workspace_id: ws.id,
+          type: signal.type,
+          source: signal.source,
+          evidence_quote: signal.evidence_quote,
+          confidence: signal.confidence,
+          refs: signal.refs,
+          proposed_patch: signal.proposed_patch ?? null,
+          authority_expanding: signal.authority_expanding,
+          status: signal.status,
+          decision: signal.decision ?? null,
+          captured_at: signal.captured_at,
+          updated_at: stamped.updatedAt,
+        })));
+      }
       const contextDocuments = ws.companyContext?.contextDocuments ?? [];
       if (contextDocuments.length) {
         await supabase.from("company_context_documents").upsert(contextDocuments.map((doc) => ({
@@ -147,9 +179,16 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
     try {
       const { data } = await supabase.from("workspaces").select("id,name,owner_email,snapshot").eq("id", id).maybeSingle();
       if (data?.snapshot) {
-        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"]; mcpLibrary?: Workspace["mcpLibrary"]; registry?: Workspace["registry"]; auditLog?: Workspace["auditLog"]; events?: Workspace["events"] };
+        const snap = data.snapshot as Partial<Workspace> & { people: Workspace["people"]; pedigree: Workspace["pedigree"] };
         if (snap.people?.length) {
-          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry, auditLog: snap.auditLog, events: snap.events, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
+          return {
+            id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree,
+            companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry,
+            auditLog: snap.auditLog, events: snap.events,
+            discoveryPlan: snap.discoveryPlan, sessionBriefs: snap.sessionBriefs, questionBacklog: snap.questionBacklog,
+            meetings: snap.meetings, signalLedger: snap.signalLedger, freshnessConfig: snap.freshnessConfig,
+            ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString(),
+          };
         }
       }
     } catch (e) {

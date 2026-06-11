@@ -1,5 +1,6 @@
 import type { AgentRecord, CompanyMcpServer, McpScope, PedigreeRow } from "@/types";
 import type { CompiledAgent } from "./runtimes/types";
+import { authorityGates } from "./authority";
 import { getRuntimeAdapter } from "./runtimes";
 
 // ── Stage E: validation gates ──────────────────────────────────────────
@@ -84,6 +85,25 @@ export function validateCompiledAgent(compiled: CompiledAgent, library: CompanyM
     if (finding.resolution === "split") {
       warnings.push(`Segregation-of-duties conflict was auto-split (${finding.rule_id}): ${finding.description}`);
     }
+  }
+
+  // Authority inheritance gates (amendment): grant exceeds owner's grant /
+  // approve-class without reviewed authority / SoD violation / clearance →
+  // FAIL; asserted-only authority or missing profile → WARN.
+  const authority = authorityGates({
+    owner: compiled.owner,
+    mcpGrants: compiled.mcp_grants,
+    allowed: gov.allowed,
+    contextDocuments: compiled.company_context?.contextDocuments,
+  });
+  failures.push(...authority.failures);
+  warnings.push(...authority.warnings);
+
+  // FAIL: no agent may be exported under an offboarded or transitioning owner.
+  if (compiled.owner.lifecycle === "offboarded") {
+    failures.push(`Owner ${compiled.owner.name} is offboarded — reassign the agent before export.`);
+  } else if (compiled.owner.lifecycle === "transitioning") {
+    warnings.push(`Owner ${compiled.owner.name} is transitioning roles — re-review the authority ceiling before deploying.`);
   }
 
   // WARN: runtime cannot natively enforce approval gates (prompt-level only).

@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import type { CsvImportResult, Person } from "@/types";
+import type { AuthorityGrantScope, AuthorityProfile, CsvImportResult, Person, SystemGrant } from "@/types";
 
 const REQUIRED = ["name", "email", "title"];
 // `manager_email` is required by the schema but may be blank for the root.
@@ -23,6 +23,8 @@ const HEADER_ALIASES: Record<string, string> = {
   dept: "department",
   tools: "known_tools",
   known_tools: "known_tools",
+  tool_scopes: "tool_scopes",
+  scopes: "tool_scopes",
 };
 
 function canonicalHeader(h: string): string {
@@ -40,6 +42,44 @@ function splitTools(raw: string | undefined): string[] {
 
 function slugId(i: number): string {
   return `P-${String(i + 1).padStart(3, "0")}`;
+}
+
+const VALID_SCOPES: AuthorityGrantScope[] = ["none", "read_only", "draft_only", "read_write", "admin"];
+
+/**
+ * Authority profile from CSV (amendment §2.1). `tool_scopes` is formatted
+ * "Salesforce:read_write;Slack:read_only". Unscoped known_tools entries get
+ * the conservative default: read_only, asserted, source csv. Returns
+ * undefined when the row carries no tool information at all.
+ */
+export function authorityFromCsv(tools: string[], toolScopesRaw: string | undefined, warnings: string[], rowLabel: string): AuthorityProfile | undefined {
+  const grants = new Map<string, SystemGrant>();
+  for (const tool of tools) {
+    grants.set(tool.toLowerCase(), {
+      system: tool,
+      scope: "read_only",
+      provenance: { source: "csv" },
+      status: "asserted",
+    });
+  }
+  for (const part of (toolScopesRaw ?? "").split(/[;|]/).map((s) => s.trim()).filter(Boolean)) {
+    const [system, scopeRaw] = part.split(":").map((s) => s.trim());
+    if (!system) continue;
+    const scope = (scopeRaw ?? "").toLowerCase() as AuthorityGrantScope;
+    if (!VALID_SCOPES.includes(scope)) {
+      warnings.push(`${rowLabel}: tool_scopes entry "${part}" has an unknown scope — kept as read_only`);
+      grants.set(system.toLowerCase(), { system, scope: "read_only", provenance: { source: "csv" }, status: "asserted" });
+      continue;
+    }
+    grants.set(system.toLowerCase(), { system, scope, provenance: { source: "csv" }, status: "asserted" });
+  }
+  if (!grants.size) return undefined;
+  return {
+    system_grants: [...grants.values()],
+    approval_authority: [],
+    sod_roles: [],
+    updated_at: new Date().toISOString(),
+  };
 }
 
 export interface RawRow {
@@ -117,6 +157,8 @@ export function parsePeopleCsv(text: string, fileName?: string): CsvImportResult
     const id = slugId(people.length);
     if (email) byEmail.set(emailKey, id);
 
+    const tools = splitTools(r.known_tools);
+    const authority = authorityFromCsv(tools, r.tool_scopes, warnings, `Row ${i + 2}`);
     people.push({
       id,
       name,
@@ -127,8 +169,10 @@ export function parsePeopleCsv(text: string, fileName?: string): CsvImportResult
       department: (r.department ?? "").trim() || "—",
       team: (r.team ?? "").trim() || undefined,
       location: (r.location ?? "").trim() || undefined,
-      tools: splitTools(r.known_tools),
+      tools,
       notes: (r.notes ?? "").trim() || undefined,
+      ...(authority ? { authority } : {}),
+      lifecycle: "active",
     });
   });
 

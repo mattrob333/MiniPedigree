@@ -362,6 +362,10 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
         registry = registry.map((entry) =>
           (patch.agentIds as string[]).includes(entry.agent_id) ? { ...entry, status: "retired" as const } : entry,
         );
+        // Digest retirements may also confirm-retire the underlying task.
+        for (const removal of (patch.taskRemovals ?? []) as { personId: string; taskId: string }[]) {
+          pedigree = removeTask(pedigree, removal.personId, removal.taskId);
+        }
         break;
       }
       case "agent_feedback":

@@ -38,6 +38,19 @@ also extract, using null whenever the transcript does not state it (never invent
 - candidate_pattern: a short slug for the workflow pattern, e.g. "weekly-report", "record-hygiene",
   "draft-followups", "monitor-and-flag". Null if no pattern is evident.
 
+Guided-capture input: the transcript may contain structured note blocks of the form
+[Q12 | target: jane@x.co | intent: cadence] followed by the facilitator's note in quotes,
+optionally followed by a raw transcript section. Treat the block's target attribution as
+AUTHORITATIVE — assign the note's content to that person even if the prose is ambiguous —
+and use the block's intent tag as a strong hint for what the note evidences. Blocks tagged
+[backlog:<id> | target: self] are a member's direct written answer to an open question;
+attribute them to that member verbatim.
+
+Authority assertions: when a participant states what they can approve, sign off, or access
+("I can approve refunds up to $2k", "only I have admin in NetSuite", "I prepare payments but
+Dana releases them"), record it in authority_assertions for that person with the verbatim
+evidence quote. These are review-gated proposals — extract them faithfully, never infer them.
+
 Return only structured JSON matching the schema.`;
 
 const responseSchema = {
@@ -109,8 +122,26 @@ const responseSchema = {
                 required: ["name", "reason", "recommended_scope", "risk_level"],
               },
             },
+            authority_assertions: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  kind: { type: "string", enum: ["system_access", "approval", "sod_role"] },
+                  system: { type: ["string", "null"] },
+                  scope: { type: ["string", "null"], enum: ["none", "read_only", "draft_only", "read_write", "admin", null] },
+                  domain: { type: ["string", "null"] },
+                  limit_description: { type: ["string", "null"] },
+                  flow: { type: ["string", "null"] },
+                  role: { type: ["string", "null"], enum: ["preparer", "approver", null] },
+                  evidence_quote: { type: "string" },
+                },
+                required: ["kind", "system", "scope", "domain", "limit_description", "flow", "role", "evidence_quote"],
+              },
+            },
           },
-          required: ["person_email", "matched_name", "match_confidence", "summary", "responsibilities", "recommended_mcp_servers"],
+          required: ["person_email", "matched_name", "match_confidence", "summary", "responsibilities", "recommended_mcp_servers", "authority_assertions"],
         },
       },
       unmatched_mentions: {

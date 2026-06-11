@@ -6,6 +6,7 @@ import type {
 } from "@/types";
 import type { AgentConstructionSpec } from "../agent";
 import { slugify } from "../agent";
+import { capGrantsByAuthority } from "../authority";
 import { resolveMcpGrants } from "../mcpLibrary";
 import { getGovernanceRules } from "../governance";
 import { hashObject } from "../hash";
@@ -56,7 +57,13 @@ export function compileAgent(input: CompileAgentInput): CompiledAgent {
 
   const constructionSpec = (manifest.construction_spec ?? {}) as AgentConstructionSpec;
   const governance = normalizeGovernance(manifest);
-  const mcpGrants = resolveMcpGrants(agent.task, mcpLibrary, agent.person.tools);
+  // Inheritance math: an agent grant never exceeds what its human owner holds
+  // (min of task needs, owner grant, library default). Missing profile ≠
+  // blank check — grants degrade to read_only.
+  const { grants: mcpGrants } = capGrantsByAuthority(
+    resolveMcpGrants(agent.task, mcpLibrary, agent.person.tools),
+    agent.person,
+  );
   const governanceRules = getGovernanceRules(companyContext);
 
   // Ingredient hashes — staleness is detected by drift in any of these.

@@ -4,6 +4,7 @@ import type {
   CompanyContext,
   CompanyMcpServer,
 } from "@/types";
+import { capGrantsByAuthority } from "./authority";
 import { getGovernanceRules } from "./governance";
 import { hashObject } from "./hash";
 import { resolveMcpGrants } from "./mcpLibrary";
@@ -95,7 +96,9 @@ export function computeIngredientHashes(
     task: hashObject({ task: agent.task, respId: agent.respId, respTitle: agent.respTitle }),
     company_context: hashObject(companyContext ?? null),
     governance_rules: hashObject(getGovernanceRules(companyContext)),
-    mcp_grants: hashObject(resolveMcpGrants(agent.task, mcpLibrary, agent.person.tools)),
+    // Same recipe as compileAgent: grants capped by the owner's authority,
+    // so an authority-profile change registers as ingredient drift.
+    mcp_grants: hashObject(capGrantsByAuthority(resolveMcpGrants(agent.task, mcpLibrary, agent.person.tools), agent.person).grants),
     runtime: hashObject(runtime),
   };
 }
