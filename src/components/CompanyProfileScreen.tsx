@@ -112,7 +112,7 @@ export function CompanyProfileScreen({ context, people = [], onSave, onBack }: P
     <div className="profile-screen">
       <div className="profile-head">
         <button className="btn btn-sm btn-ghost" onClick={onBack}><Icon name="chevron-left" size={12} /> Back</button>
-        <div className="profile-id"><span className="cur">Company Profile</span></div>
+        <div className="profile-id"><span className="cur">Company Context</span></div>
       </div>
 
       <div className="profile-body">
@@ -168,7 +168,7 @@ export function CompanyProfileScreen({ context, people = [], onSave, onBack }: P
                 <button className="btn btn-outline-cyan" onClick={runParse} disabled={busy || (!url.trim() && !notes.trim())}>
                   <Icon name="sparkles" size={12} /> {busy ? "Researching..." : url.trim() ? "Research + Parse" : "Parse Notes"}
                 </button>
-                <button className="btn btn-primary" onClick={saveProfile}><Icon name="checkmark" size={12} /> Save Company Profile</button>
+                <button className="btn btn-primary" onClick={saveProfile}><Icon name="checkmark" size={12} /> Save Company Context</button>
               </div>
             </div>
 

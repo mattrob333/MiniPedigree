@@ -87,7 +87,7 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt },
         updated_at: stamped.updatedAt,
       });
       if (ws.mcpLibrary?.length) {
@@ -187,6 +187,7 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
             auditLog: snap.auditLog, events: snap.events,
             discoveryPlan: snap.discoveryPlan, sessionBriefs: snap.sessionBriefs, questionBacklog: snap.questionBacklog,
             meetings: snap.meetings, signalLedger: snap.signalLedger, freshnessConfig: snap.freshnessConfig,
+            rosterValidatedAt: snap.rosterValidatedAt,
             ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString(),
           };
         }

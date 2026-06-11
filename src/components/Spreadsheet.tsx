@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { PedigreeState, Person, TaskItem } from "@/types";
 import { Icon } from "./Icon";
 import { BrandChip } from "./BrandLogo";
 import { StatusBadge } from "./StatusBadge";
+import { SESSION_LABEL, isMapped, recommendSessionType } from "@/lib/sessions";
 import { initials } from "@/lib/util";
 
 function Empty() {
@@ -31,20 +32,86 @@ function TaskCell({ list, color }: { list: TaskItem[]; color?: string }) {
   );
 }
 
+interface RowQuality {
+  issues: string[];
+}
+
+function rowQuality(p: Person, people: Person[]): RowQuality {
+  const issues: string[] = [];
+  if (!p.email) issues.push("missing email");
+  if (!p.title || p.title === "—") issues.push("missing title");
+  if (!p.department || p.department === "—") issues.push("missing department");
+  if (!p.tools.length) issues.push("no known tools");
+  if (p.managerEmail && !p.managerId) issues.push(`manager "${p.managerEmail}" not found`);
+  void people;
+  return { issues };
+}
+
 interface SpreadsheetProps {
   people: Person[];
   pedigree: PedigreeState;
   department?: string;
-  onOpenInput: () => void;
+  rosterValidated: boolean;
+  onValidateRoster: () => void;
+  onStartSession: (personId: string) => void;
   onSwitchTab: (tab: string) => void;
   onExport: () => void;
   selectedId: string | null;
   onSelectRow: (id: string) => void;
 }
 
-export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitchTab, onExport, selectedId, onSelectRow }: SpreadsheetProps) {
+export function Spreadsheet({ people, pedigree, department, rosterValidated, onValidateRoster, onStartSession, onSwitchTab, onExport, selectedId, onSelectRow }: SpreadsheetProps) {
+  // Progressive disclosure: future-workflow columns appear only once they
+  // hold real data — never a wall of "Not mapped yet".
+  const hasResponsibilities = useMemo(
+    () => people.some((p) => (pedigree[p.id]?.responsibilities.length ?? 0) > 0),
+    [people, pedigree],
+  );
+  const hasTasks = useMemo(
+    () => people.some((p) => {
+      const t = pedigree[p.id]?.tasks;
+      return Boolean(t && (t.delegatable.length || t.approval.length || t.not_delegatable.length));
+    }),
+    [people, pedigree],
+  );
+  const hasAgents = useMemo(
+    () => people.some((p) => (pedigree[p.id]?.agents.length ?? 0) > 0),
+    [people, pedigree],
+  );
+
+  const quality = useMemo(() => {
+    const byId = new Map(people.map((p) => [p.id, rowQuality(p, people)]));
+    const issueCount = [...byId.values()].filter((q) => q.issues.length > 0).length;
+    const roots = people.filter((p) => !p.managerId).length;
+    return { byId, issueCount, roots };
+  }, [people]);
+
   return (
     <div className="sheet-wrap" id="spreadsheet-pane">
+      {/* Validation summary: the first decision is "did the roster import
+          correctly enough to run discovery?" */}
+      {!rosterValidated && people.length > 0 && (
+        <div className="roster-validation">
+          <div className="roster-validation-copy">
+            <Icon name={quality.issueCount ? "warning" : "check-circle"} size={14} stroke={quality.issueCount ? "var(--yellow)" : "var(--green)"} />
+            <div>
+              <div className="roster-validation-title">
+                {quality.issueCount
+                  ? `${quality.issueCount} of ${people.length} people have import issues`
+                  : `${people.length} people imported cleanly`}
+              </div>
+              <div className="roster-validation-sub">
+                {quality.roots > 1 ? `${quality.roots} people have no manager (multiple roots). ` : ""}
+                Check names, manager links, and departments — discovery sessions are planned from this data.
+              </div>
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={onValidateRoster}>
+            <Icon name="checkmark" size={12} /> Roster looks right — continue
+          </button>
+        </div>
+      )}
+
       <div className="sheet-toolbar">
         <span className="filter-chip">
           <Icon name="filter" size={11} /> Department:{" "}
@@ -55,7 +122,7 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
           <span className="mono" style={{ color: "var(--text-1)" }}>Manager → Direct reports</span>
         </span>
         <span style={{ flex: 1 }} />
-        {/* Export + Map Responsibilities live in the global header; toolbar only switches view. */}
+        <button className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export CSV</button>
         <button className="btn btn-sm" onClick={() => onSwitchTab("orgmap")}>
           <Icon name="network" size={12} /> Org Map
         </button>
@@ -70,12 +137,14 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
             <th>Manager</th>
             <th>Department</th>
             <th>Known Tools</th>
-            <th>Responsibilities</th>
-            <th>Delegatable Tasks</th>
-            <th>Approval Required</th>
-            <th>Not Delegatable</th>
-            <th>Agent Candidates</th>
+            {!rosterValidated && <th>Data Quality</th>}
+            {hasResponsibilities && <th>Responsibilities</th>}
+            {hasTasks && <th>Ready for Delegation</th>}
+            {hasTasks && <th>Approval Required</th>}
+            {hasTasks && <th>Not Delegatable</th>}
+            {hasAgents && <th>Agents</th>}
             <th>Status</th>
+            <th>Next Action</th>
           </tr>
         </thead>
         <tbody>
@@ -85,6 +154,9 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
             const respList = ped.responsibilities;
             const t = ped.tasks;
             const agents = ped.agents;
+            const q = quality.byId.get(p.id);
+            const mapped = isMapped(ped.status);
+            const sessionType = recommendSessionType(p, people, pedigree);
             return (
               <tr key={p.id} className={selectedId === p.id ? "selected" : ""} onClick={() => onSelectRow(p.id)}>
                 <td className="row-index">{String(i + 1).padStart(2, "0")}</td>
@@ -93,7 +165,7 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
                     <span className="avatar">{initials(p.name)}</span>
                     <div>
                       <div className="name-text">{p.name}</div>
-                      <div className="mono" style={{ fontSize: 10.5, color: "var(--text-4)" }}>{p.email}</div>
+                      <div className="mono" style={{ fontSize: 11, color: "var(--text-4)" }}>{p.email}</div>
                     </div>
                   </div>
                 </td>
@@ -106,30 +178,50 @@ export function Spreadsheet({ people, pedigree, department, onOpenInput, onSwitc
                     {p.tools.length > 3 && <span className="tag">+{p.tools.length - 3}</span>}
                   </div>
                 </td>
-                <td>
-                  {respList.length === 0 ? <Empty /> : (
-                    <div className="pill-list">
-                      {respList.slice(0, 2).map((r) => <span key={r.id} className="tag cyan">{r.title}</span>)}
-                      {respList.length > 2 && <span className="tag">+{respList.length - 2}</span>}
-                    </div>
-                  )}
-                </td>
-                <td><TaskCell list={t.delegatable} color="cyan" /></td>
-                <td><TaskCell list={t.approval} color="yellow" /></td>
-                <td><TaskCell list={t.not_delegatable} /></td>
-                <td>
-                  {agents.length === 0 ? <Empty /> : (
-                    <div className="pill-list">
-                      {agents.map((a) => (
-                        <span key={a.id} className="tag green">
-                          <Icon name="robot" size={10} />
-                          {a.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </td>
+                {!rosterValidated && (
+                  <td>
+                    {q?.issues.length
+                      ? <span className="tag yellow" title={q.issues.join("; ")}>{q.issues.length} issue{q.issues.length === 1 ? "" : "s"}</span>
+                      : <span className="tag" style={{ color: "var(--green)" }}>clean</span>}
+                  </td>
+                )}
+                {hasResponsibilities && (
+                  <td>
+                    {respList.length === 0 ? <Empty /> : (
+                      <div className="pill-list">
+                        {respList.slice(0, 2).map((r) => <span key={r.id} className="tag cyan">{r.title}</span>)}
+                        {respList.length > 2 && <span className="tag">+{respList.length - 2}</span>}
+                      </div>
+                    )}
+                  </td>
+                )}
+                {hasTasks && <td><TaskCell list={t.delegatable} color="cyan" /></td>}
+                {hasTasks && <td><TaskCell list={t.approval} color="yellow" /></td>}
+                {hasTasks && <td><TaskCell list={t.not_delegatable} /></td>}
+                {hasAgents && (
+                  <td>
+                    {agents.length === 0 ? <Empty /> : (
+                      <div className="pill-list">
+                        {agents.map((a) => (
+                          <span key={a.id} className="tag green">
+                            <Icon name="robot" size={10} />
+                            {a.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                )}
                 <td><StatusBadge status={ped.status} /></td>
+                <td>
+                  <button
+                    className={"btn btn-sm " + (mapped ? "btn-ghost" : "btn-outline-cyan")}
+                    title={`${SESSION_LABEL[sessionType]} for ${p.name}`}
+                    onClick={(e) => { e.stopPropagation(); onStartSession(p.id); }}
+                  >
+                    {mapped ? "Update session" : "Start session"}
+                  </button>
+                </td>
               </tr>
             );
           })}

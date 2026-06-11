@@ -304,6 +304,7 @@ export interface Workspace {
   meetings?: RegisteredMeeting[];  // recurring meeting registry (maintenance engine)
   signalLedger?: StackSignal[];    // maintenance + member signals awaiting durability/review
   freshnessConfig?: FreshnessConfig;
+  rosterValidatedAt?: string;      // human confirmed the imported roster (maturity stage 2)
   ownerEmail?: string;
   updatedAt?: string;
 }

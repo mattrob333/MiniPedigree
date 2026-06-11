@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Icon } from "./Icon";
 import { BrandLogo } from "./BrandLogo";
+import { summaryNextAction } from "@/lib/maturity";
 import type { WorkspaceSummary } from "@/types";
 
 export interface DemoCompany {
@@ -78,7 +79,7 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
           <div>
             <div className="eyebrow"><Icon name="network" size={12} stroke="var(--cyan)" /> Pedigree Discover Lite</div>
             <h1>Welcome{userName ? `, ${userName.split(/\s+/)[0]}` : ""}.</h1>
-            <p className="lead">Pick a company to work in, open a demo org, or upload a new client CSV. Each company keeps its own people, mappings, agents, and profile.</p>
+            <p className="lead">Start with a roster: upload a CSV with each person's name, title, manager, department, email, and known tools. Each company keeps its own people, mappings, agents, and context.</p>
           </div>
         </div>
 
@@ -103,36 +104,6 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
           </div>
         )}
 
-        {/* HRIS integrations — roadmap only; no live connector ships today. */}
-        <div className="home-section-head" style={{ marginTop: 22 }}>
-          <Icon name="build" size={12} /> HRIS integrations <span className="dim" style={{ fontSize: 12 }}>roadmap — no live connector yet</span>
-        </div>
-        <div className="integration-grid">
-          {HRIS_INTEGRATIONS.map((integration) => {
-            const requested = connectorRequests.includes(integration.name);
-            return (
-              <div key={integration.name} className="integration-card coming-soon" aria-disabled="true">
-                <BrandLogo name={integration.name} size={34} />
-                <div className="integration-copy">
-                  <div className="integration-name">{integration.label}</div>
-                  <div className="integration-desc">{integration.description}</div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-                  <span className="coming-soon-badge">Roadmap</span>
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    style={{ pointerEvents: "auto" }}
-                    disabled={requested}
-                    onClick={(e) => { e.stopPropagation(); requestConnector(integration.name); }}
-                  >
-                    {requested ? <><Icon name="checkmark" size={11} /> Request noted</> : "Request this connector"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
         {/* Your companies */}
         <div className="home-section-head"><Icon name="users" size={13} /> Your companies <span className="tag">{workspaces.length}</span></div>
         {workspaces.length === 0 ? (
@@ -155,7 +126,7 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
                   <div className="hc-bar"><span style={{ width: `${pct}%` }} /></div>
                   <div className="hc-foot">
                     <span className="mono">{new Date(w.updatedAt).toLocaleDateString()}</span>
-                    <span className="open">Open <Icon name="arrow-right" size={11} /></span>
+                    <span className="open">{summaryNextAction(w)} <Icon name="arrow-right" size={11} /></span>
                   </div>
                 </div>
               );
@@ -173,6 +144,36 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
               <div className="hc-foot"><span className="mono">demo</span><span className="open">{loadingDemo === d.file ? "Loading…" : <>Open <Icon name="arrow-right" size={11} /></>}</span></div>
             </div>
           ))}
+        </div>
+
+        {/* HRIS integrations — coming later; never competes with the real first action. */}
+        <div className="home-section-head" style={{ marginTop: 26, opacity: 0.7 }}>
+          <Icon name="build" size={12} /> HRIS integrations <span className="dim" style={{ fontSize: 12 }}>coming later — roster CSV is the path today</span>
+        </div>
+        <div className="integration-grid" style={{ opacity: 0.75 }}>
+          {HRIS_INTEGRATIONS.map((integration) => {
+            const requested = connectorRequests.includes(integration.name);
+            return (
+              <div key={integration.name} className="integration-card coming-soon" aria-disabled="true">
+                <BrandLogo name={integration.name} size={34} />
+                <div className="integration-copy">
+                  <div className="integration-name">{integration.label}</div>
+                  <div className="integration-desc">{integration.description}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                  <span className="coming-soon-badge">Coming later</span>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ pointerEvents: "auto" }}
+                    disabled={requested}
+                    onClick={(e) => { e.stopPropagation(); requestConnector(integration.name); }}
+                  >
+                    {requested ? <><Icon name="checkmark" size={11} /> Request noted</> : "Request this connector"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

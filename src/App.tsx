@@ -49,6 +49,11 @@ import { ingestSignals, pendingSignals } from "./lib/signalLedger";
 import { buildRecommendations } from "./lib/optimizer";
 import { canAdminister } from "./lib/rbac";
 import {
+  canDefaultToOrgMap, defaultSurface, deriveStage, nextAction, setupChecklist,
+  setupComplete, stageMetrics, type CompanyStage, type MaturityInput, type WorkspaceSurface,
+} from "./lib/maturity";
+import { SetupChecklist } from "./components/SetupChecklist";
+import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
   recordOnboardingStep,
@@ -60,6 +65,18 @@ import {
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member";
 type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
+
+// Maturity surfaces → workspace tabs (internal tab ids stay stable).
+const SURFACE_TAB: Record<WorkspaceSurface, Tab> = {
+  people: "spreadsheet",
+  orgmap: "orgmap",
+  discovery: "plan",
+  review: "review",
+  responsibilities: "orgmap",
+  agentplan: "agents",
+  digest: "digest",
+  evidence: "audit",
+};
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
 const CONNECTED_CONTEXT_PREFIX = "connected-context:";
@@ -249,6 +266,7 @@ export default function App() {
   const [questionBacklog, setQuestionBacklog] = useState<QuestionBacklogItem[]>([]);
   const [meetings, setMeetings] = useState<RegisteredMeeting[]>([]);
   const [signalLedger, setSignalLedger] = useState<StackSignal[]>([]);
+  const [rosterValidatedAt, setRosterValidatedAt] = useState<string | undefined>(undefined);
   const [memberPersonId, setMemberPersonId] = useState<string | null>(null);
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
@@ -283,7 +301,7 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[] }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
@@ -295,16 +313,32 @@ export default function App() {
     setEvents(ws.events ?? []);
     // The discovery plan is a first-class object: generate it the moment
     // people are loaded; regenerate non-destructively when one exists.
-    setDiscoveryPlan(generatePlan(ws.people, ws.pedigree, ws.companyContext, ws.discoveryPlan));
+    const plan = generatePlan(ws.people, ws.pedigree, ws.companyContext, ws.discoveryPlan);
+    setDiscoveryPlan(plan);
     setSessionBriefs(ws.sessionBriefs ?? []);
     setQuestionBacklog(ws.questionBacklog ?? []);
     setMeetings(ws.meetings ?? []);
     setSignalLedger(ws.signalLedger ?? []);
+    setRosterValidatedAt(ws.rosterValidatedAt);
     setCompanyProfileOpen(false);
     setSelectedId(null);
     setDrawerOpen(false);
     setScreen("workspace");
-    setTab("orgmap");
+    // State-based default: the workspace opens to the surface that matches
+    // the company's maturity — never the org map before there is data to
+    // overlay on it. (docs/ux-reset-plan.md)
+    const stage = deriveStage({
+      people: ws.people,
+      pedigree: ws.pedigree,
+      readiness: computeReadiness(ws.companyContext, ws.companyContext?.contextDocuments ?? [], ws.people),
+      rosterValidatedAt: ws.rosterValidatedAt,
+      discoveryPlan: plan,
+      reviewQueueCount: buildReviewQueue(ws.people, ws.pedigree).length,
+      questionBacklog: ws.questionBacklog ?? [],
+      registry: ws.registry ?? [],
+      agentsBuilt: ws.people.reduce((n, p) => n + (ws.pedigree[p.id]?.agents.length ?? 0), 0),
+    });
+    setTab(SURFACE_TAB[defaultSurface(stage)]);
   };
 
   // Bootstrap: restore session, list this user's companies, resume the last one.
@@ -340,12 +374,12 @@ export default function App() {
     if (!(currentWorkspaceId && people.length && profile)) return;
     const handle = setTimeout(() => {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() },
         profile.email,
       );
     }, 800);
     return () => clearTimeout(handle);
-  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -395,7 +429,7 @@ export default function App() {
   const persistCompanyContext = (ctx: CompanyContext) => {
     setCompanyContext(ctx);
     if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, createdAt: new Date().toISOString() }, profile?.email);
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() }, profile?.email);
     }
   };
 
@@ -450,18 +484,9 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, metrics.agentsBuilt]);
 
-  useEffect(() => {
-    if (booting || !profile || tourOpen) return;
-    if (screen === "home" && shouldShowUploadOnboarding(tourUserKey)) {
-      setTourStartStep("upload-team");
-      setTourOpen(true);
-      return;
-    }
-    if (screen === "workspace" && currentWorkspaceId && shouldShowWorkspaceOnboarding(tourUserKey, currentWorkspaceId)) {
-      setTourStartStep(getInitialWorkspaceOnboardingStep(tourUserKey, currentWorkspaceId));
-      setTourOpen(true);
-    }
-  }, [booting, currentWorkspaceId, profile, screen, tourOpen, tourUserKey]);
+  // UX reset: the slideshow tour no longer auto-launches — the persistent
+  // setup checklist guides setup instead. The tour stays available from the
+  // Settings menu (onRestartTour).
 
   const createWorkspaceFromCsv = (text: string, fileName: string, nameOverride?: string) => {
     setUploadError(null);
@@ -794,6 +819,47 @@ export default function App() {
     () => buildRecommendations({ ledger: signalLedger, registry, people, pedigree, mcpLibrary }),
     [signalLedger, registry, people, pedigree, mcpLibrary],
   );
+
+  // ── Maturity ladder: the app always knows which state the company is in ──
+  const maturityInput: MaturityInput = useMemo(() => ({
+    people, pedigree, readiness, rosterValidatedAt, discoveryPlan,
+    reviewQueueCount, questionBacklog, registry, agentsBuilt: metrics.agentsBuilt,
+  }), [people, pedigree, readiness, rosterValidatedAt, discoveryPlan, reviewQueueCount, questionBacklog, registry, metrics.agentsBuilt]);
+  const stage = useMemo(() => deriveStage(maturityInput), [maturityInput]);
+  const action = useMemo(() => nextAction(stage, maturityInput), [stage, maturityInput]);
+  const checklist = useMemo(() => setupChecklist(stage), [stage]);
+  const headerMetrics = useMemo(() => stageMetrics(stage, maturityInput), [stage, maturityInput]);
+  const orgMapEarned = useMemo(() => canDefaultToOrgMap(maturityInput), [maturityInput]);
+
+  const navigateToSurface = (target: ReturnType<typeof nextAction>["target"]) => {
+    if (target.kind === "screen") {
+      setScreen(target.screen);
+    } else {
+      setScreen("workspace");
+      setTab(SURFACE_TAB[target.tab]);
+    }
+  };
+
+  // One primary CTA, routed by state. For run_sessions it goes straight into
+  // the next planned session instead of just landing on the Discovery tab.
+  const onPrimaryCta = () => {
+    if (stage === "run_sessions") {
+      const next = discoveryPlan?.sessions.find((s) => s.status !== "applied");
+      if (next) {
+        onStartSession(next.anchor_person_id, next.id);
+        return;
+      }
+    }
+    navigateToSurface(action.target);
+  };
+
+  const onChecklistNavigate = (target: CompanyStage) => navigateToSurface(nextAction(target, maturityInput).target);
+
+  const onValidateRoster = () => {
+    setRosterValidatedAt(new Date().toISOString());
+    pushToast("Roster validated", "Next: add company context so discovery questions are specific to this business", true);
+    setScreen("company");
+  };
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
   const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
   const discoveryStarted = metrics.mappedPeople > 0;
@@ -856,17 +922,20 @@ export default function App() {
                 <div className="subtitle">{companySubtitle}</div>
               </button>
               <div className="actions">
-                <button data-tour="company-profile" className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="Edit the company profile that grounds discovery & agents"><Icon name="build" size={12} /> Company Profile</button>
-                <button className="btn btn-sm btn-ghost" onClick={() => setScreen("mcplibrary")} title="Register the company's approved MCP servers — agent grants are resolved from this library"><Icon name="lock" size={12} /> MCP Library{mcpLibrary.length ? ` (${mcpLibrary.length})` : ""}</button>
+                <button data-tour="company-profile" className="btn btn-sm btn-ghost" onClick={() => setScreen("company")} title="The grounding context for discovery questions and agent generation"><Icon name="build" size={12} /> Company Context</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setScreen("mcplibrary")} title="The company's approved tool surface — agent grants are resolved from this registry"><Icon name="lock" size={12} /> Sources & Tools{mcpLibrary.length ? ` (${mcpLibrary.length})` : ""}</button>
                 <button className="btn btn-sm btn-ghost" onClick={openMyPedigree} title="Your own slice of the stack: confirm tasks, see your agents in plain language, answer questions, request agents"><Icon name="user" size={12} /> My Pedigree</button>
-                <button data-tour="export" className="btn btn-sm btn-ghost" onClick={onExport}><Icon name="download" size={12} /> Export</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
-                <button className={"btn btn-sm " + (discoveryComplete ? "btn-primary" : "btn-ghost")} onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
-                <button data-tour="map-responsibilities" className={"btn " + (discoveryComplete ? "btn-ghost btn-sm" : "btn-primary")} onClick={() => onStartSession(selectedId ?? rootId)} title={discoveryComplete ? "Re-run discovery for a person to update them" : "Run a discovery pass to map responsibilities"}>
-                  <Icon name="sparkles" size={12} /> {discoveryStarted ? (discoveryComplete ? "Update Responsibilities" : "Continue Discovery") : "Map Responsibilities"}
+                <button className="btn btn-sm btn-ghost" onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
+                {/* ONE state-routed primary action — the only saturated CTA on this surface. */}
+                <button data-tour="map-responsibilities" className="btn btn-primary" onClick={onPrimaryCta} title={action.hint}>
+                  <Icon name="sparkles" size={12} /> {action.label}
                 </button>
               </div>
             </div>
+
+            {/* Persistent setup checklist until the company reaches operation. */}
+            {!setupComplete(stage) && <SetupChecklist items={checklist} onNavigate={onChecklistNavigate} />}
 
             {companyProfileOpen && (
               <CompanyProfileDropdown
@@ -877,13 +946,11 @@ export default function App() {
               />
             )}
 
-            {/* Funnel: People → Responsibilities → Delegatable → Candidates → Built */}
-            <div className="metrics funnel">
-              <Metric label="People" value={metrics.peopleCount} delta={`${metrics.mappedPeople} mapped`} up={metrics.mappedPeople > 0} arrow />
-              <Metric label="Responsibilities" value={metrics.respMapped} delta={metrics.respMapped > 0 ? "discovered" : "awaiting discovery"} up={metrics.respMapped > 0} arrow />
-              <Metric tourId="delegatable-tasks" label="Delegatable Tasks" value={metrics.delegTasks} delta={metrics.delegTasks > 0 ? "automatable" : "—"} up={metrics.delegTasks > 0} arrow />
-              <Metric tourId="agent-candidates" label="Agent Candidates" value={metrics.candidates} delta={metrics.candidates > 0 ? "ready to build" : "—"} up={metrics.candidates > 0} arrow />
-              <Metric label="Agents Built" value={metrics.agentsBuilt} delta={metrics.agentsBuilt > 0 ? "governed" : "none yet"} up={metrics.agentsBuilt > 0} />
+            {/* Stage-aware metrics: only what is meaningful NOW — no zero-walls. */}
+            <div className="metrics funnel" data-tour="delegatable-tasks">
+              {headerMetrics.map((m, i) => (
+                <Metric key={m.label} label={m.label} value={m.value} delta={m.delta} up={m.up} arrow={i < headerMetrics.length - 1} />
+              ))}
             </div>
 
             <div className="map-progress">
@@ -895,35 +962,38 @@ export default function App() {
             </div>
 
             <div className="tabs" role="tablist">
-              <button className="tab" role="tab" aria-selected={tab === "spreadsheet"} onClick={() => setTab("spreadsheet")}>
-                <Icon name="spreadsheet" size={12} /> Spreadsheet <span className="count">{people.length}</span>
+              <button className="tab" role="tab" aria-selected={tab === "spreadsheet"} onClick={() => setTab("spreadsheet")} title="People & Roles — validate the roster, then track everyone's discovery status">
+                <Icon name="spreadsheet" size={12} /> People <span className="count">{people.length}</span>
               </button>
-              <button className="tab" role="tab" aria-selected={tab === "orgmap"} onClick={() => setTab("orgmap")}>
-                <Icon name="network" size={12} /> Org Map <span className="count">{people.length}</span>
+              <button className="tab" role="tab" aria-selected={tab === "orgmap"} onClick={() => setTab("orgmap")} title={orgMapEarned ? "The responsibility map — owners, work, and agents over the org" : "Org preview — lights up as discovery covers the org"}>
+                <Icon name="network" size={12} /> {orgMapEarned ? "Responsibility Map" : "Org Preview"} <span className="count">{people.length}</span>
               </button>
               <button className="tab" role="tab" aria-selected={tab === "plan"} onClick={() => setTab("plan")} title="The discovery campaign: session cascade, coverage, and the question backlog">
-                <Icon name="target" size={12} /> Plan <span className="count">{planPendingCount}</span>
+                <Icon name="target" size={12} /> Discovery <span className="count">{planPendingCount}</span>
               </button>
-              <button className={"tab" + (metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => metrics.agentsBuilt > 0 && setTab("agents")} title={metrics.agentsBuilt === 0 ? "Available after first agent is generated" : "Generated agents"}>
-                <Icon name="robot" size={12} /> Agents <span className="count">{metrics.agentsBuilt}</span>
-              </button>
-              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Org-wide review queue: everything pending provenance confirmation">
+              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Review queue: extracted work awaiting confirmation, with evidence">
                 <Icon name="shield" size={12} /> Review <span className="count">{reviewQueueCount}</span>
               </button>
-              <button className="tab" role="tab" aria-selected={tab === "digest"} onClick={() => setTab("digest")} title="The maintenance loop: meeting signals, weekly digest, freshness">
-                <Icon name="transcript" size={12} /> Digest <span className="count">{digestPendingCount}</span>
+              <button className={"tab" + (metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => (metrics.delegTasks > 0 || metrics.agentsBuilt > 0) && setTab("agents")} title={metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? "Agent planning unlocks once tasks are extracted and classified" : "Plan agents under their human-owned responsibilities"}>
+                <Icon name="robot" size={12} /> Agent Plan <span className="count">{metrics.agentsBuilt}</span>
               </button>
-              <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Append-only audit trail: who generated, confirmed, approved, exported">
-                <Icon name="history" size={12} /> Audit <span className="count">{events.length + auditLog.length}</span>
+              {/* Data-driven gate: the maintenance loop appears once there is a mapped stack to maintain. */}
+              {(signalLedger.length > 0 || metrics.mappedPeople > 0) && (
+                <button className="tab" role="tab" aria-selected={tab === "digest"} onClick={() => setTab("digest")} title="The maintenance loop: meeting signals, weekly digest, freshness">
+                  <Icon name="transcript" size={12} /> Digest <span className="count">{digestPendingCount}</span>
+                </button>
+              )}
+              <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Evidence: who generated, confirmed, approved, exported — append-only">
+                <Icon name="history" size={12} /> Evidence <span className="count">{events.length + auditLog.length}</span>
               </button>
               <span style={{ flex: 1 }} />
-              <span className="kbd-hint">Tab <span className="k">1</span> Spreadsheet · <span className="k">2</span> Org Map</span>
+              <span className="kbd-hint">Tab <span className="k">1</span> People · <span className="k">2</span> Map</span>
             </div>
           </div>
 
           <div className="workspace-body">
             {tab === "spreadsheet" && (
-              <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} onOpenInput={() => onStartSession(selectedId ?? rootId)} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
+              <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} rosterValidated={Boolean(rosterValidatedAt)} onValidateRoster={onValidateRoster} onStartSession={onStartSession} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
             )}
             {tab === "orgmap" && (
               <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
@@ -1081,7 +1151,7 @@ export default function App() {
   );
 }
 
-function Metric({ label, value, delta, extra, up, arrow, tourId }: { label: string; value: number; delta?: string; extra?: string; up?: boolean; arrow?: boolean; tourId?: string }) {
+function Metric({ label, value, delta, extra, up, arrow, tourId }: { label: string; value: number | string; delta?: string; extra?: string; up?: boolean; arrow?: boolean; tourId?: string }) {
   return (
     <div className="metric" data-tour={tourId}>
       {arrow && <span className="funnel-arrow" aria-hidden>›</span>}

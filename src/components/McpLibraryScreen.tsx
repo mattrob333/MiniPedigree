@@ -57,7 +57,7 @@ export function McpLibraryScreen({ library, companyContext, people, ownerEmail, 
       <div className="manifest-pane">
         <div className="manifest-head">
           <Icon name="build" size={14} stroke="var(--cyan)" />
-          <div className="title">Company MCP Library</div>
+          <div className="title">Sources &amp; Tools <span className="dim" style={{ fontSize: 12, fontWeight: 400 }}>(the company MCP library)</span></div>
           <span className="sub">{library.length} approved server{library.length === 1 ? "" : "s"}</span>
           <span style={{ flex: 1 }} />
           <button className="btn btn-sm btn-ghost" onClick={onBack}><Icon name="chevron-left" size={11} /> Back</button>
