@@ -53,6 +53,8 @@ import {
   setupComplete, stageMetrics, type CompanyStage, type MaturityInput, type WorkspaceSurface,
 } from "./lib/maturity";
 import { SetupChecklist } from "./components/SetupChecklist";
+import { ResponsibilityMatrix } from "./components/ResponsibilityMatrix";
+import { AgentPlan } from "./components/AgentPlan";
 import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
@@ -267,6 +269,7 @@ export default function App() {
   const [meetings, setMeetings] = useState<RegisteredMeeting[]>([]);
   const [signalLedger, setSignalLedger] = useState<StackSignal[]>([]);
   const [rosterValidatedAt, setRosterValidatedAt] = useState<string | undefined>(undefined);
+  const [respView, setRespView] = useState<"matrix" | "map" | null>(null); // null = auto by maturity
   const [memberPersonId, setMemberPersonId] = useState<string | null>(null);
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
@@ -936,7 +939,6 @@ export default function App() {
                 <button className="btn btn-sm btn-ghost" onClick={() => setScreen("mcplibrary")} title="The company's approved tool surface — agent grants are resolved from this registry"><Icon name="lock" size={12} /> Sources & Tools{mcpLibrary.length ? ` (${mcpLibrary.length})` : ""}</button>
                 <button className="btn btn-sm btn-ghost" onClick={openMyPedigree} title="Your own slice of the stack: confirm tasks, see your agents in plain language, answer questions, request agents"><Icon name="user" size={12} /> My Pedigree</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
-                <button className="btn btn-sm btn-ghost" onClick={() => setOrgSyncOpen(true)} title="Refresh from a recent meeting transcript (reviewed changeset)"><Icon name="history" size={12} /> Org Sync</button>
                 {/* ONE state-routed primary action — the only saturated CTA on this surface. */}
                 <button data-tour="map-responsibilities" className="btn btn-primary" onClick={onPrimaryCta} title={action.hint}>
                   <Icon name="sparkles" size={12} /> {action.label}
@@ -975,8 +977,8 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "spreadsheet"} onClick={() => setTab("spreadsheet")} title="People & Roles — validate the roster, then track everyone's discovery status">
                 <Icon name="spreadsheet" size={12} /> People <span className="count">{people.length}</span>
               </button>
-              <button className="tab" role="tab" aria-selected={tab === "orgmap"} onClick={() => setTab("orgmap")} title={orgMapEarned ? "The responsibility map — owners, work, and agents over the org" : "Org preview — lights up as discovery covers the org"}>
-                <Icon name="network" size={12} /> {orgMapEarned ? "Responsibility Map" : "Org Preview"} <span className="count">{people.length}</span>
+              <button className="tab" role="tab" aria-selected={tab === "orgmap"} onClick={() => setTab("orgmap")} title={orgMapEarned ? "The responsibility matrix and map — owners, work, boundaries, agents" : "Org preview — becomes the responsibility map as discovery covers the org"}>
+                <Icon name="network" size={12} /> Responsibilities <span className="count">{metrics.respMapped || people.length}</span>
               </button>
               <button className="tab" role="tab" aria-selected={tab === "plan"} onClick={() => setTab("plan")} title="The discovery campaign: session cascade, coverage, and the question backlog">
                 <Icon name="target" size={12} /> Discovery <span className="count">{planPendingCount}</span>
@@ -1005,9 +1007,31 @@ export default function App() {
             {tab === "spreadsheet" && (
               <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} rosterValidated={Boolean(rosterValidatedAt)} onValidateRoster={onValidateRoster} onStartSession={onStartSession} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
             )}
-            {tab === "orgmap" && (
-              <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
-            )}
+            {tab === "orgmap" && (() => {
+              const view = respView ?? (metrics.respMapped > 0 ? "matrix" : "map");
+              return (
+                <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+                  <div className="resp-view-toolbar">
+                    <button className={"btn btn-sm" + (view === "matrix" ? " btn-outline-cyan" : "")} onClick={() => setRespView("matrix")} title="The working surface: owner × responsibility × task classification with evidence">
+                      <Icon name="spreadsheet" size={11} /> Matrix
+                    </button>
+                    <button className={"btn btn-sm" + (view === "map" ? " btn-outline-cyan" : "")} onClick={() => setRespView("map")} title={orgMapEarned ? "Responsibility map: owners, coverage, and agents over the org" : "Org preview"}>
+                      <Icon name="network" size={11} /> {orgMapEarned ? "Responsibility Map" : "Org Preview"}
+                    </button>
+                    {view === "map" && !orgMapEarned && (
+                      <span className="dim" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <Icon name="info" size={11} /> Roster imported — responsibilities not mapped yet. The map lights up as sessions are applied; run the leadership session first.
+                      </span>
+                    )}
+                  </div>
+                  {view === "matrix" ? (
+                    <ResponsibilityMatrix people={people} pedigree={pedigree} onCreateAgent={(ctx) => setCreateAgentCtx(ctx)} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} onStartSession={onStartSession} onSelectPerson={onSelect} />
+                  ) : (
+                    <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
+                  )}
+                </div>
+              );
+            })()}
             {tab === "plan" && (
               <DiscoveryPlanPanel
                 plan={discoveryPlan}
@@ -1021,7 +1045,7 @@ export default function App() {
                 onSelectPerson={onSelect}
               />
             )}
-            {tab === "agents" && <AgentsList agents={allAgents} people={people} registry={registry} recommendations={recommendations} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "agents" && <AgentPlan people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} onCreateAgent={(ctx) => setCreateAgentCtx(ctx)} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
             {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} role={userRole} onConfirm={onConfirmReview} onEdit={onEditReview} />}
             {tab === "digest" && (
               <DigestScreen
@@ -1037,6 +1061,7 @@ export default function App() {
                 approverEmail={profile?.email ?? "unknown"}
                 onChange={onDigestStateChange}
                 onToast={pushToast}
+                onOpenOrgSync={() => setOrgSyncOpen(true)}
               />
             )}
             {tab === "audit" && <AuditTrail events={events} stackAuditLog={auditLog} workspaceName={workspaceName} />}
@@ -1560,105 +1585,6 @@ function PanelSources({ sources }: { sources?: CompanyResearchSource[] }) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function AgentsList({ agents, people, registry, recommendations, onOpen }: { agents: AgentRecord[]; people: Person[]; registry: AgentRegistryEntry[]; recommendations: import("./lib/optimizer").Recommendation[]; onOpen: (a: AgentRecord) => void }) {
-  const standing = agents.filter((a) => (a.lifecycle ?? "standing") === "standing");
-  const task = agents.filter((a) => a.lifecycle === "task");
-  const peopleIds = new Set(people.map((p) => p.id));
-  const registryById = new Map(registry.map((e) => [e.agent_id, e]));
-  const suspended = registry.filter((e) => e.status === "suspended");
-
-  // P1-2: an agent must never silently retain a departed owner or stale
-  // ingredients — surface "needs re-review" where agents are browsed.
-  const Card = ({ a }: { a: AgentRecord }) => {
-    const manifestId = String((a.manifest as Record<string, unknown> | undefined)?.agent_id ?? a.id);
-    const entry = registryById.get(manifestId);
-    const orphaned = !peopleIds.has(a.person.id);
-    const needsReReview = orphaned || entry?.stale === true;
-    return (
-      <div className="manifest-card" style={{ marginBottom: 0, cursor: "pointer", ...(needsReReview ? { border: "1px solid var(--yellow)" } : {}) }} onClick={() => onOpen(a)}>
-        <div className="manifest-card-head">
-          <Icon name="robot" size={11} style={{ marginRight: 6 }} /> {a.id}
-          <span className="right" style={{ display: "flex", gap: 4 }}>
-            <span className="tag">{a.lifecycle === "task" ? "task" : "standing"}</span>
-            {entry?.status === "suspended" && <span className="tag" style={{ color: "var(--red)", borderColor: "var(--red)" }}>suspended</span>}
-            {orphaned && <span className="tag" style={{ color: "var(--red)", borderColor: "var(--red)" }}>orphaned owner</span>}
-            {needsReReview ? <span className="tag yellow">needs re-review</span> : <span className="badge generated"><span className="dot" />generated</span>}
-          </span>
-        </div>
-        <div className="manifest-card-body">
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", marginBottom: 6 }}>{a.name}</div>
-          <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 8 }}>{a.person.name} · {a.person.title}{orphaned ? " · no longer in the org map" : ""}</div>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-            <span className="tag cyan">{a.respTitle}</span>
-            <RiskBadge level={a.riskLevel} />
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const Section = ({ title, hint, list }: { title: string; hint: string; list: AgentRecord[] }) => (
-    <section style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{title}</h3>
-        <span className="tag">{list.length}</span>
-        <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>{hint}</span>
-      </div>
-      {list.length === 0 ? (
-        <div style={{ fontSize: 12, color: "var(--text-4)", fontStyle: "italic" }}>None yet.</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
-          {list.map((a) => <Card key={a.id} a={a} />)}
-        </div>
-      )}
-    </section>
-  );
-
-  return (
-    <div className="sheet-wrap" style={{ padding: 20 }}>
-      {/* Inventory optimizer: standing recommendations from the signal ledger.
-          Advisory only — acting on one routes through the normal flows. */}
-      {recommendations.length > 0 && (
-        <section style={{ marginBottom: 24 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Stack recommendations</h3>
-            <span className="tag">{recommendations.length}</span>
-            <span style={{ fontSize: 11.5, color: "var(--text-4)" }}>composed from meeting signals — every score carries its evidence</span>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
-            {recommendations.slice(0, 6).map((rec) => (
-              <div className="manifest-card" key={rec.id} style={{ marginBottom: 0 }}>
-                <div className="manifest-card-head">
-                  <Icon name={rec.kind === "build_candidate" ? "sparkles" : rec.kind === "retirement" ? "warning" : "info"} size={11} style={{ marginRight: 6 }} />
-                  {rec.kind.replace(/_/g, " ")}
-                  <span className="right"><span className="tag cyan" title={Object.entries(rec.score_breakdown).map(([k, v]) => `${k}: ${typeof v === "number" ? v.toFixed(2) : v}`).join(" · ")}>score {rec.score.toFixed(1)}</span></span>
-                </div>
-                <div className="manifest-card-body">
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", marginBottom: 4 }}>{rec.title}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-3)", marginBottom: 6 }}>{rec.detail}</div>
-                  {rec.evidence.slice(0, 2).map((quote, i) => (
-                    <blockquote key={i} style={{ margin: "4px 0", padding: "4px 8px", borderLeft: "2px solid var(--border-1)", fontSize: 11.5, color: "var(--text-4)", fontStyle: "italic" }}>“{quote}”</blockquote>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      {suspended.length > 0 && (
-        <div className="manifest-card" style={{ marginBottom: 20, border: "1px solid var(--red)" }}>
-          <div className="manifest-card-body" style={{ fontSize: 12.5 }}>
-            <Icon name="warning" size={12} style={{ marginRight: 6, verticalAlign: -2 }} />
-            {suspended.length} agent{suspended.length === 1 ? " is" : "s are"} <strong>suspended</strong> (owner offboarded or paused). Export packages are invalid until each is reassigned and recompiled under the new owner's authority ceiling.
-          </div>
-        </div>
-      )}
-      <Section title="Standing agents" hint="persistent, tied to a recurring responsibility" list={standing} />
-      <Section title="Task agents (active / recent)" hint="ephemeral but governed — audit log retained on teardown" list={task} />
     </div>
   );
 }

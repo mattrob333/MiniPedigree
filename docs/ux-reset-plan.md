@@ -1,7 +1,8 @@
 # Pedigree UX Reset: Spreadsheet-First Discovery — Implementation Plan
 
 Source: external UX review (2026-06). Decision: **adopt**, with three amendments
-noted at the bottom. Core principle accepted as the product spine:
+noted at the bottom. **Status: Sprints 1–3 implemented** (see the acceptance
+notes at the end). Core principle accepted as the product spine:
 
 > Organize the product around **discovery maturity**, not features. The app
 > always knows which state the company is in and defaults to the surface that
@@ -158,3 +159,29 @@ Post-discovery operational surfaces (Digest, My Pedigree, Evidence) are
 The review's §15 checklist is adopted verbatim (navigation, onboarding,
 people table, discovery, evidence, visual design), with the amendment that
 "Digest renamed Brief" is replaced by "Digest hidden until stage ≥ 6".
+
+
+## Implementation status (2026-06)
+
+- **Sprint 1 — shipped.** `src/lib/maturity.ts` ladder + tests; state-based
+  default surface and ONE primary CTA; persistent `SetupChecklist` (tour
+  demoted to Settings); People & Roles with validation panel, progressive
+  columns, Data Quality + Next Action; stage-aware metrics; renames; home
+  screen reordered with next-action cards; button/typography/glow pass.
+- **Sprint 2 — shipped.** Full-screen `SessionWorkspace` (Prepare / Run /
+  Review) replaces the wizard modal; per-item accept/edit/reject of parsed
+  findings (`src/lib/parseReview.ts`, tested) before apply; Review Queue
+  grouped by finding type with inline evidence and an Edit action
+  (`editReviewItem`); Discovery Plan cards carry purpose, why-now, and
+  expected output with a Prepare CTA.
+- **Sprint 3 — shipped.** `ResponsibilityMatrix` as the working surface with
+  a Matrix ⇄ Map toggle (map labeled Org Preview until earned, with an
+  explanatory banner); `AgentPlan` grouped owner → responsibility → task →
+  candidate with optimizer recommendations and a runtime-lives-in-Export
+  note; Org Sync's transcript flow consolidated into the Digest intake
+  ("Full discovery refresh") — the header door is gone; CSV export demoted
+  to the People toolbar.
+- **Deferred:** per-column roster editing in the validation panel; Org Map
+  coverage-overlay mid-state (status rings already serve this); moving
+  recommended sessions out of the org-map rail (the Discovery tab is now the
+  primary surface for that).

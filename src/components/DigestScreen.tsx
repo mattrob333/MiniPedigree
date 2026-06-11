@@ -56,9 +56,11 @@ interface Props {
   approverEmail: string;
   onChange: (patch: DigestStatePatch) => void;
   onToast: (t1: string, t2?: string, green?: boolean) => void;
+  /** Full discovery refresh (Org Sync changeset) — the other transcript mode. */
+  onOpenOrgSync?: () => void;
 }
 
-export function DigestScreen({ people, pedigree, registry, meetings, ledger, backlog, auditLog, companyContext, role, approverEmail, onChange, onToast }: Props) {
+export function DigestScreen({ people, pedigree, registry, meetings, ledger, backlog, auditLog, companyContext, role, approverEmail, onChange, onToast, onOpenOrgSync }: Props) {
   const [transcript, setTranscript] = useState("");
   const [meetingId, setMeetingId] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -226,6 +228,11 @@ export function DigestScreen({ people, pedigree, registry, meetings, ledger, bac
             {meetings.filter((m) => m.active).map((m) => <option key={m.id} value={m.id}>{m.name} ({m.cadence})</option>)}
           </select>
           <button className="btn btn-sm btn-ghost" onClick={() => setRegisterOpen((v) => !v)}><Icon name="plus" size={11} /> Register series</button>
+          {onOpenOrgSync && (
+            <button className="btn btn-sm btn-ghost" onClick={onOpenOrgSync} title="Full discovery refresh: re-parse a rich transcript into a reviewed changeset (new responsibilities, ownership shifts)">
+              <Icon name="history" size={11} /> Full discovery refresh
+            </button>
+          )}
           <span style={{ flex: 1 }} />
           <span className="dim" style={{ fontSize: 11 }}>{meetings.length} registered meeting{meetings.length === 1 ? "" : "s"}</span>
         </div>
