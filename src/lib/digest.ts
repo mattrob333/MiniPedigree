@@ -176,6 +176,24 @@ export function signalToProposal(signal: StackSignal, people: Person[], pedigree
       };
     }
     case "rule_signal": {
+      // Authority assertions from discovery ride the rule_signal channel but
+      // patch the person's authority profile, not the governance overlay.
+      if (patch.kind === "authority_assertion") {
+        const personId = (patch as { personId?: string }).personId ?? signal.refs.person_ids[0];
+        if (!personId) return null;
+        const assertion = (patch as { assertion?: { kind: string; system?: string | null; scope?: string | null; domain?: string | null } }).assertion;
+        const what = assertion?.kind === "system_access"
+          ? `${assertion.system ?? "system"} access (${assertion.scope ?? "read_only"})`
+          : assertion?.kind === "approval"
+            ? `approval authority over ${assertion.domain ?? "a domain"}`
+            : "a segregation-of-duties role";
+        return {
+          ...base,
+          type: "authority_change",
+          summary: `${personName(personId)} asserted ${what} — merge onto their authority profile (trust-ordered; discrepancies flag).`,
+          proposed_patch: patch,
+        };
+      }
       const rule = patch.rule
         ?? extractGovernanceRulesDeterministic({ approvalRules: [signal.evidence_quote] })[0]
         ?? null;
@@ -274,6 +292,7 @@ export interface ApplyDigestResult {
   registry: AgentRegistryEntry[];
   auditLog: StackAuditRecord[];
   backlog: QuestionBacklogItem[];
+  people?: Person[];   // returned when an authority_change patched a person
   applied: number;
   skipped: string[];   // signals that could not convert (e.g. missing owner)
 }
@@ -338,6 +357,7 @@ export function applyDigestSelections(input: ApplyDigestInput): ApplyDigestResul
     registry: freshened.registry,
     auditLog: result.auditLog,
     backlog,
+    ...(result.people ? { people: result.people } : {}),
     applied: appliedSignalIds.length,
     skipped,
   };

@@ -23,6 +23,7 @@ import {
   sessionPrompt,
 } from "@/lib/sessions";
 import { parseDiscovery, requestSessionBrief, transcribeAudio } from "@/lib/api";
+import { collectStaleItems, staleConfirmationQuestions } from "@/lib/freshness";
 import { computeReadiness } from "@/lib/readiness";
 import { ReadinessPanel } from "./CompanyProfileScreen";
 import { SessionBriefView } from "./SessionBriefView";
@@ -140,12 +141,25 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
         .flatMap((p) => (pedigree[p.id]?.responsibilities ?? []).map((r) => ({ person_id: p.id, person_name: p.name, title: r.title })))
         .filter((claim) => scopedPeople.some((sp) => sp.department === people.find((p) => p.id === claim.person_id)?.department))
         .slice(0, 4);
+      // Stale records are just another carried-over question source: inject
+      // confirmation checks for this scope into the brief.
+      const staleQuestions = staleConfirmationQuestions(
+        collectStaleItems(scopedPeople, pedigree, []),
+        scopeIds,
+      ).map((q, i) => ({
+        id: `QB-STALE-${q.source_ref}-${i}`,
+        person_id: q.person_id,
+        question: q.question,
+        source: "parser_open_question" as const,
+        source_ref: q.source_ref,
+        created_at: new Date().toISOString(),
+      }));
       const { brief: generated } = await requestSessionBrief({
         session: { id: sessionId, type: sessionType, anchor_person_id: person.id, scope_ids: scopeIds },
         participants: scopedPeople,
         companyContext,
         pedigree,
-        backlog: questionBacklog,
+        backlog: [...questionBacklog, ...staleQuestions],
         claimedElsewhere,
       });
       setBrief(generated);

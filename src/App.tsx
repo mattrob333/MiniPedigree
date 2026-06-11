@@ -43,9 +43,9 @@ import type { ApplyMappingArgs } from "./components/MappingSessionWizard";
 import { adaptPlan, generatePlan, setSessionStatus } from "./lib/discoveryPlan";
 import { ingestBriefOutcomes, ingestParserOpenQuestions, openBacklog, resolveBacklogFromParse, resolveBacklogItem } from "./lib/questionBacklog";
 import { computeReadiness } from "./lib/readiness";
-import { deriveAuthorityFromRules, enforceLeaverInvariant, flagAgentsForMover, mergeApprovalAuthority, suspendAgentsForLeaver } from "./lib/authority";
+import { authorityAssertionSignals, deriveAuthorityFromRules, enforceLeaverInvariant, flagAgentsForMover, mergeApprovalAuthority, suspendAgentsForLeaver } from "./lib/authority";
 import { getGovernanceRules } from "./lib/governance";
-import { pendingSignals } from "./lib/signalLedger";
+import { ingestSignals, pendingSignals } from "./lib/signalLedger";
 import { buildRecommendations } from "./lib/optimizer";
 import { canAdminister } from "./lib/rbac";
 import {
@@ -527,6 +527,13 @@ export default function App() {
     }
     setQuestionBacklog(backlog);
 
+    // Authority assertions ("I can approve refunds up to $2k") land in the
+    // digest as review-gated proposals — never direct writes.
+    const assertionSignals = authorityAssertionSignals(args.parsed, args.scopeIds, args.plannedSessionId ?? args.sessionLabel);
+    if (assertionSignals.length) {
+      setSignalLedger((prev) => ingestSignals(prev, assertionSignals).ledger);
+    }
+
     // Plan: session applied → re-prioritize, propose targeted deep-dives,
     // flag thin sessions for a re-run.
     setDiscoveryPlan((prev) => {
@@ -594,6 +601,7 @@ export default function App() {
     if (patch.backlog) setQuestionBacklog(patch.backlog);
     if (patch.companyContext) setCompanyContext(patch.companyContext);
     if (patch.auditLog) setAuditLog(patch.auditLog);
+    if (patch.people) setPeople(patch.people);
     if (patch.events?.length) setEvents((prev) => [...prev, ...patch.events!]);
   };
 
@@ -703,6 +711,7 @@ export default function App() {
     });
     setPedigree(result.pedigree);
     if (result.companyContext) setCompanyContext(result.companyContext);
+    if (result.people) setPeople(result.people);
     setRegistry(result.registry);
     setAuditLog(result.auditLog);
     setOrgSyncOpen(false);

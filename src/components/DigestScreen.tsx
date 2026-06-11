@@ -40,6 +40,7 @@ export interface DigestStatePatch {
   companyContext?: CompanyContext;
   auditLog?: StackAuditRecord[];
   events?: WorkspaceAuditEvent[];
+  people?: Person[];
 }
 
 interface Props {
@@ -185,6 +186,7 @@ export function DigestScreen({ people, pedigree, registry, meetings, ledger, bac
       backlog: result.backlog,
       companyContext: result.companyContext,
       auditLog: result.auditLog,
+      ...(result.people ? { people: result.people } : {}),
       events,
     });
     setSelected(new Set());

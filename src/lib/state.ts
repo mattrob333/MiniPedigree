@@ -81,6 +81,7 @@ export function applyParsed(
         assignedByName: managerName(person),
         confidence: r.confidence,
         provenance: deriveResponsibilityProvenance(r, opts.sessionLabel),
+        last_confirmed_at: new Date().toISOString(),
       };
     });
 
@@ -110,7 +111,9 @@ export function applyParsed(
 /** Build a TaskItem, carrying over per-task detail (risk, evidence, completion context) when parsed. */
 function toTaskItem(id: string, label: string, r: ParsedResponsibility, sessionLabel?: string): TaskItem {
   const detail = r.taskDetails?.find((d) => d.name.trim().toLowerCase() === label.trim().toLowerCase());
-  const item: TaskItem = { id, label, respId: r.id, respTitle: r.title };
+  // The discovery session itself is the first confirmation — freshness
+  // windows start counting from here.
+  const item: TaskItem = { id, label, respId: r.id, respTitle: r.title, last_confirmed_at: new Date().toISOString() };
   if (detail) {
     item.riskLevel = detail.risk_level;
     if (detail.evidence_quote) item.evidence = detail.evidence_quote;

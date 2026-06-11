@@ -22,6 +22,7 @@ const PROPOSAL_TAGS: Record<StackChangeProposal["type"], { label: string; cls: s
   task_changed: { label: "task changed", cls: "" },
   ownership_transfer: { label: "ownership transfer", cls: "yellow" },
   rule_changed: { label: "rule changed", cls: "yellow" },
+  authority_change: { label: "authority change", cls: "yellow" },
   agent_feedback: { label: "agent feedback", cls: "" },
   retire_candidate: { label: "retire candidate", cls: "" },
 };

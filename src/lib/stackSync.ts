@@ -1,5 +1,7 @@
 import type {
   AgentRegistryEntry,
+  AuthorityAssertion,
+  AuthorityProvenance,
   CompanyContext,
   GovernanceRule,
   ParsedMap,
@@ -10,6 +12,7 @@ import type {
   StackChangeProposal,
   TaskItem,
 } from "@/types";
+import { applyAssertion } from "./authority";
 import { extractGovernanceRulesDeterministic, significantKeywords } from "./governance";
 import { deriveProvenance } from "./provenance";
 import { markStale } from "./registry";
@@ -307,6 +310,8 @@ export interface ApplyStackResult {
   companyContext?: CompanyContext;
   registry: AgentRegistryEntry[];
   auditLog: StackAuditRecord[];
+  /** Returned when an authority_change proposal patched a person record. */
+  people?: Person[];
   applied: number;
 }
 
@@ -320,6 +325,8 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
   let pedigree = { ...input.pedigree };
   let companyContext = input.companyContext ? { ...input.companyContext } : undefined;
   let registry = input.registry;
+  let people = input.people;
+  let peopleChanged = false;
   const auditLog = [...input.auditLog];
   let applied = 0;
   const now = () => new Date().toISOString();
@@ -368,6 +375,24 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
         }
         break;
       }
+      case "authority_change": {
+        // A reviewed authority assertion (discovery or member) merges onto the
+        // person record with trust ordering; discrepancies flag, never resolve.
+        const personId = patch.personId as string;
+        const assertion = patch.assertion as AuthorityAssertion;
+        const provenance = (patch.provenance ?? { source: "discovery", transcript_id: proposal.transcript_id }) as AuthorityProvenance;
+        people = people.map((person) => {
+          if (person.id !== personId) return person;
+          const base = person.authority ?? { system_grants: [], approval_authority: [], sod_roles: [], updated_at: now() };
+          const res = applyAssertion(base, personId, assertion, provenance);
+          return { ...person, authority: res.profile };
+        });
+        peopleChanged = true;
+        // Authority is a compile ingredient: every agent this person owns drifts.
+        const owned = registry.filter((e) => e.owner_person_id === personId && e.status !== "retired").map((e) => e.agent_id);
+        if (owned.length) registry = markStale(registry, owned);
+        break;
+      }
       case "agent_feedback":
         // Review note: the audit record below is the attachment.
         break;
@@ -391,7 +416,7 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
     applied++;
   }
 
-  return { pedigree, companyContext, registry, auditLog, applied };
+  return { pedigree, companyContext, registry, auditLog, ...(peopleChanged ? { people } : {}), applied };
 }
 
 function addTaskToPerson(
@@ -427,6 +452,7 @@ function addTaskToPerson(
     respTitle: resp.title,
     ...(completion ? { completion } : {}),
     ...(provenance ? { provenance } : {}),
+    last_confirmed_at: new Date().toISOString(), // evidence-backed at creation
   };
   const tasks = {
     delegatable: [...prev.tasks.delegatable],

@@ -246,6 +246,38 @@ export function applyAssertion(
   return { profile, discrepancies: [] };
 }
 
+// ── Discovery parse → digest proposals ─────────────────────────────────
+// Approval-boundary answers parse into authority assertions; they land as
+// review-gated digest proposals, never direct writes.
+
+import type { ParsedMap, StackSignal } from "@/types";
+
+export function authorityAssertionSignals(parsed: ParsedMap, scopeIds: string[], transcriptId: string): StackSignal[] {
+  const signals: StackSignal[] = [];
+  let seq = 0;
+  for (const personId of scopeIds) {
+    for (const assertion of parsed[personId]?.authority_assertions ?? []) {
+      if (!assertion.evidence_quote?.trim()) continue;
+      seq += 1;
+      const expanding = assertion.kind === "approval"
+        || (assertion.kind === "system_access" && scopeRank(assertion.scope ?? "read_only") > scopeRank("read_only"));
+      signals.push({
+        id: `SIG-AUTH-${Date.now().toString(36)}-${seq}`,
+        type: "rule_signal",
+        source: { kind: "meeting", meeting_id: "discovery", transcript_id: transcriptId },
+        evidence_quote: assertion.evidence_quote,
+        confidence: 0.75,
+        refs: { person_ids: [personId], task_ids: [], agent_ids: [], rule_ids: [], backlog_ids: [] },
+        proposed_patch: { kind: "authority_assertion", personId, assertion, provenance: { source: "discovery", transcript_id: transcriptId } },
+        authority_expanding: expanding,
+        captured_at: new Date().toISOString(),
+        status: "ledgered",
+      });
+    }
+  }
+  return signals;
+}
+
 // ── Inheritance math (Compiler Stage B addition) ───────────────────────
 // agent_grant(system) = min(task_needs, owner grant, library default).
 // Missing profile ≠ blank check: it means no verified grants, which degrades

@@ -56,6 +56,75 @@ Pedigree distinguishes the **first pass** from **ongoing updates**, because comp
   applies until you approve it, and approvals **merge** onto existing mappings — they never overwrite.
   This is the recurring loop that keeps the org map current as initiatives and ownership change.
 
+### Guided Discovery: readiness → plan → brief → guided capture → backlog
+
+Pedigree doesn't merely accept transcripts — it plans the discovery campaign from the org chart,
+prepares each session from everything it already knows, leads the interviewer through it, and
+learns from each session to sharpen the next one:
+
+- **Context readiness** — an 8-dimension rubric (identity, goals, KPIs, bottlenecks, software
+  stack, governance, org completeness, terminology) scored on the Company Profile screen with
+  specific gap messages and fix locations; a compact banner in the wizard shows how question
+  quality will be affected. Guidance, never a gate. A KPI table feeds "who owns the number?" probes.
+- **Discovery Plan (Plan tab)** — the cascade as a first-class object: leadership first,
+  departments ordered by bottleneck/goal mentions then headcount, clarification sessions from
+  needs-review statuses, plus targeted deep-dives proposed when someone accumulates ≥3 open
+  questions. Thin applied sessions are flagged "re-run suggested" instead of silently done, and a
+  configurable "discovery complete" threshold marks the end of a Discovery Sprint.
+- **Session briefs** — an editable, participant-specific question script (AI with a deterministic
+  template fallback) grounded in the company's goals, KPIs, systems, and carried-over open
+  questions. Mom Test discipline baked in: past-behavior phrasing, one question per question, and
+  never pitching automation at the interviewee. Downloadable as Markdown for phone/printout.
+- **Guided Capture** — a live facilitator mode in the wizard: tap-to-mark question checklist,
+  per-question notes with intent tags and target attribution (authoritative for the parser),
+  "park it" for out-of-scope items, and per-participant coverage meters; recording can run
+  simultaneously and both feed the parse.
+- **Question backlog** — unanswered brief questions, parser open-questions, and parked items flow
+  into a per-person backlog that automatically reappears in the next relevant brief and resolves
+  when a later session (or the person themselves) answers it.
+
+### The Living Stack: after discovery, maintained by signals (Digest tab)
+
+- **Maintenance parse** — paste recurring team-meeting transcripts; the parser emits classified
+  signals against existing stack state and never creates records directly. One-off assignments are
+  ignored; confirmations apply silently (freshness timestamps only).
+- **Durability** — new candidates reach review only when corroborated in two distinct meetings,
+  stated with explicit recurrence language, or asserted by a member; rule changes always surface
+  at top priority; uncorroborated mentions expire after 30 days.
+- **Weekly digest** — rule changes and authority-expanding items first (red treatment, explicit
+  per-item confirmation, operator/governance-reviewer role), then drift, ranked candidates with
+  every corroborating quote, retirements, agent feedback, and the free wins. Applying routes
+  through the same reviewed changeset path as Org Sync: audit record, affected agents marked
+  stale, recompile stays an explicit step.
+- **Freshness** — every task, responsibility, and agent is fresh / aging / stale; an agent whose
+  underlying task went stale is itself flagged. Stale records inject confirmation questions into
+  upcoming session briefs and the owner's member view.
+- **Inventory optimizer** — standing recommendation cards on the Agents tab: build candidates
+  (corroborations × pain language × class fit × tool coverage), adoption gaps, merge candidates,
+  retirements, and scope tunes — each with its evidence and score breakdown.
+
+### My Pedigree: the member workspace
+
+Every person in the org map gets their own slice: **My Work** (freshness badges with one-tap
+confirm / correct / "doesn't exist anymore"), **My Agents** (plain-language cards: what it does,
+what it may do alone, what needs my approval, what it's blocked from, which tools at which scope),
+**My Questions** (inline answers become attributed discovery evidence — no meeting needed),
+**Request an Agent** (a self-service mini-discovery whose member provenance counts as
+corroboration), and **My Access** self-attestation. Member actions never write authority
+directly — everything routes through the signal ledger and digest review.
+
+### Authority Profile: inheritance made mechanical
+
+An agent can only inherit authority its human owner actually holds. Person records carry
+trust-ranked grants (CSV `tool_scopes`, rule-derived approval authority, discovery assertions,
+member attestation, operator entry — lower trust never overwrites a higher source; it raises a
+discrepancy). At compile time every MCP grant is capped at `min(task needs, owner grant, library
+default)` and `admin` never flows to an agent. Validation hard-fails grants above the owner's
+ceiling, approve-class actions without reviewed approval authority, preparer/approver SoD
+violations, and context documents above the owner's data clearance. Offboarding a person
+suspends every agent they own — no exceptions — until reassigned and recompiled under the new
+owner's ceiling.
+
 ### Sign in, persistence & company context
 
 - **Lightweight sign-in** (email + name + company + "what your company does") — no password.

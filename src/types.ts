@@ -388,6 +388,7 @@ export type StackChangeType =
   | "task_changed"
   | "ownership_transfer"
   | "rule_changed"
+  | "authority_change"
   | "agent_feedback"
   | "retire_candidate";
 

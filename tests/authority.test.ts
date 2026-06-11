@@ -242,3 +242,41 @@ describe("discovery assertions", () => {
     expect(claim.evidence_quote).toContain("$2k");
   });
 });
+
+describe("authority assertions through the digest", () => {
+  it("a parsed assertion becomes a review-gated digest proposal that patches the person", async () => {
+    const { authorityAssertionSignals } = await import("../src/lib/authority");
+    const { ingestSignals } = await import("../src/lib/signalLedger");
+    const { buildDigest, applyDigestSelections } = await import("../src/lib/digest");
+    const parsed = {
+      "P-001": {
+        summary: "",
+        responsibilities: [],
+        authority_assertions: [{
+          kind: "approval" as const, domain: "refunds", limit_description: "up to $2,000",
+          evidence_quote: "I can approve refunds up to $2k without anyone signing off.",
+        }],
+      },
+    };
+    const signals = authorityAssertionSignals(parsed, ["P-001"], "T-1");
+    expect(signals).toHaveLength(1);
+    expect(signals[0].authority_expanding).toBe(true);
+
+    const owner: Person = { ...jane, authority: undefined };
+    const { ledger } = ingestSignals([], signals);
+    const digest = buildDigest({ ledger, people: [owner], pedigree: {}, registry: [] });
+    expect(digest.rule_and_authority).toHaveLength(1);
+    expect(digest.rule_and_authority[0].proposal?.type).toBe("authority_change");
+
+    const result = applyDigestSelections({
+      signalIds: ledger.map((s) => s.id), ledger, approver: "gov@x.co",
+      people: [owner], pedigree: {}, registry: [], auditLog: [], backlog: [],
+    });
+    expect(result.applied).toBe(1);
+    const patched = result.people?.find((p) => p.id === "P-001");
+    expect(patched?.authority?.approval_authority[0].domain).toBe("refunds");
+    // Discovery-sourced claims stay asserted until an operator reviews them.
+    expect(patched?.authority?.approval_authority[0].status).toBe("asserted");
+    expect(result.auditLog).toHaveLength(1);
+  });
+});
