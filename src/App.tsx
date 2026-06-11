@@ -3,7 +3,7 @@ import { Topbar } from "./components/Topbar";
 import { Spreadsheet } from "./components/Spreadsheet";
 import { OrgMap } from "./components/OrgMap";
 import { Drawer, type CreateAgentCtx } from "./components/Drawer";
-import { MappingSessionWizard } from "./components/MappingSessionWizard";
+import { SessionWorkspace } from "./components/SessionWorkspace";
 import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
 import { ProfileScreen } from "./components/ProfileScreen";
@@ -25,7 +25,7 @@ import { RiskBadge } from "./components/ProvenanceBadge";
 import { DiscoveryPlanPanel } from "./components/DiscoveryPlanPanel";
 import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
 import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
-import { buildReviewQueue, confirmReviewItems, type ReviewQueueItem } from "./lib/provenance";
+import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewQueueItem } from "./lib/provenance";
 import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
@@ -39,7 +39,7 @@ import {
 } from "./lib/persist";
 import { refreshStaleness } from "./lib/registry";
 import { applyStackProposals } from "./lib/stackSync";
-import type { ApplyMappingArgs } from "./components/MappingSessionWizard";
+import type { ApplyMappingArgs } from "./components/SessionWorkspace";
 import { adaptPlan, generatePlan, setSessionStatus } from "./lib/discoveryPlan";
 import { ingestBriefOutcomes, ingestParserOpenQuestions, openBacklog, resolveBacklogFromParse, resolveBacklogItem } from "./lib/questionBacklog";
 import { computeReadiness } from "./lib/readiness";
@@ -63,7 +63,7 @@ import {
   skipOnboarding,
 } from "./lib/onboarding";
 
-type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member";
+type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member" | "session";
 type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
 
 // Maturity surfaces → workspace tabs (internal tab ids stay stable).
@@ -530,6 +530,8 @@ export default function App() {
     if (!personId) return;
     setWizardPlannedSessionId(plannedSessionId);
     setWizardPersonId(personId);
+    setDrawerOpen(false);
+    setScreen("session"); // full-screen Session Workspace — not a modal
   };
 
   const onPlanEvent = (sessionId: string, status: Parameters<typeof setSessionStatus>[2], briefId?: string) => {
@@ -573,6 +575,7 @@ export default function App() {
 
     setWizardPersonId(null);
     setWizardPlannedSessionId(undefined);
+    setScreen("workspace");
     const newQuestions = openBacklog(backlog).length - openBacklog(questionBacklog).length;
     pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}${newQuestions > 0 ? ` · ${newQuestions} open question${newQuestions === 1 ? "" : "s"} queued for the next brief` : ""}`, true);
   };
@@ -795,6 +798,13 @@ export default function App() {
     pushToast("Provenance confirmed", `${items.length} item${items.length === 1 ? "" : "s"} human-confirmed · audit recorded`, true);
   };
 
+  const onEditReview = (item: ReviewQueueItem, newLabel: string) => {
+    const result = editReviewItem(pedigree, item, newLabel, profile?.email ?? "unknown");
+    setPedigree(result.pedigree);
+    setEvents((prev) => [...prev, result.event]);
+    pushToast("Edited and confirmed", `"${newLabel}" — the correction is itself a confirmation`, true);
+  };
+
   // Recompute registry staleness whenever an ingredient (person record, task,
   // company context, governance docs, MCP library) changes — and enforce the
   // leaver invariant: no agent stays deployed under an offboarded owner.
@@ -1012,7 +1022,7 @@ export default function App() {
               />
             )}
             {tab === "agents" && <AgentsList agents={allAgents} people={people} registry={registry} recommendations={recommendations} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
-            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} role={userRole} onConfirm={onConfirmReview} />}
+            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} role={userRole} onConfirm={onConfirmReview} onEdit={onEditReview} />}
             {tab === "digest" && (
               <DigestScreen
                 people={people}
@@ -1071,6 +1081,20 @@ export default function App() {
         <CompanyProfileScreen context={companyContext ?? { company: workspaceName, whatWeDo: "" }} people={people} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
       )}
 
+      {screen === "session" && wizardPerson && (
+        <SessionWorkspace
+          person={wizardPerson}
+          people={people}
+          pedigree={pedigree}
+          companyContext={companyContext}
+          plannedSessionId={wizardPlannedSessionId}
+          questionBacklog={questionBacklog}
+          onClose={() => { setWizardPersonId(null); setWizardPlannedSessionId(undefined); setScreen("workspace"); }}
+          onApply={onApplyMapping}
+          onPlanEvent={onPlanEvent}
+        />
+      )}
+
       {screen === "member" && memberPersonId && people.find((p) => p.id === memberPersonId) && (
         <>
           {/* Preview-as picker: local roles, so the member view is honest about identity */}
@@ -1122,18 +1146,7 @@ export default function App() {
         />
       )}
 
-      <MappingSessionWizard
-        open={!!wizardPerson}
-        person={wizardPerson}
-        people={people}
-        pedigree={pedigree}
-        companyContext={companyContext}
-        plannedSessionId={wizardPlannedSessionId}
-        questionBacklog={questionBacklog}
-        onClose={() => { setWizardPersonId(null); setWizardPlannedSessionId(undefined); }}
-        onApply={onApplyMapping}
-        onPlanEvent={onPlanEvent}
-      />
+
       <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
       <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} registry={registry} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 

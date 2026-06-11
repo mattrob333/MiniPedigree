@@ -20,6 +20,25 @@ import { initials } from "@/lib/util";
 // and the question backlog. This is what makes a paid Discovery Sprint
 // legible: the client sees the campaign, its sequence, and its progress.
 
+const SESSION_PURPOSE: Record<PlannedSession["type"], { purpose: string; output: string }> = {
+  leadership_session: {
+    purpose: "Capture company goals, bottlenecks, decision rights, and executive KPIs; map what each direct report owns and what stays human.",
+    output: "Company-level ownership map · 5–10 responsibilities · initial agent opportunity themes",
+  },
+  department_session: {
+    purpose: "Map the department end to end: the head's responsibilities, each report's recurring work, and where approval boundaries sit.",
+    output: "Evidence-backed responsibilities and tasks per participant · classification seeds",
+  },
+  individual_role_session: {
+    purpose: "Deep-dive one role: deliverables, cadence, systems, approval ceiling — and resolve this person's open questions.",
+    output: "Concrete tasks with completion context · resolved open questions",
+  },
+  clarification_session: {
+    purpose: "Resolve ambiguous signals from earlier sessions: confirm what this person is actually accountable for.",
+    output: "Cleared needs-review status · confirmed ownership",
+  },
+};
+
 const STATUS_META: Record<PlannedSession["status"], { label: string; color: string }> = {
   planned: { label: "Planned", color: "var(--text-4)" },
   briefed: { label: "Briefed", color: "var(--cyan)" },
@@ -145,15 +164,17 @@ function PlanSessionCard({ session, person, backlogCount, onStart }: { session: 
           {person && <span className="dim"> — {person.name}</span>}
           <span className="plan-status" style={{ color: meta.color }}><span className="dot" style={{ background: meta.color }} /> {meta.label}</span>
         </div>
-        <div className="plan-session-rationale">{session.rationale}</div>
+        <div className="plan-session-purpose">{SESSION_PURPOSE[session.type].purpose}</div>
+        <div className="plan-session-rationale"><Icon name="info" size={10} /> Why now: {session.rationale}</div>
         <div className="plan-session-meta">
           <span>{session.scope_ids.length} participant{session.scope_ids.length === 1 ? "" : "s"}</span>
+          <span className="dim">Expected output: {SESSION_PURPOSE[session.type].output}</span>
           {backlogCount > 0 && <span className="tag yellow">{backlogCount} carried-over question{backlogCount === 1 ? "" : "s"}</span>}
           {session.brief_id && <span className="tag cyan">briefed</span>}
         </div>
       </div>
-      <button className={"btn btn-sm " + (applied ? "btn-ghost" : session.status === "rerun_suggested" ? "btn-primary" : "btn-outline-cyan")} onClick={onStart}>
-        <Icon name="sparkles" size={11} /> {applied ? "Re-run" : session.status === "rerun_suggested" ? "Re-run session" : "Start session"}
+      <button className={"btn btn-sm " + (applied ? "btn-ghost" : session.status === "rerun_suggested" ? "btn-primary" : "btn-outline-cyan")} onClick={onStart} title="Opens the session workspace in Prepare mode — review the question script before going live">
+        <Icon name="sparkles" size={11} /> {applied ? "Re-run" : session.status === "rerun_suggested" ? "Re-run session" : "Prepare session"}
       </button>
     </div>
   );

@@ -170,6 +170,58 @@ export function isBulkConfirmable(item: ReviewQueueItem): boolean {
   return true;
 }
 
+/**
+ * Edit-and-confirm: a reviewer corrects the extracted wording, which is
+ * itself a human confirmation. Renames the item and marks it confirmed.
+ */
+export function editReviewItem(
+  pedigree: PedigreeState,
+  item: ReviewQueueItem,
+  newLabel: string,
+  by: string,
+): { pedigree: PedigreeState; event: WorkspaceAuditEvent } {
+  const row = pedigree[item.personId];
+  let next = pedigree;
+  if (row) {
+    if (item.kind === "task") {
+      const rename = (tasks: TaskItem[]) => tasks.map((t) => (t.id === item.itemId ? { ...t, label: newLabel } : t));
+      next = {
+        ...pedigree,
+        [item.personId]: {
+          ...row,
+          tasks: {
+            delegatable: rename(row.tasks.delegatable),
+            approval: rename(row.tasks.approval),
+            not_delegatable: rename(row.tasks.not_delegatable),
+          },
+        },
+      };
+      next = confirmTaskProvenance(next, item.personId, item.itemId, by);
+    } else {
+      next = {
+        ...pedigree,
+        [item.personId]: {
+          ...row,
+          responsibilities: row.responsibilities.map((r) => (r.id === item.itemId ? { ...r, title: newLabel } : r)),
+        },
+      };
+      next = confirmResponsibilityProvenance(next, item.personId, item.itemId, by);
+    }
+  }
+  return {
+    pedigree: next,
+    event: {
+      id: `EVT-${Date.now().toString(36)}-edit-${item.itemId}`,
+      type: "provenance_confirmed",
+      actor: by,
+      timestamp: new Date().toISOString(),
+      summary: `Edited and confirmed ${item.kind} for ${item.personName}: "${item.label}" → "${newLabel}".`,
+      subject_id: item.itemId,
+      ...(item.provenance.evidence_quote ? { evidence: item.provenance.evidence_quote } : {}),
+    },
+  };
+}
+
 /** Apply confirmations and emit one audit event per confirmed item. */
 export function confirmReviewItems(
   pedigree: PedigreeState,
