@@ -107,13 +107,20 @@ export function runMaintenanceParseDeterministic(args: MaintenanceParseArgs): St
       signals.push(signal);
     }
 
-    // New candidate: recurring work not in the map, only with recurrence/
-    // ownership language (one-off assignments emit nothing).
-    if (!stops && RECURRENCE_RE.test(sentence)) {
+    // New candidate: work not in the map. Sentences with explicit recurrence/
+    // ownership language promote immediately; vague verb-phrase mentions are
+    // LEDGERED so a later meeting can corroborate them — the durability rules
+    // (not the parser) decide what reaches review. Sentences without a
+    // recognizable work verb-phrase (one-off assignments like "take the
+    // Henderson account this week") emit nothing.
+    if (!stops) {
+      const recurrence = RECURRENCE_RE.test(sentence);
+      const label = candidateLabel(sentence);
+      const hasVerbPhrase = label !== fallbackLabel(sentence);
       const known = tasks.some((t) => tokenOverlap(sentence, t.label) >= MATCH_THRESHOLD);
-      if (!known) {
-        const signal = baseSignal(args, "new_candidate", sentence, 0.55);
-        signal.proposed_patch = { kind: "new_candidate", label: candidateLabel(sentence), recurrence_language: true };
+      if (!known && (recurrence || hasVerbPhrase)) {
+        const signal = baseSignal(args, "new_candidate", sentence, recurrence ? 0.55 : 0.45);
+        signal.proposed_patch = { kind: "new_candidate", label, recurrence_language: recurrence };
         signals.push(signal);
       }
     }
@@ -137,12 +144,24 @@ export function runMaintenanceParseDeterministic(args: MaintenanceParseArgs): St
 }
 
 /** Verb-phrase label for a candidate sentence (best-effort, reviewed before apply). */
+const ING_BASE: Record<string, string> = {
+  compiling: "compile", preparing: "prepare", updating: "update",
+  summarizing: "summarize", summarising: "summarise", reconciling: "reconcile",
+};
+
 function candidateLabel(sentence: string): string {
-  const m = sentence.match(/\b(reviews?|cleans?|compares?|summari[sz]es?|drafts?|pulls?|compiles?|sends?|tracks?|prepares?|updates?|reconciles?|audits?|monitors?|exports?|builds?|reports?)\b\s+([^.;,]{4,70})/i);
+  // Gerunds normalize to base form so "compiling the churn digest" (Monday)
+  // and "compiles the churn digest" (Friday) corroborate each other.
+  const m = sentence.match(/\b(reviews?|reviewing|cleans?|cleaning|compares?|comparing|summari[sz]es?|summari[sz]ing|drafts?|drafting|pulls?|pulling|compiles?|compiling|sends?|sending|tracks?|tracking|prepares?|preparing|updates?|updating|reconciles?|reconciling|audits?|auditing|monitors?|monitoring|exports?|exporting|builds?|building|reports?|reporting)\b\s+([^.;,]{4,70})/i);
   if (m) {
-    const verb = m[1].replace(/s$/i, "");
+    const raw = m[1].toLowerCase();
+    const verb = ING_BASE[raw] ?? raw.replace(/ing$/i, "").replace(/s$/i, "");
     return `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${m[2].trim()}`.replace(/\s+/g, " ");
   }
+  return fallbackLabel(sentence);
+}
+
+function fallbackLabel(sentence: string): string {
   const clean = sentence.replace(/\s+/g, " ").trim();
   return clean.length > 80 ? `${clean.slice(0, 77)}...` : clean;
 }

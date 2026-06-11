@@ -23,6 +23,7 @@ import { setSignalStatus } from "@/lib/signalLedger";
 import { getGovernanceRules } from "@/lib/governance";
 import { canApplyAuthority, canApplyNonAuthority } from "@/lib/rbac";
 import { initials } from "@/lib/util";
+import { DEMO_STANDUPS } from "@/lib/demoKit";
 
 // ── Living Stack: meetings in, signals ledgered, digest reviewed ───────
 // After initial discovery the stack is maintained by signals, not sessions.
@@ -240,10 +241,24 @@ export function DigestScreen({ people, pedigree, registry, meetings, ledger, bac
         <textarea
           className="textarea"
           rows={4}
-          placeholder='Paste the standup/planning transcript (Fireflies, Meet, Zoom…). One-off assignments are ignored; only durable signals reach review. Try: "From now on Finance signs off on all refunds."'
+          placeholder='Paste the standup/planning transcript (Fireflies, Meet, Zoom…). One-off assignments are ignored; only durable signals reach review.'
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
         />
+        <div style={{ marginTop: 6 }}>
+          {/* Demo kit: standup 1 ledgers a vague candidate; standup 2 corroborates it
+              with recurrence language so the durability rules demo visibly. */}
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => {
+              const meetingSignals = ledger.filter((s) => s.source.kind === "meeting").length;
+              const pick = DEMO_STANDUPS[meetingSignals > 0 ? 1 : 0];
+              setTranscript(`${pick.label}\n\n${pick.text}`);
+            }}
+          >
+            <Icon name="play" size={10} /> Insert demo standup ({ledger.some((s) => s.source.kind === "meeting") ? "Friday — corroborates" : "Monday — first mentions"})
+          </button>
+        </div>
         <div style={{ display: "flex", marginTop: 8, gap: 8, alignItems: "center" }}>
           <span className="dim" style={{ fontSize: 11 }}>
             <Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />

@@ -250,10 +250,18 @@ export function buildDigest({ ledger, people, pedigree, periodDays = 7, now = ne
   const ruleAndAuthority = proposed.filter((s) => s.type === "rule_signal" || s.authority_expanding).map(entry);
   const inSection = new Set(ruleAndAuthority.map((e) => e.signal.id));
   const drift = proposed.filter((s) => s.type === "drift" && !inSection.has(s.id)).map(entry);
+  // One entry per corroboration cluster: the strongest mention carries every
+  // corroborating quote instead of the cluster appearing N times.
+  const seenInCluster = new Set<string>();
   const candidates = proposed
     .filter((s) => s.type === "new_candidate" && !inSection.has(s.id))
     .map(entry)
-    .sort((a, b) => (b.corroborations.length + b.signal.confidence) - (a.corroborations.length + a.signal.confidence));
+    .sort((a, b) => (b.corroborations.length + b.signal.confidence) - (a.corroborations.length + a.signal.confidence))
+    .filter((e) => {
+      if (seenInCluster.has(e.signal.id)) return false;
+      for (const c of e.corroborations) seenInCluster.add(c.id);
+      return true;
+    });
   const retirements = proposed.filter((s) => s.type === "retirement" && !inSection.has(s.id)).map(entry);
   const agentFeedback = proposed.filter((s) => s.type === "agent_feedback" && !inSection.has(s.id)).map(entry);
 

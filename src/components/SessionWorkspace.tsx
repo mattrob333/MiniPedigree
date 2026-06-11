@@ -16,7 +16,6 @@ import type {
 } from "@/types";
 import {
   SESSION_LABEL,
-  buildDemoSessionText,
   defaultScopeFor,
   directReports,
   getScopePersonIds,
@@ -35,6 +34,7 @@ import {
   type GuidedCaptureState,
 } from "@/lib/guidedCapture";
 import { countFindings, filterParsedMap, responsibilityKey, taskKey, type FindingKey } from "@/lib/parseReview";
+import { demoTranscript } from "@/lib/demoKit";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { deriveProvenance } from "@/lib/provenance";
 import { initials } from "@/lib/util";
@@ -475,7 +475,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
             {pasteOpen && (
               <>
                 <textarea className="textarea" rows={6} style={{ marginTop: 6 }} placeholder="Paste or transcribe here — feeds the parse alongside the structured notes." value={transcript} onChange={(e) => setTranscript(e.target.value)} />
-                <button className="btn btn-sm btn-ghost" style={{ marginTop: 4 }} onClick={() => setTranscript(buildDemoSessionText(person, reports, sessionType))}><Icon name="play" size={10} /> Insert demo transcript</button>
+                <button className="btn btn-sm btn-ghost" style={{ marginTop: 4 }} onClick={() => setTranscript(demoTranscript(person, reports, sessionType))}><Icon name="play" size={10} /> Insert demo transcript</button>
               </>
             )}
             {err && <div className="hint" style={{ color: "var(--red)", marginTop: 8 }}><Icon name="warning" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />{err}</div>}

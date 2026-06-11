@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./Icon";
+import { DEMO_ORG_REFRESH } from "@/lib/demoKit";
 import type { Changeset } from "@/lib/orgSync";
 import { computeChangeset } from "@/lib/orgSync";
 import { parseDiscovery } from "@/lib/api";
@@ -124,6 +125,7 @@ export function OrgSyncModal({ open, people, pedigree, companyContext, registry,
                 <span style={{ color: "var(--text-4)", fontSize: 10 }}>{text.trim().split(/\s+/).filter(Boolean).length} words</span>
               </div>
               <textarea className="textarea" rows={12} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste a Fireflies transcript here. Pedigree will detect new tasks, changed tasks, ownership shifts, governance rule changes, agent feedback, and retire candidates…" style={{ minHeight: 220 }} />
+              <button className="btn btn-sm btn-ghost" style={{ marginTop: 6 }} onClick={() => setText(DEMO_ORG_REFRESH)}><Icon name="play" size={10} /> Insert demo refresh (ownership transfer + rule change)</button>
               {err && <div className="hint" style={{ color: "var(--red)" }}><Icon name="warning" size={11} style={{ verticalAlign: -1, marginRight: 4 }} />{err}</div>}
               <div className="hint"><Icon name="info" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Roles and missions are stable; this surfaces what changed — and flags anything that would expand an agent's authority.</div>
             </div>

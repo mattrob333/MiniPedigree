@@ -5,6 +5,7 @@ import type { CompanyContext, CompanyKpi, CompanyResearchSource, Person } from "
 import { parseCompanyProfile } from "@/lib/api";
 import { companyContextSchema } from "@/lib/schemas";
 import { computeReadiness, READINESS_DIMENSION_LABEL, READINESS_DIMENSION_WHY, READINESS_MAX, readinessTier } from "@/lib/readiness";
+import { demoCompanyContext } from "@/lib/demoKit";
 
 interface Props {
   context: CompanyContext;
@@ -164,6 +165,20 @@ export function CompanyProfileScreen({ context, people = [], onSave, onBack }: P
 
               <div className="company-profile-actions">
                 <button className="btn" onClick={onBack}>Cancel</button>
+                <button
+                  className="btn btn-ghost"
+                  title="Load the curated Lumen Bay demo context: goals, KPIs, systems, SOPs, approval rules, SOD docs — readiness 16/16"
+                  onClick={() => {
+                    const demo = demoCompanyContext(profile.company || context.company || "Lumen Bay");
+                    setProfile(demo);
+                    setNotes(notesFromContext(demo));
+                    setUrl(demo.url ?? "");
+                    setMode("manual");
+                    setMessage("Demo context loaded — goals, KPIs, systems, approval rules, and SOD/policy documents. Save to apply.");
+                  }}
+                >
+                  <Icon name="play" size={12} /> Insert demo context
+                </button>
                 <span style={{ flex: 1 }} />
                 <button className="btn btn-outline-cyan" onClick={runParse} disabled={busy || (!url.trim() && !notes.trim())}>
                   <Icon name="sparkles" size={12} /> {busy ? "Researching..." : url.trim() ? "Research + Parse" : "Parse Notes"}
