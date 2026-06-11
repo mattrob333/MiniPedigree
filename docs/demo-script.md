@@ -45,23 +45,30 @@ server the parses get richer, but every beat below works without one.
   named. Each card shows purpose, why-now, expected output.
 - Click **Prepare session** on **Leadership — Avery Collins**.
 
-## Beat 4 — Session Workspace: Prepare → Run → Review (3 min)
-- **Prepare**: the generated question script — point at KPI-ownership
-  questions using *Lumen Bay's own vocabulary*, the "why" under each
-  question, and the gaps panel. Edit one question to show it's editable.
-- Click **Start live session**.
-- **Run**: the cockpit — queue left, current question huge, coverage meters
-  right. Open the **Transcript** panel in the right rail and click
-  **Insert demo transcript** (curated leadership conversation: approval
-  ceilings, SoD statements, pain language, an open question).
-- Click **End session & parse**.
-- **Review**: extracted findings with evidence quotes and confidence.
-  **Uncheck one task** ("this one's wrong") — *say:* "rejected items never
-  enter the map; this is the trust layer." Click **Apply**.
+## Beat 4 — Session Workspace: Brief → Transcript → Review (3 min)
+- **Brief**: the facilitator's agenda — the "How to run this meeting" steps,
+  the grouped round-robin and core topics, KPI follow-ups collapsed below.
+  Point at a KPI question using *Lumen Bay's own vocabulary* and the "why"
+  under each question. Click **Copy agenda** ("paste this into your meeting
+  doc — the app stays out of the call").
+- *Say:* "You run the meeting in Google Meet like a normal conversation.
+  Pedigree's job starts when the transcript comes back."
+- Click **Upload transcript** → the Transcript surface ("Transcript
+  needed"). Click **Insert demo transcript** (a realistic leadership
+  conversation: approval ceilings, SoD statements, pain language, an open
+  question) → **Parse transcript**.
+- **Review**: the **agenda coverage strip** ("12 answered · 1 unanswered —
+  carried into open questions") then extracted findings with evidence
+  quotes and confidence. **Uncheck one task** ("this one's wrong") — *say:*
+  "rejected items never enter the map; this is the trust layer." Click
+  **Apply**.
+- Optional aside: **Use native capture** on the Brief shows the per-question
+  cockpit for teams that want Pedigree taking the notes — it's an option,
+  never the default.
 
 ## Beat 5 — Run the Revenue session (1 min, optional)
-- Discovery tab → **Prepare session** on **Priya Shah**. Skip straight to
-  Run → Insert demo transcript → parse → apply.
+- Discovery tab → **Open session brief** on **Priya Shah** → Upload
+  transcript → Insert demo transcript → Parse → Apply.
 - This transcript carries the juicy governance content: Lucas's 15% discount
   ceiling, Priya's 15–25% band, preparer/approver separation, Camila's
   renewal-handoff open question — watch it land in the **question backlog**.

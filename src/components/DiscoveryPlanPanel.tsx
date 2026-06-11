@@ -62,6 +62,7 @@ interface Props {
 
 export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness, onStartSession, onOpenCompanyProfile, onResolveBacklogItem, onSelectPerson }: Props) {
   const [showDone, setShowDone] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const completion = useMemo(() => discoveryCompletion(people, pedigree, backlog), [people, pedigree, backlog]);
   const grouped = useMemo(() => backlogByPerson(backlog), [backlog]);
   const tier = readinessTier(readiness);
@@ -97,13 +98,31 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
       </div>
 
       <div className="plan-layout">
-        {/* Session cascade */}
+        {/* Session cascade: momentum, not a wall of meetings — top 3 expanded. */}
         <section className="plan-sessions">
-          <div className="sh" style={{ marginBottom: 10 }}>Discovery campaign <span className="count">{pending.length} pending</span></div>
+          <div className="howto-run" style={{ marginBottom: 12 }}>
+            <div className="howto-title"><Icon name="play" size={12} /> Run discovery in Google Meet</div>
+            <ol>
+              <li>Open the next session brief and <strong>copy the agenda</strong>.</li>
+              <li>Run the call naturally with the recording on.</li>
+              <li><strong>Upload the transcript</strong> after the call — Pedigree parses responsibilities, tasks, approvals, and agent candidates with evidence.</li>
+            </ol>
+          </div>
+          <div className="sh" style={{ marginBottom: 10 }}>Recommended next sessions <span className="count">{pending.length} planned</span></div>
           {pending.length === 0 && <div className="drawer-empty">Every planned session has been applied. New sessions appear here as the plan adapts.</div>}
-          {pending.map((session) => (
-            <PlanSessionCard key={session.id} session={session} person={personOf(session.anchor_person_id)} backlogCount={session.scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)} onStart={() => onStartSession(session.anchor_person_id, session.id)} />
+          {pending.slice(0, 3).map((session, i) => (
+            <PlanSessionCard key={session.id} session={session} person={personOf(session.anchor_person_id)} backlogCount={session.scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)} primary={i === 0} onStart={() => onStartSession(session.anchor_person_id, session.id)} />
           ))}
+          {pending.length > 3 && (
+            <>
+              <button className="btn btn-sm btn-ghost" style={{ marginTop: 4 }} onClick={() => setShowMore((v) => !v)}>
+                <Icon name={showMore ? "chevron-down" : "chevron-right"} size={11} /> {pending.length - 3} more session{pending.length - 3 === 1 ? "" : "s"} planned
+              </button>
+              {showMore && pending.slice(3).map((session) => (
+                <PlanSessionCard key={session.id} session={session} person={personOf(session.anchor_person_id)} backlogCount={session.scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)} onStart={() => onStartSession(session.anchor_person_id, session.id)} />
+              ))}
+            </>
+          )}
           {done.length > 0 && (
             <>
               <button className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} onClick={() => setShowDone((v) => !v)}>
@@ -119,7 +138,7 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
         {/* Question backlog */}
         <aside className="plan-backlog">
           <div className="sh" style={{ marginBottom: 10 }}>
-            Question backlog <span className="count">{completion.open_backlog}</span>
+            Open questions <span className="count">{completion.open_backlog}</span>
             <span className="dim" style={{ marginLeft: "auto", fontSize: 10.5, textTransform: "none", letterSpacing: 0 }}>carried into the next relevant brief — never dropped silently</span>
           </div>
           {grouped.size === 0 && <div className="drawer-empty">No open questions. Parser open-questions and unanswered brief questions land here.</div>}
@@ -151,7 +170,7 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
   );
 }
 
-function PlanSessionCard({ session, person, backlogCount, onStart }: { session: PlannedSession; person?: Person; backlogCount: number; onStart: () => void }) {
+function PlanSessionCard({ session, person, backlogCount, onStart, primary = false }: { session: PlannedSession; person?: Person; backlogCount: number; onStart: () => void; primary?: boolean }) {
   const meta = STATUS_META[session.status];
   const dept = person ? getDepartmentColor(person.department) : null;
   const applied = session.status === "applied";
@@ -173,8 +192,8 @@ function PlanSessionCard({ session, person, backlogCount, onStart }: { session: 
           {session.brief_id && <span className="tag cyan">briefed</span>}
         </div>
       </div>
-      <button className={"btn btn-sm " + (applied ? "btn-ghost" : session.status === "rerun_suggested" ? "btn-primary" : "btn-outline-cyan")} onClick={onStart} title="Opens the session workspace in Prepare mode — review the question script before going live">
-        <Icon name="sparkles" size={11} /> {applied ? "Re-run" : session.status === "rerun_suggested" ? "Re-run session" : "Prepare session"}
+      <button className={"btn btn-sm " + (applied ? "btn-ghost" : primary || session.status === "rerun_suggested" ? "btn-primary" : "")} onClick={onStart} title="Opens the session brief — copy the agenda, run the call, upload the transcript">
+        <Icon name="sparkles" size={11} /> {applied ? "Re-run" : session.status === "rerun_suggested" ? "Re-run session" : "Open session brief"}
       </button>
     </div>
   );

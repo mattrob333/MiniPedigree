@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import type { PedigreeState, Person, TaskItem } from "@/types";
+import type { DiscoveryPlan, PedigreeState, Person, TaskItem } from "@/types";
 import { Icon } from "./Icon";
 import { BrandChip } from "./BrandLogo";
 import { StatusBadge } from "./StatusBadge";
-import { SESSION_LABEL, isMapped, recommendSessionType } from "@/lib/sessions";
+import { SESSION_LABEL, isMapped } from "@/lib/sessions";
 import { initials } from "@/lib/util";
 
 function Empty() {
@@ -53,14 +53,15 @@ interface SpreadsheetProps {
   department?: string;
   rosterValidated: boolean;
   onValidateRoster: () => void;
-  onStartSession: (personId: string) => void;
+  plan: DiscoveryPlan | null;
+  onOpenDiscovery: () => void;
   onSwitchTab: (tab: string) => void;
   onExport: () => void;
   selectedId: string | null;
   onSelectRow: (id: string) => void;
 }
 
-export function Spreadsheet({ people, pedigree, department, rosterValidated, onValidateRoster, onStartSession, onSwitchTab, onExport, selectedId, onSelectRow }: SpreadsheetProps) {
+export function Spreadsheet({ people, pedigree, department, rosterValidated, onValidateRoster, plan, onOpenDiscovery, onSwitchTab, onExport, selectedId, onSelectRow }: SpreadsheetProps) {
   // Progressive disclosure: future-workflow columns appear only once they
   // hold real data — never a wall of "Not mapped yet".
   const hasResponsibilities = useMemo(
@@ -78,6 +79,22 @@ export function Spreadsheet({ people, pedigree, department, rosterValidated, onV
     () => people.some((p) => (pedigree[p.id]?.agents.length ?? 0) > 0),
     [people, pedigree],
   );
+
+  // Sessions start from the Discovery page, not from every table row — rows
+  // show which planned session covers each person instead.
+  const sessionFor = useMemo(() => {
+    const out = new Map<string, { label: string; applied: boolean }>();
+    for (const session of plan?.sessions ?? []) {
+      const applied = session.status === "applied";
+      for (const id of session.scope_ids) {
+        const existing = out.get(id);
+        if (!existing || (existing.applied && !applied)) {
+          out.set(id, { label: SESSION_LABEL[session.type], applied });
+        }
+      }
+    }
+    return out;
+  }, [plan]);
 
   const quality = useMemo(() => {
     const byId = new Map(people.map((p) => [p.id, rowQuality(p, people)]));
@@ -156,7 +173,6 @@ export function Spreadsheet({ people, pedigree, department, rosterValidated, onV
             const agents = ped.agents;
             const q = quality.byId.get(p.id);
             const mapped = isMapped(ped.status);
-            const sessionType = recommendSessionType(p, people, pedigree);
             return (
               <tr key={p.id} className={selectedId === p.id ? "selected" : ""} onClick={() => onSelectRow(p.id)}>
                 <td className="row-index">{String(i + 1).padStart(2, "0")}</td>
@@ -214,13 +230,21 @@ export function Spreadsheet({ people, pedigree, department, rosterValidated, onV
                 )}
                 <td><StatusBadge status={ped.status} /></td>
                 <td>
-                  <button
-                    className={"btn btn-sm " + (mapped ? "btn-ghost" : "btn-outline-cyan")}
-                    title={`${SESSION_LABEL[sessionType]} for ${p.name}`}
-                    onClick={(e) => { e.stopPropagation(); onStartSession(p.id); }}
-                  >
-                    {mapped ? "Update session" : "Start session"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {(() => {
+                      const membership = sessionFor.get(p.id);
+                      if (mapped) return <span className="tag" style={{ color: "var(--green)" }}>mapped</span>;
+                      if (membership && !membership.applied) {
+                        return (
+                          <button className="tag session-chip" title="Covered by a planned session — open the Discovery page to run it" onClick={(e) => { e.stopPropagation(); onOpenDiscovery(); }}>
+                            In {membership.label}
+                          </button>
+                        );
+                      }
+                      return <span className="tag yellow">Needs discovery</span>;
+                    })()}
+                    <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); onSelectRow(p.id); }}>View</button>
+                  </div>
                 </td>
               </tr>
             );

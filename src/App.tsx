@@ -1003,7 +1003,7 @@ export default function App() {
 
           <div className="workspace-body">
             {tab === "spreadsheet" && (
-              <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} rosterValidated={Boolean(rosterValidatedAt)} onValidateRoster={onValidateRoster} onStartSession={onStartSession} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
+              <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} rosterValidated={Boolean(rosterValidatedAt)} onValidateRoster={onValidateRoster} plan={discoveryPlan} onOpenDiscovery={() => setTab("plan")} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
             )}
             {tab === "orgmap" && (() => {
               const view = respView ?? (metrics.respMapped > 0 ? "matrix" : "map");
@@ -1013,8 +1013,8 @@ export default function App() {
                     <button className={"btn btn-sm" + (view === "matrix" ? " btn-outline-cyan" : "")} onClick={() => setRespView("matrix")} title="The working surface: owner × responsibility × task classification with evidence">
                       <Icon name="spreadsheet" size={11} /> Matrix
                     </button>
-                    <button className={"btn btn-sm" + (view === "map" ? " btn-outline-cyan" : "")} onClick={() => setRespView("map")} title={orgMapEarned ? "Responsibility map: owners, coverage, and agents over the org" : "Org preview"}>
-                      <Icon name="network" size={11} /> {orgMapEarned ? "Responsibility Map" : "Org Preview"}
+                    <button className={"btn btn-sm" + (view === "map" ? " btn-outline-cyan" : "")} onClick={() => setRespView("map")} title={orgMapEarned ? "Responsibility map: owners, coverage, and agents over the org" : metrics.mappedPeople > 0 ? "Coverage map: who has been interviewed, which departments are covered" : "Org preview — the roster as a chart"}>
+                      <Icon name="network" size={11} /> {orgMapEarned ? "Responsibility Map" : metrics.mappedPeople > 0 ? "Coverage Map" : "Org Preview"}
                     </button>
                     {view === "map" && !orgMapEarned && (
                       <span className="dim" style={{ fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -1115,6 +1115,7 @@ export default function App() {
           onClose={() => { setWizardPersonId(null); setWizardPlannedSessionId(undefined); setScreen("workspace"); }}
           onApply={onApplyMapping}
           onPlanEvent={onPlanEvent}
+          onToast={pushToast}
         />
       )}
 

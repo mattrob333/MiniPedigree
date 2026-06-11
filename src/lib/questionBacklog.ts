@@ -68,7 +68,9 @@ export function ingestBriefOutcomes(
 ): QuestionBacklogItem[] {
   const next = [...backlog];
   for (const question of brief.questions) {
-    const unanswered = question.outcome === "skipped" || question.outcome === "parked" || question.outcome === undefined;
+    // Skipped, parked, never-asked, and weakly-answered topics all carry
+    // forward — a partial answer is an open question with a head start.
+    const unanswered = question.outcome !== "answered";
     if (!unanswered) continue;
     const personId = question.target_person_id === "group" ? anchorPersonId : question.target_person_id;
     if (hasQuestion(next, personId, question.text)) continue;

@@ -1297,3 +1297,37 @@ button.plan-chip:hover { border-color: var(--border-cyan); }
 .empty-state { max-width: 480px; margin: 60px auto; text-align: center; }
 .empty-state h3 { font-size: 16px; color: var(--text-1); margin: 0 0 8px; }
 .empty-state p { font-size: 13.5px; color: var(--text-3); margin: 0 0 16px; line-height: 1.55; }
+
+/* ════════════════════════════════════════════════════════════════════
+   UX V2: transcript-first discovery
+   ════════════════════════════════════════════════════════════════════ */
+/* Metrics: never render empty grid cells (auto columns, not a fixed 5). */
+.metrics.funnel { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+
+/* Brief sections (grouped agenda) */
+.brief-section { border-top: 1px dashed var(--border-1); padding: 6px 0; }
+.brief-section-head { display: flex; align-items: baseline; gap: 8px; cursor: pointer; list-style: none; padding: 6px 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
+.brief-section-head::-webkit-details-marker { display: none; }
+.brief-section-chevron { transition: transform 0.15s; flex-shrink: 0; align-self: center; }
+details[open] > .brief-section-head .brief-section-chevron { transform: rotate(90deg); }
+.brief-section-hint { font-size: 12px; font-weight: 400; color: var(--text-4); }
+
+/* How-to-run callout */
+.howto-run { border: 1px solid var(--border-cyan); border-radius: 10px; background: color-mix(in srgb, var(--cyan) 4%, var(--bg-2)); padding: 12px 16px; margin-bottom: 12px; }
+.howto-title { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13.5px; color: var(--text-1); margin-bottom: 6px; }
+.howto-run ol { margin: 0; padding-left: 20px; font-size: 13.5px; color: var(--text-2); line-height: 1.7; }
+
+/* Transcript mode */
+.transcript-main { flex: 1; max-width: 860px; display: flex; flex-direction: column; }
+.transcript-status { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--border-1); border-radius: 10px; background: var(--bg-2); margin-bottom: 12px; }
+.transcript-status-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+.transcript-status-sub { font-size: 13px; color: var(--text-3); margin-top: 3px; max-width: 75ch; }
+.transcript-paste { font-size: 14px; min-height: 260px; }
+.transcript-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+
+/* Native capture demotion banner */
+.capture-banner { display: flex; align-items: center; gap: 9px; padding: 8px 20px; font-size: 12.5px; color: var(--text-3); background: var(--bg-2); border-bottom: 1px solid var(--border-1); }
+
+/* Agenda coverage strip in review */
+.agenda-coverage { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border-1); border-radius: 10px; background: var(--bg-2); font-size: 13.5px; color: var(--text-2); margin-bottom: 14px; flex-wrap: wrap; }
+.session-chip { cursor: pointer; border-color: var(--border-cyan); color: var(--cyan); background: transparent; }

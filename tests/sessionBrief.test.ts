@@ -85,3 +85,25 @@ describe("sanitizeBrief", () => {
     expect(cleaned.questions.some((q) => q.text === backlog[0].question)).toBe(true);
   });
 });
+
+describe("assessAgendaCoverage (transcript-first)", () => {
+  it("maps transcript passages back to agenda questions and carries gaps forward", async () => {
+    const { assessAgendaCoverage } = await import("../src/lib/agendaCoverage");
+    const { ingestBriefOutcomes } = await import("../src/lib/questionBacklog");
+    const brief = buildTemplateBrief({ session, participants, companyContext: ctx });
+    const transcript = [
+      "Sam: My week revolves around the Salesforce pipeline. Every Monday I open Salesforce, go deal by deal, flag the stale ones, and send the list to the team before ten.",
+      "Sam: The pipeline coverage number gets produced every week — I pull the open pipeline from Salesforce, divide by the quarterly target, and post it in Slack.",
+      "Rep One: I mostly draft follow-up emails for quiet deals and update next steps in Salesforce.",
+    ].join("\n");
+    const parsed = {};
+    const { brief: scored, coverage } = assessAgendaCoverage(brief, transcript, parsed);
+    expect(coverage.total).toBe(brief.questions.length);
+    expect(coverage.answered).toBeGreaterThan(0);
+    expect(coverage.unanswered).toBeGreaterThan(0);
+    // Unanswered topics flow into the open-questions backlog.
+    const backlog = ingestBriefOutcomes([], scored, [], "P-002");
+    expect(backlog.length).toBe(coverage.unanswered + coverage.partial + scored.questions.filter((q) => q.outcome === undefined).length);
+    expect(backlog.every((b) => b.source === "unanswered_brief")).toBe(true);
+  });
+});

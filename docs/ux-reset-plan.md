@@ -185,3 +185,25 @@ people table, discovery, evidence, visual design), with the amendment that
   coverage-overlay mid-state (status rings already serve this); moving
   recommended sessions out of the org-map rail (the Discovery tab is now the
   primary surface for that).
+
+
+## V2 addendum: transcript-first discovery (2026-06, second review) — shipped
+
+The second review's core correction was adopted: **discovery is
+transcript-first**. Sessions are now Brief → Transcript → Review; the
+per-question cockpit became optional "native capture" behind a secondary
+button. The brief is a facilitator agenda (grouped round-robin + core topics
+expanded; KPI/overlap/carried-over follow-ups collapsed) with Copy agenda and
+a how-to-run callout. The Transcript surface takes paste, .txt/.vtt/.srt
+upload (timestamps stripped), or audio; `assessAgendaCoverage` maps the
+transcript back to the agenda so Review shows "N answered · M carried into
+open questions" and gaps feed the backlog. Also shipped from that review:
+People-table rows show session membership instead of per-row Start session
+(sessions start from Discovery); the Discovery page shows the top 3 sessions
+expanded with the rest collapsed, a Google Meet workflow callout, and one
+primary CTA; the demo-context insert is blocked outside the Lumen Bay demo
+company (trust guard); empty metric cells eliminated (auto-fit grid); map
+staging gained the Coverage Map intermediate label; renames (Conduct
+discovery, Review findings, Open session brief, Open questions). Declined:
+building native live transcription (per the review's own call) and deleting
+the capture UI (demoted, not removed).

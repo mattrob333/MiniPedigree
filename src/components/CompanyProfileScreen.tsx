@@ -165,20 +165,31 @@ export function CompanyProfileScreen({ context, people = [], onSave, onBack }: P
 
               <div className="company-profile-actions">
                 <button className="btn" onClick={onBack}>Cancel</button>
-                <button
-                  className="btn btn-ghost"
-                  title="Load the curated Lumen Bay demo context: goals, KPIs, systems, SOPs, approval rules, SOD docs — readiness 16/16"
-                  onClick={() => {
-                    const demo = demoCompanyContext(profile.company || context.company || "Lumen Bay");
-                    setProfile(demo);
-                    setNotes(notesFromContext(demo));
-                    setUrl(demo.url ?? "");
-                    setMode("manual");
-                    setMessage("Demo context loaded — goals, KPIs, systems, approval rules, and SOD/policy documents. Save to apply.");
-                  }}
-                >
-                  <Icon name="play" size={12} /> Insert demo context
-                </button>
+                {/* Trust guard: demo context belongs to Lumen Bay. Never let one
+                    company's context land in another company's workspace. */}
+                {(() => {
+                  const activeName = profile.company || context.company || "";
+                  const isDemoCompany = /lumen\s*bay/i.test(activeName);
+                  return (
+                    <button
+                      className="btn btn-ghost"
+                      disabled={!isDemoCompany}
+                      title={isDemoCompany
+                        ? "Load the curated Lumen Bay demo context: goals, KPIs, systems, SOPs, approval rules, SOD docs — readiness 16/16"
+                        : `Blocked: this demo context belongs to "Lumen Bay", but the active company is "${activeName}". Open the Lumen Bay demo company to use it — mixing client context is never allowed.`}
+                      onClick={() => {
+                        const demo = demoCompanyContext(activeName);
+                        setProfile(demo);
+                        setNotes(notesFromContext(demo));
+                        setUrl(demo.url ?? "");
+                        setMode("manual");
+                        setMessage("Demo context loaded (source: Lumen Bay) — goals, KPIs, systems, approval rules, and SOD/policy documents. Save to apply.");
+                      }}
+                    >
+                      <Icon name="play" size={12} /> Insert demo context (Lumen Bay)
+                    </button>
+                  );
+                })()}
                 <span style={{ flex: 1 }} />
                 <button className="btn btn-outline-cyan" onClick={runParse} disabled={busy || (!url.trim() && !notes.trim())}>
                   <Icon name="sparkles" size={12} /> {busy ? "Researching..." : url.trim() ? "Research + Parse" : "Parse Notes"}

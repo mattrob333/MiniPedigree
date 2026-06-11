@@ -89,7 +89,7 @@ export function nextAction(stage: CompanyStage, s: MaturityInput): NextAction {
       };
     }
     case "review_findings":
-      return { label: "Review extracted work", hint: `${s.reviewQueueCount} item${s.reviewQueueCount === 1 ? "" : "s"} waiting for confirmation — evidence in, trusted map out.`, target: { kind: "tab", tab: "review" } };
+      return { label: "Review findings", hint: `${s.reviewQueueCount} item${s.reviewQueueCount === 1 ? "" : "s"} waiting for confirmation — evidence in, trusted map out.`, target: { kind: "tab", tab: "review" } };
     case "plan_agents":
       return { label: "Plan agents", hint: "Choose which delegatable tasks become agents, under which human owner.", target: { kind: "tab", tab: "agentplan" } };
     case "export":
@@ -206,7 +206,7 @@ export interface ChecklistItem {
 const LADDER: { id: CompanyStage; label: string }[] = [
   { id: "validate_roster", label: "Validate roster" },
   { id: "add_context", label: "Add company context" },
-  { id: "run_sessions", label: "Run discovery sessions" },
+  { id: "run_sessions", label: "Conduct discovery" },
   { id: "review_findings", label: "Review extracted work" },
   { id: "plan_agents", label: "Plan agents" },
   { id: "export", label: "Approve & export" },
