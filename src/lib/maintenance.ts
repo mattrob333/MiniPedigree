@@ -3,7 +3,7 @@ import type {
   StackSignalSource,
 } from "@/types";
 import type { MaintenanceParseServerSignal } from "./api";
-import { extractGovernanceRulesDeterministic, significantKeywords } from "./governance";
+import { extractGovernanceRulesDeterministic, tokenOverlap } from "./governance";
 import type { CompactStackState } from "./meetings";
 
 // ── Living Stack A.1: the maintenance parse (deterministic fallback) ───
@@ -18,15 +18,6 @@ let signalSeq = 0;
 function nextSignalId(): string {
   signalSeq += 1;
   return `SIG-${Date.now().toString(36)}-${signalSeq}`;
-}
-
-function tokenOverlap(a: string, b: string): number {
-  const ta = new Set(significantKeywords(a));
-  const tb = new Set(significantKeywords(b));
-  if (!ta.size || !tb.size) return 0;
-  let shared = 0;
-  for (const t of ta) if (tb.has(t)) shared++;
-  return shared / Math.min(ta.size, tb.size);
 }
 
 const MATCH_THRESHOLD = 0.6;

@@ -4,6 +4,7 @@ import type {
   FreshnessState,
   PedigreeState,
   Person,
+  QuestionBacklogItem,
   TaskItem,
 } from "@/types";
 
@@ -160,15 +161,21 @@ export function collectStaleItems(
   return out.sort((a, b) => rank[a.state] - rank[b.state]);
 }
 
-/** Stale-check questions to inject into the next relevant session brief. */
-export function staleConfirmationQuestions(items: StaleItem[], personIds: string[], limit = 4): { person_id: string; question: string; source_ref: string }[] {
+/**
+ * Stale-check questions for the next relevant session brief, shaped as
+ * backlog items so every brief-question source flows through one channel.
+ */
+export function staleConfirmationQuestions(items: StaleItem[], personIds: string[], limit = 4): QuestionBacklogItem[] {
   const ids = new Set(personIds);
   return items
     .filter((i) => i.kind === "task" && i.state === "stale" && ids.has(i.person_id))
     .slice(0, limit)
     .map((i) => ({
+      id: `QB-STALE-${i.id}`,
       person_id: i.person_id,
       question: `Is "${i.label}" still happening the way it was originally described? Walk me through the last time.`,
+      source: "parser_open_question" as const,
       source_ref: i.id,
+      created_at: new Date().toISOString(),
     }));
 }

@@ -155,6 +155,14 @@ describe("validation gates", () => {
     expect(withAuthority.failures).toHaveLength(0);
   });
 
+  it("approval authority is domain-scoped: spend authority does not unlock hiring approvals", () => {
+    const spendOnly = { ...jane, authority: { ...baseProfile(), approval_authority: [{ domain: "spend", limit: { amount: 5000, description: "Managers approve spend above $500" }, provenance: { source: "operator" as const, operator_id: "op" }, status: "reviewed" as const }] } };
+    const hiring = authorityGates({ owner: spendOnly, mcpGrants: [], allowed: ["Approve hiring offers"] });
+    expect(hiring.failures.some((f) => f.includes("approve-class"))).toBe(true);
+    const spend = authorityGates({ owner: spendOnly, mcpGrants: [], allowed: ["Approve spend requests"] });
+    expect(spend.failures).toHaveLength(0);
+  });
+
   it("blocks a preparer's agent from approve-class actions in that flow", () => {
     const res = authorityGates({
       owner: { ...jane, authority: { ...baseProfile(), approval_authority: [{ domain: "payments", provenance: { source: "operator", operator_id: "op" }, status: "reviewed" }], sod_roles: [{ flow: "payment_processing", role: "preparer", provenance: { source: "rule_derived", rule_id: "GR-1" } }] } },

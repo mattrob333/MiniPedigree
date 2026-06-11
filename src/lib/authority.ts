@@ -336,6 +336,23 @@ export function isApproveClassAction(action: string): boolean {
   return APPROVE_CLASS_RE.test(action);
 }
 
+/**
+ * Domain match for approve-class actions: tokens of the authority's domain
+ * (and its limit description, for rule-derived domains) must appear in the
+ * action. Singular/plural tolerant ("payments" covers "payment runs").
+ */
+export function approvalDomainMatches(authority: ApprovalAuthority, action: string): boolean {
+  const hay = action.toLowerCase();
+  const tokens = [
+    ...authority.domain.split(/[_\s]+/),
+    ...(authority.limit?.description ? authority.limit.description.toLowerCase().split(/[^a-z0-9$]+/) : []),
+  ].filter((t) => t.length >= 4 && !["approval", "approve", "must", "above", "require", "requires"].includes(t));
+  return tokens.some((token) => {
+    const stem = token.endsWith("s") ? token.slice(0, -1) : token;
+    return hay.includes(token) || hay.includes(stem);
+  });
+}
+
 export interface AuthorityGateResult {
   failures: string[];
   warnings: string[];
@@ -378,12 +395,14 @@ export function authorityGates(args: {
   }
 
   // Approve-class actions need reviewed (or verified) owner approval
-  // authority — asserted claims never activate compilation.
+  // authority IN A MATCHING DOMAIN — asserted claims never activate
+  // compilation, and spend authority does not unlock hiring approvals.
   const approveActions = args.allowed.filter(isApproveClassAction);
   if (approveActions.length) {
     const reviewed = (profile?.approval_authority ?? []).filter((a) => a.status === "reviewed" || a.status === "verified");
-    if (!reviewed.length) {
-      for (const action of approveActions) {
+    for (const action of approveActions) {
+      const covered = reviewed.some((a) => approvalDomainMatches(a, action));
+      if (!covered) {
         failures.push(`Allowed action "${action}" is approve-class but ${args.owner.name} has no reviewed approval authority covering it.`);
       }
     }

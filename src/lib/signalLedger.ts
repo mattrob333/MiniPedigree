@@ -1,5 +1,5 @@
 import type { StackSignal } from "@/types";
-import { significantKeywords } from "./governance";
+import { tokenOverlap } from "./governance";
 import { RECURRENCE_RE } from "./maintenance";
 
 // ── Living Stack A.4: durability and corroboration ─────────────────────
@@ -14,15 +14,6 @@ import { RECURRENCE_RE } from "./maintenance";
 //  - backlog_resolution  → auto-links; surfaced in the digest as a free win
 
 export const DEFAULT_CANDIDATE_EXPIRY_DAYS = 30;
-
-function tokenOverlap(a: string, b: string): number {
-  const ta = new Set(significantKeywords(a));
-  const tb = new Set(significantKeywords(b));
-  if (!ta.size || !tb.size) return 0;
-  let shared = 0;
-  for (const t of ta) if (tb.has(t)) shared++;
-  return shared / Math.min(ta.size, tb.size);
-}
 
 const CORROBORATION_THRESHOLD = 0.6;
 

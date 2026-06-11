@@ -333,14 +333,18 @@ export default function App() {
   }, []);
 
   // Persist the active workspace by its own id whenever it changes.
+  // Debounced: bursts of state updates (digest applies, guided-capture
+  // sessions, member confirms) collapse into one localStorage/Supabase write.
   useEffect(() => {
     if (booting) return;
-    if (currentWorkspaceId && people.length && profile) {
+    if (!(currentWorkspaceId && people.length && profile)) return;
+    const handle = setTimeout(() => {
       void saveWorkspace(
         { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, createdAt: new Date().toISOString() },
         profile.email,
       );
-    }
+    }, 800);
+    return () => clearTimeout(handle);
   }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));

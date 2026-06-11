@@ -309,24 +309,38 @@ export function MemberWorkspace({ person, people, pedigree, registry, ledger, ba
             </p>
             <SelfAttestForm knownTools={person.tools} grants={person.authority?.system_grants ?? []} onAttest={selfAttestAccess} />
 
-            {reports.length > 0 && (
-              <>
-                <div className="ps-head" style={{ marginTop: 18 }}><Icon name="users" size={13} stroke="var(--cyan)" /> My Team</div>
-                {reports.map((r) => {
-                  const stale = collectStaleItems([r], pedigree, registry).filter((i) => i.state === "stale" && i.kind === "task").length;
-                  return (
-                    <div className="member-request" key={r.id}>
-                      <span className="member-request-label">{r.name} — {r.title}</span>
-                      {stale > 0 ? <span className="tag yellow">{stale} stale item{stale === 1 ? "" : "s"}</span> : <span className="tag">fresh</span>}
-                    </div>
-                  );
-                })}
-              </>
-            )}
+            {reports.length > 0 && <TeamRollup reports={reports} pedigree={pedigree} registry={registry} />}
           </section>
         </div>
       </div>
     </div>
+  );
+}
+
+function TeamRollup({ reports, pedigree, registry }: { reports: Person[]; pedigree: PedigreeState; registry: AgentRegistryEntry[] }) {
+  // One stale scan for the whole team, grouped by person.
+  const staleByPerson = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of collectStaleItems(reports, pedigree, registry)) {
+      if (item.state === "stale" && item.kind === "task") {
+        counts.set(item.person_id, (counts.get(item.person_id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [reports, pedigree, registry]);
+  return (
+    <>
+      <div className="ps-head" style={{ marginTop: 18 }}><Icon name="users" size={13} stroke="var(--cyan)" /> My Team</div>
+      {reports.map((r) => {
+        const stale = staleByPerson.get(r.id) ?? 0;
+        return (
+          <div className="member-request" key={r.id}>
+            <span className="member-request-label">{r.name} — {r.title}</span>
+            {stale > 0 ? <span className="tag yellow">{stale} stale item{stale === 1 ? "" : "s"}</span> : <span className="tag">fresh</span>}
+          </div>
+        );
+      })}
+    </>
   );
 }
 

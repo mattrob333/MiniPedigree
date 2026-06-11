@@ -4,7 +4,7 @@ import type {
   SessionBrief,
   SessionNote,
 } from "@/types";
-import { significantKeywords } from "./governance";
+import { tokenOverlap } from "./governance";
 
 // ── Guided Discovery Stage 5: the question ledger / backlog ────────────
 // Unanswered brief questions, parser open_questions, and parked items flow
@@ -95,15 +95,6 @@ export function ingestBriefOutcomes(
     });
   }
   return next;
-}
-
-function tokenOverlap(a: string, b: string): number {
-  const ta = new Set(significantKeywords(a));
-  const tb = new Set(significantKeywords(b));
-  if (!ta.size || !tb.size) return 0;
-  let shared = 0;
-  for (const t of ta) if (tb.has(t)) shared++;
-  return shared / Math.min(ta.size, tb.size);
 }
 
 const RESOLVE_THRESHOLD = 0.5;

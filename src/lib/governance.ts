@@ -81,6 +81,21 @@ export function significantKeywords(text: string): string[] {
   ));
 }
 
+/**
+ * Shared fuzzy-match metric: fraction of significant tokens two texts share
+ * (relative to the smaller set). Used for stack diffs, signal corroboration,
+ * backlog resolution, and merge detection — one implementation so matching
+ * behaves identically everywhere.
+ */
+export function tokenOverlap(a: string, b: string): number {
+  const ta = new Set(significantKeywords(a));
+  const tb = new Set(significantKeywords(b));
+  if (!ta.size || !tb.size) return 0;
+  let shared = 0;
+  for (const t of ta) if (tb.has(t)) shared++;
+  return shared / Math.min(ta.size, tb.size);
+}
+
 function splitSentences(text: string): string[] {
   return text
     .replace(/\r/g, "")

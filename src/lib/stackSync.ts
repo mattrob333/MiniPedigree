@@ -13,7 +13,7 @@ import type {
   TaskItem,
 } from "@/types";
 import { applyAssertion } from "./authority";
-import { extractGovernanceRulesDeterministic, significantKeywords } from "./governance";
+import { extractGovernanceRulesDeterministic, tokenOverlap } from "./governance";
 import { deriveProvenance } from "./provenance";
 import { markStale } from "./registry";
 import type { ItemProvenance } from "@/types";
@@ -35,15 +35,6 @@ export interface StackDiffInput {
 }
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-
-function tokenOverlap(a: string, b: string): number {
-  const ta = new Set(significantKeywords(a));
-  const tb = new Set(significantKeywords(b));
-  if (!ta.size || !tb.size) return 0;
-  let shared = 0;
-  for (const t of ta) if (tb.has(t)) shared++;
-  return shared / Math.min(ta.size, tb.size);
-}
 
 const SIMILAR_THRESHOLD = 0.6;
 
@@ -385,6 +376,10 @@ export function applyStackProposals(input: ApplyStackInput): ApplyStackResult {
           if (person.id !== personId) return person;
           const base = person.authority ?? { system_grants: [], approval_authority: [], sod_roles: [], updated_at: now() };
           const res = applyAssertion(base, personId, assertion, provenance);
+          // The discrepancy queue is itself audit evidence — never drop it.
+          for (const d of res.discrepancies) {
+            proposal.summary += ` [discrepancy flagged: ${d.lower_source} claims ${d.asserted} for ${d.key}, but ${d.higher_source} says ${d.held} — not applied]`;
+          }
           return { ...person, authority: res.profile };
         });
         peopleChanged = true;

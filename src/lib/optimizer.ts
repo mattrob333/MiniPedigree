@@ -6,7 +6,7 @@ import type {
   StackSignal,
 } from "@/types";
 import { classifyTask } from "./parse";
-import { significantKeywords } from "./governance";
+import { tokenOverlap } from "./governance";
 import { corroborationsFor } from "./signalLedger";
 import { collectStaleItems } from "./freshness";
 import type { FreshnessConfig } from "@/types";
@@ -40,15 +40,6 @@ export const OPTIMIZER_WEIGHTS = {
 };
 
 const PAIN_RE = /\btakes\s+forever\b|\bmanual(ly)?\b|\bevery\s+single\b|\btedious\b|\bpainful\b|\bhours\b|\bnightmare\b|\bby\s+hand\b/i;
-
-function tokenOverlap(a: string, b: string): number {
-  const ta = new Set(significantKeywords(a));
-  const tb = new Set(significantKeywords(b));
-  if (!ta.size || !tb.size) return 0;
-  let shared = 0;
-  for (const t of ta) if (tb.has(t)) shared++;
-  return shared / Math.min(ta.size, tb.size);
-}
 
 function candidateLabel(signal: StackSignal): string {
   const patch = signal.proposed_patch as { label?: string | null } | undefined;

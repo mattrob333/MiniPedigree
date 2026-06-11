@@ -143,17 +143,7 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
         .slice(0, 4);
       // Stale records are just another carried-over question source: inject
       // confirmation checks for this scope into the brief.
-      const staleQuestions = staleConfirmationQuestions(
-        collectStaleItems(scopedPeople, pedigree, []),
-        scopeIds,
-      ).map((q, i) => ({
-        id: `QB-STALE-${q.source_ref}-${i}`,
-        person_id: q.person_id,
-        question: q.question,
-        source: "parser_open_question" as const,
-        source_ref: q.source_ref,
-        created_at: new Date().toISOString(),
-      }));
+      const staleQuestions = staleConfirmationQuestions(collectStaleItems(scopedPeople, pedigree, []), scopeIds);
       const { brief: generated } = await requestSessionBrief({
         session: { id: sessionId, type: sessionType, anchor_person_id: person.id, scope_ids: scopeIds },
         participants: scopedPeople,
