@@ -255,30 +255,48 @@ ol.brief-question-list.nested > .brief-question::before { content: "–"; text-a
   overflow-wrap: anywhere;
   line-height: 1.55;
 }
-.review-task-section-label {
-  margin: 8px 0 4px 26px;
-  font-size: 11px;
-  letter-spacing: 0;
-  color: var(--text-4);
-  font-family: var(--font-mono);
-}
-.review-task-description,
-.review-action-items {
-  grid-column: 2 / -1;
-  color: var(--text-4);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.review-action-items summary {
-  cursor: pointer;
-  color: var(--cyan);
-  font-size: 11px;
-  font-family: var(--font-mono);
-}
-.review-action-items ul {
-  margin: 4px 0 8px 16px;
+/* ── Session review: task cards (name → description → action items) ──── */
+.review-task-head { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.review-task-head input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+.review-task-label { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--text-1); line-height: 1.45; }
+.review-task-badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.review-task-desc { margin: 6px 0 0 26px; font-size: 13px; line-height: 1.5; color: var(--text-3); max-width: 78ch; }
+.review-task-foot { display: flex; gap: 18px; align-items: center; margin: 8px 0 0 26px; min-height: 18px; }
+.review-quiet-btn {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  background: transparent;
+  border: 0;
   padding: 0;
+  font-size: 12px;
+  color: var(--text-4);
+  cursor: pointer;
+  white-space: nowrap;
 }
+.review-quiet-btn:hover { color: var(--cyan); }
+.review-quiet-btn.active { color: var(--cyan); }
+.review-task-unlock { font-size: 12px; color: var(--text-4); font-style: italic; }
+.review-task-actionitems {
+  margin: 10px 0 2px 26px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-1);
+  border-radius: 8px;
+  background: var(--bg-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 18px;
+}
+.ai-col-head {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
+  margin-bottom: 5px;
+}
+.review-task-actionitems ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.65; color: var(--text-2); }
+.review-task-actionitems ul.dod { list-style: none; padding-left: 0; }
 .audit-trail-drawer {
   width: 520px;
   max-width: min(520px, 92vw);
@@ -1428,12 +1446,13 @@ button.plan-chip:hover { border-color: var(--border-cyan); }
 .review-person-head { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-bottom: 8px; color: var(--text-1); }
 .review-finding { border: 1px solid var(--border-1); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--bg-2); }
 .review-finding.rejected { opacity: 0.45; }
-.review-finding-row { display: flex; gap: 9px; align-items: center; cursor: pointer; }
-.review-finding-title { font-size: 14.5px; font-weight: 600; color: var(--text-1); flex: 1; }
-.review-tasks { margin: 8px 0 0 26px; display: flex; flex-direction: column; gap: 4px; }
-.review-task { display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--text-2); cursor: pointer; padding: 3px 0; }
-.review-task.rejected { opacity: 0.45; text-decoration: line-through; }
-.review-task-label { flex: 1; }
+.review-finding-row { display: flex; gap: 10px; align-items: center; }
+.review-finding-check { display: flex; gap: 9px; align-items: center; cursor: pointer; flex: 1; min-width: 0; }
+.review-finding-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+.review-tasks { margin: 12px 0 2px 26px; display: flex; flex-direction: column; gap: 8px; }
+.review-task { padding: 11px 12px; border: 1px solid var(--border-1); border-radius: 9px; background: var(--bg-1); }
+.review-task.rejected { opacity: 0.45; }
+.review-task.rejected .review-task-label { text-decoration: line-through; }
 .template-parse-warning { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 14px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--yellow) 45%, var(--border-1)); border-radius: 8px; background: color-mix(in srgb, var(--yellow) 9%, var(--bg-2)); color: var(--text-2); }
 .template-parse-warning strong { display: block; color: var(--text-1); margin-bottom: 3px; }
 .template-parse-warning span { display: block; font-size: 12.5px; line-height: 1.45; }

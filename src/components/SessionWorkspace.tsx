@@ -135,6 +135,11 @@ interface Props {
 let noteSeq = 0;
 
 /** Strip WEBVTT/SRT headers and timestamps so meeting exports paste cleanly. */
+/** Split a free-text definition-of-done into checklist items. */
+function dodItems(text: string): string[] {
+  return text.split(/\n|;|\.\s+/).map((item) => item.trim()).filter(Boolean);
+}
+
 function cleanTranscriptFile(raw: string): string {
   return raw
     .replace(/^WEBVTT.*$/m, "")
@@ -168,6 +173,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
   const [outcomeBrief, setOutcomeBrief] = useState<SessionBrief | null>(null);
   const [rejected, setRejected] = useState<Set<FindingKey>>(new Set());
   const [flagged, setFlagged] = useState<Set<FindingKey>>(new Set());
+  const [openTasks, setOpenTasks] = useState<Set<FindingKey>>(new Set());
   const [evidenceDrawer, setEvidenceDrawer] = useState<{ title: string; provenance: ItemProvenance } | null>(null);
   const [parkText, setParkText] = useState("");
   const mediaRef = useRef<MediaRecorder | null>(null);
@@ -850,53 +856,89 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                     ];
                     return (
                       <div className={"review-finding" + (rRejected ? " rejected" : "")} key={r.id}>
-                        <label className="review-finding-row">
-                          <input type="checkbox" checked={!rRejected} onChange={() => toggleRejected(rKey)} aria-label={`Accept responsibility: ${r.title}`} />
-                          <span className="review-finding-title">{r.title}</span>
+                        <div className="review-finding-row">
+                          <label className="review-finding-check">
+                            <input type="checkbox" checked={!rRejected} onChange={() => toggleRejected(rKey)} aria-label={`Accept responsibility: ${r.title}`} />
+                            <span className="review-finding-title">{r.title}</span>
+                          </label>
                           <ProvenanceBadge provenance={deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence, source: r.source })} compact onOpen={() => setEvidenceDrawer({ title: r.title, provenance: deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence, source: r.source }) })} />
-                          {r.confidence !== undefined && <span className="dim mono" style={{ fontSize: 11 }}>{Math.round(r.confidence * 100)}%</span>}
-                        </label>
+                          {!rRejected && (
+                            <button className={"review-quiet-btn" + (rFlagged ? " active" : "")} onClick={() => toggleFlagged(rKey)}>
+                              <Icon name="flag" size={11} /> {rFlagged ? "Will ask later" : "Ask later"}
+                            </button>
+                          )}
+                        </div>
+                        {r.evidence_quote && <blockquote className="digest-evidence" style={{ margin: "6px 0 0 26px" }}>“{r.evidence_quote}”</blockquote>}
                         {!rRejected && (
-                          <button className={"btn btn-sm " + (rFlagged ? "btn-outline-cyan" : "btn-ghost")} onClick={() => toggleFlagged(rKey)}>
-                            <Icon name="flag" size={11} /> {rFlagged ? "Will ask later" : "Ask later"}
-                          </button>
-                        )}
-                        {r.evidence_quote && <blockquote className="digest-evidence" style={{ marginLeft: 26 }}>“{r.evidence_quote}”</blockquote>}
-                        {!rRejected && (
-                          <>
-                          <div className="review-task-section-label">TASKS</div>
                           <div className="review-tasks">
                             {allTasks.map((t) => {
                               const tKey = taskKey(p.id, r.id, t.label);
                               const tRejected = rejected.has(tKey);
                               const tFlagged = flagged.has(tKey);
+                              const tOpen = openTasks.has(tKey);
                               const detail = r.taskDetails?.find((x) => x.name.trim().toLowerCase() === t.label.trim().toLowerCase());
+                              const prov = deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source });
+                              const done = detail?.definition_of_done ? dodItems(detail.definition_of_done) : [];
+                              const actionCount = (detail?.inputs?.length ?? 0) + (detail?.outputs?.length ?? 0) + done.length;
                               return (
-                                <label className={"review-task" + (tRejected ? " rejected" : "")} key={tKey}>
-                                  <input type="checkbox" checked={!tRejected} onChange={() => toggleRejected(tKey)} aria-label={`Accept task: ${t.label}`} />
-                                  <span className="review-task-label">{t.label}</span>
-                                  <span className={"tag " + t.color}>{t.cls}</span>
-                                  <ProvenanceBadge provenance={deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source })} compact onOpen={() => setEvidenceDrawer({ title: t.label, provenance: deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source }) })} />
-                                  {detail?.evidence_quote && <span className="dim" style={{ fontSize: 11.5 }} title={detail.evidence_quote}><Icon name="transcript" size={10} /> evidence</span>}
-                                  {detail?.plain_language_description && <span className="review-task-description">{detail.plain_language_description}</span>}
-                                  {(detail?.inputs?.length || detail?.outputs?.length || detail?.definition_of_done) ? (
-                                    <details className="review-action-items" onClick={(e) => e.stopPropagation()}>
-                                      <summary>ACTION ITEMS</summary>
-                                      {detail.inputs?.length ? <div><strong>Inputs</strong><ul>{detail.inputs.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-                                      {detail.outputs?.length ? <div><strong>Outputs</strong><ul>{detail.outputs.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
-                                      {detail.definition_of_done ? <div><strong>Definition of done</strong><ul>{detail.definition_of_done.split(/\n|;|\.\s+/).map((item) => item.trim()).filter(Boolean).map((item) => <li key={item}>☐ {item}</li>)}</ul></div> : null}
-                                    </details>
-                                  ) : parseSource !== "ai" ? <span className="review-task-description">Action items unlock with deep extraction (API key required).</span> : null}
-                                  {!tRejected && (
-                                    <button type="button" className={"btn btn-sm " + (tFlagged ? "btn-outline-cyan" : "btn-ghost")} onClick={(e) => { e.preventDefault(); toggleFlagged(tKey); }}>
-                                      {tFlagged ? "Will ask later" : "Ask later"}
-                                    </button>
+                                <div className={"review-task" + (tRejected ? " rejected" : "")} key={tKey}>
+                                  <label className="review-task-head">
+                                    <input type="checkbox" checked={!tRejected} onChange={() => toggleRejected(tKey)} aria-label={`Accept task: ${t.label}`} />
+                                    <span className="review-task-label">{t.label}</span>
+                                    <span className="review-task-badges">
+                                      <span className={"tag " + t.color}>{t.cls}</span>
+                                      <ProvenanceBadge provenance={prov} compact onOpen={() => setEvidenceDrawer({ title: t.label, provenance: prov })} />
+                                    </span>
+                                  </label>
+                                  {detail?.plain_language_description && <p className="review-task-desc">{detail.plain_language_description}</p>}
+                                  <div className="review-task-foot">
+                                    {actionCount > 0 ? (
+                                      <button
+                                        className={"review-quiet-btn" + (tOpen ? " active" : "")}
+                                        onClick={() => setOpenTasks((prev) => { const next = new Set(prev); next.has(tKey) ? next.delete(tKey) : next.add(tKey); return next; })}
+                                      >
+                                        <Icon name={tOpen ? "chevron-down" : "chevron-right"} size={10} /> Action items ({actionCount})
+                                      </button>
+                                    ) : parseSource !== "ai" ? (
+                                      <span className="review-task-unlock">Action items unlock with deep extraction (API key required)</span>
+                                    ) : null}
+                                    {(detail?.evidence_quote || r.evidence_quote) && (
+                                      <button className="review-quiet-btn" onClick={() => setEvidenceDrawer({ title: t.label, provenance: prov })}>
+                                        <Icon name="transcript" size={10} /> Evidence
+                                      </button>
+                                    )}
+                                    {!tRejected && (
+                                      <button className={"review-quiet-btn" + (tFlagged ? " active" : "")} onClick={() => toggleFlagged(tKey)}>
+                                        <Icon name="flag" size={10} /> {tFlagged ? "Will ask later" : "Ask later"}
+                                      </button>
+                                    )}
+                                  </div>
+                                  {tOpen && actionCount > 0 && detail && (
+                                    <div className="review-task-actionitems">
+                                      {detail.inputs?.length ? (
+                                        <div>
+                                          <div className="ai-col-head">Inputs</div>
+                                          <ul>{detail.inputs.map((item) => <li key={item}>{item}</li>)}</ul>
+                                        </div>
+                                      ) : null}
+                                      {detail.outputs?.length ? (
+                                        <div>
+                                          <div className="ai-col-head">Outputs</div>
+                                          <ul>{detail.outputs.map((item) => <li key={item}>{item}</li>)}</ul>
+                                        </div>
+                                      ) : null}
+                                      {done.length ? (
+                                        <div>
+                                          <div className="ai-col-head">Definition of done</div>
+                                          <ul className="dod">{done.map((item) => <li key={item}>☐ {item}</li>)}</ul>
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   )}
-                                </label>
+                                </div>
                               );
                             })}
                           </div>
-                          </>
                         )}
                       </div>
                     );
