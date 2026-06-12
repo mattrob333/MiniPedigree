@@ -47,7 +47,6 @@ import { copyText } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
 import { ScheduleSessionModal } from "./modals/ScheduleSessionModal";
 import { briefToParticipantMarkdown } from "@/lib/prepSheet";
-import { OrgMapMini } from "./OrgMapMini";
 import { EvidenceDrawer } from "./EvidenceDrawer";
 
 const SHOW_NATIVE_CAPTURE = false;
@@ -119,14 +118,10 @@ interface Props {
   plannedSessionId?: string;
   plannedSession?: PlannedSession;
   questionBacklog?: QuestionBacklogItem[];
-  reviewQueueCount: number;
-  nextPendingSession?: PlannedSession;
-  discoveryJustCompleted?: boolean;
-  completionCoverage?: { covered: number; total: number };
   onClose: () => void;
   onApply: (args: ApplyMappingArgs) => void;
-  onReviewFindings: () => void;
-  onStartNextSession: (session: PlannedSession) => void;
+  /** Called after a successful apply — the parent navigates (no dead-end screen here). */
+  onApplied: () => void;
   onPlanEvent?: (sessionId: string, status: PlannedSessionStatus, briefId?: string) => void;
   onScheduleSession?: (sessionId: string, schedule: SessionSchedule) => void;
   onToast?: (t1: string, t2?: string, green?: boolean) => void;
@@ -150,7 +145,7 @@ function cleanTranscriptFile(raw: string): string {
     .trim();
 }
 
-export function SessionWorkspace({ person, people, pedigree, companyContext, plannedSessionId, plannedSession, questionBacklog = [], reviewQueueCount, nextPendingSession, discoveryJustCompleted, completionCoverage, onClose, onApply, onReviewFindings, onStartNextSession, onPlanEvent, onScheduleSession, onToast }: Props) {
+export function SessionWorkspace({ person, people, pedigree, companyContext, plannedSessionId, plannedSession, questionBacklog = [], onClose, onApply, onApplied, onPlanEvent, onScheduleSession, onToast }: Props) {
   const sessionType: MappingSessionType = useMemo(
     () => recommendSessionType(person, people, pedigree),
     [person, people, pedigree],
@@ -166,7 +161,6 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [appliedSummary, setAppliedSummary] = useState<{ responsibilities: number; tasks: number; exceptions: number } | null>(null);
   const [parsed, setParsed] = useState<ParsedMap | null>(null);
   const [parseSource, setParseSource] = useState<"ai" | "local">("local");
   const [coverage, setCoverage] = useState<AgendaCoverage | null>(null);
@@ -385,7 +379,6 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
     if (!parsed) return;
     const accepted = filterParsedMap(parsed, rejected);
     const finalBrief = outcomeBrief ?? brief ?? undefined;
-    const counts = countFindings(accepted, scopeIds);
     const exceptionKeys = [...flagged].filter((key) => !rejected.has(key));
     onApply({
       scopeIds,
@@ -397,7 +390,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
       ...(finalBrief ? { brief: finalBrief } : {}),
       ...(capture.parked.length ? { parkedNotes: capture.parked } : {}),
     });
-    setAppliedSummary({ ...counts, exceptions: exceptionKeys.length });
+    onApplied();
   };
 
   const wordCount = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
@@ -413,48 +406,6 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
   const selectedFindings = surviving.responsibilities + surviving.tasks;
   const activeExceptionCount = [...flagged].filter((key) => !rejected.has(key)).length;
   const allCoverageTargets = Boolean(brief && scopedPeople.length > 0 && scopedPeople.every((p) => brief.coverage_targets.includes(p.id)));
-  const nextSessionPerson = nextPendingSession ? people.find((p) => p.id === nextPendingSession.anchor_person_id) : undefined;
-  const nextSessionLabel = nextPendingSession && nextSessionPerson ? `${SESSION_LABEL[nextPendingSession.type]} - ${nextSessionPerson.name}` : undefined;
-
-  if (appliedSummary) {
-    return (
-      <div className="session-screen">
-        <div className="session-head" style={{ borderTop: `3px solid ${dept.accent}` }}>
-          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="chevron-left" size={12} /> Exit session</button>
-          <div className="session-title">
-            <h2><Icon name="check-circle" size={15} stroke="var(--green)" /> Findings applied</h2>
-            <span className="session-sub">{SESSION_LABEL[sessionType]} - {person.name}</span>
-          </div>
-        </div>
-        <div className="session-body apply-complete">
-          <section className="stage-complete-card session-apply-complete-card">
-            <div className="stage-complete-icon"><Icon name="checkmark" size={18} /></div>
-            <div>
-              <h3>{discoveryJustCompleted ? "Discovery complete" : "Session findings applied"}</h3>
-              {discoveryJustCompleted && completionCoverage ? (
-                <p>{completionCoverage.covered}/{completionCoverage.total} people covered. The discovery sprint is ready for human review.</p>
-              ) : (
-                <>
-                <OrgMapMini people={people} pedigree={pedigree} highlightIds={scopedPeople.map((p) => p.id)} height={320} />
-                <p>{appliedSummary.responsibilities} responsibilities and {appliedSummary.tasks} tasks confirmed from this session{appliedSummary.exceptions ? `; ${appliedSummary.exceptions} follow-up${appliedSummary.exceptions === 1 ? "" : "s"} noted - they'll be raised in the next session.` : "."}</p>
-                </>
-              )}
-            </div>
-            <div className="stage-complete-actions">
-              {!discoveryJustCompleted && nextPendingSession && nextSessionLabel && (
-                <button className="btn btn-primary" onClick={() => onStartNextSession(nextPendingSession)}>
-                  <Icon name="arrow-right" size={13} /> Next session: {nextSessionLabel}
-                </button>
-              )}
-              <button className={nextPendingSession ? "btn btn-ghost" : "btn btn-primary"} onClick={onReviewFindings}>
-                <Icon name="shield" size={13} /> {reviewQueueCount ? `Follow-ups (${reviewQueueCount})` : "Plan agents"}
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
-    );
-  }
 
   const MODES: [Mode, string, string][] = [
     ["brief", "Brief", "The agenda that runs the meeting."],

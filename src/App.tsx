@@ -307,7 +307,6 @@ export default function App() {
   const [auditLog, setAuditLog] = useState<StackAuditRecord[]>([]);
   const [events, setEvents] = useState<WorkspaceAuditEvent[]>([]);
   const [discoveryPlan, setDiscoveryPlan] = useState<DiscoveryPlan | null>(null);
-  const [discoveryJustCompleted, setDiscoveryJustCompleted] = useState(false);
   const [sessionBriefs, setSessionBriefs] = useState<SessionBrief[]>([]);
   const [questionBacklog, setQuestionBacklog] = useState<QuestionBacklogItem[]>([]);
   const [meetings, setMeetings] = useState<RegisteredMeeting[]>([]);
@@ -645,9 +644,19 @@ export default function App() {
     });
 
     const afterCompletion = discoveryCompletion(people, next, backlog);
-    setDiscoveryJustCompleted(!beforeCompletion.complete && afterCompletion.complete);
+    const justCompleted = !beforeCompletion.complete && afterCompletion.complete;
     const newQuestions = openBacklog(backlog).length - openBacklog(questionBacklog).length;
-    pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}${newQuestions > 0 ? ` · ${newQuestions} open question${newQuestions === 1 ? "" : "s"} queued for the next brief` : ""}`, true);
+    const followUps = args.exceptionKeys?.length ?? 0;
+    const detailBits = [
+      `${args.scopeIds.length} people updated · ${args.sessionLabel}`,
+      followUps > 0 ? `${followUps} follow-up${followUps === 1 ? "" : "s"} noted` : "",
+      newQuestions > 0 ? `${newQuestions} open question${newQuestions === 1 ? "" : "s"} queued for the next brief` : "",
+    ].filter(Boolean).join(" · ");
+    pushToast(
+      justCompleted ? "Discovery complete — findings are on the map" : "Session findings applied",
+      detailBits,
+      true,
+    );
   };
 
   // Joiner/mover/leaver: authority is only meaningful if it ends.
@@ -1019,10 +1028,8 @@ export default function App() {
     () => computeReadiness(companyContext, companyContext?.contextDocuments ?? [], people),
     [companyContext, people],
   );
-  const discoveryCompletionState = useMemo(() => discoveryCompletion(people, pedigree, questionBacklog), [people, pedigree, questionBacklog]);
   const planPendingCount = discoveryPlan?.sessions.filter((s) => s.status !== "applied").length ?? 0;
   const appliedSessionCount = discoveryPlan?.sessions.filter((s) => s.status === "applied").length ?? 0;
-  const nextPendingSession = discoveryPlan?.sessions.find((s) => s.status !== "applied");
   const digestPendingCount = pendingSignals(signalLedger).length;
   const recommendations = useMemo(
     () => buildRecommendations({ ledger: signalLedger, registry, people, pedigree, mcpLibrary }),
@@ -1074,16 +1081,14 @@ export default function App() {
   const closeSessionWorkspace = () => {
     setWizardPersonId(null);
     setWizardPlannedSessionId(undefined);
-    setDiscoveryJustCompleted(false);
     setScreen("workspace");
   };
-  const goToReviewFromSession = () => {
+  // Confirm & apply lands on the Discovery tab: the campaign map with newly
+  // green nodes, the next-session hero card, and follow-ups — no dead-end
+  // success screen in between.
+  const sessionApplied = () => {
     closeSessionWorkspace();
-    setTab("review");
-  };
-  const startNextPendingSession = (session: DiscoveryPlan["sessions"][number]) => {
-    setDiscoveryJustCompleted(false);
-    onStartSession(session.anchor_person_id, session.id);
+    setTab("plan");
   };
   const discoveryComplete = metrics.peopleCount > 0 && metrics.mappedPeople === metrics.peopleCount;
   const companyTitle = companyContext?.company?.trim() || workspaceName;
@@ -1326,17 +1331,9 @@ export default function App() {
           plannedSessionId={wizardPlannedSessionId}
           plannedSession={discoveryPlan?.sessions.find((s) => s.id === wizardPlannedSessionId)}
           questionBacklog={questionBacklog}
-          reviewQueueCount={reviewQueueCount}
-          nextPendingSession={nextPendingSession}
-          discoveryJustCompleted={discoveryJustCompleted}
-          completionCoverage={{
-            covered: discoveryCompletionState.managers_mapped + discoveryCompletionState.ics_mapped,
-            total: discoveryCompletionState.managers_total + discoveryCompletionState.ics_total,
-          }}
           onClose={closeSessionWorkspace}
           onApply={onApplyMapping}
-          onReviewFindings={goToReviewFromSession}
-          onStartNextSession={startNextPendingSession}
+          onApplied={sessionApplied}
           onPlanEvent={onPlanEvent}
           onScheduleSession={onScheduleSession}
           onToast={pushToast}
