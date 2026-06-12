@@ -547,6 +547,27 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
             </div>
           </div>
 
+          <div className="manifest-format-dock" aria-label="Export package" data-tour="agent-runtime-selector">
+            <div className="manifest-format-copy">
+              <div className="manifest-format-eyebrow">Export package</div>
+              <div className="manifest-format-title">Export this manifest as a runtime-ready agent</div>
+            </div>
+            <div className="manifest-format-actions">
+              {RUNTIME_ADAPTERS.map((adapter) => (
+                <button
+                  key={adapter.id}
+                  className={`manifest-format-button ${adapter.id === "hermes" ? "primary" : ""}`}
+                  disabled={!exportOk}
+                  onClick={() => void exportAgentFormat(adapter)}
+                  title={exportOk ? adapter.description : exportBlockReason}
+                >
+                  <BrandLogo name={RUNTIME_BRANDS[adapter.id] ?? adapter.label} size={26} />
+                  <span className="manifest-format-label">{adapter.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
             <span style={{ flex: 1 }} />
             <button className="btn btn-primary" onClick={onSwitchToOrgMap}><Icon name="checkmark" size={12} /> Done — back to Org Map</button>
@@ -554,26 +575,6 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
         </div>
       </div>
 
-      <div className="manifest-format-dock" aria-label="Choose your output format" data-tour="agent-runtime-selector">
-        <div className="manifest-format-copy">
-          <div className="manifest-format-eyebrow">Choose your output format</div>
-          <div className="manifest-format-title">Export this manifest as a runtime-ready agent</div>
-        </div>
-        <div className="manifest-format-actions">
-          {RUNTIME_ADAPTERS.map((adapter) => (
-            <button
-              key={adapter.id}
-              className={`manifest-format-button ${adapter.id === "hermes" ? "primary" : ""}`}
-              disabled={!exportOk}
-              onClick={() => void exportAgentFormat(adapter)}
-              title={exportOk ? adapter.description : exportBlockReason}
-            >
-              <BrandLogo name={RUNTIME_BRANDS[adapter.id] ?? adapter.label} size={26} />
-              <span className="manifest-format-label">{adapter.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
