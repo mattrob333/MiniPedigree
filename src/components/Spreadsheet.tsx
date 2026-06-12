@@ -156,9 +156,9 @@ export function Spreadsheet({ people, pedigree, department, rosterValidated, onV
             <th>Known Tools</th>
             {!rosterValidated && <th>Data Quality</th>}
             {hasResponsibilities && <th>Responsibilities</th>}
-            {hasTasks && <th>Ready for Delegation</th>}
+            {hasTasks && <th>Delegation Candidates</th>}
             {hasTasks && <th>Approval Required</th>}
-            {hasTasks && <th>Not Delegatable</th>}
+            {hasTasks && <th>Human-only / Blocked</th>}
             {hasAgents && <th>Agents</th>}
             <th>Status</th>
             <th>Next Action</th>

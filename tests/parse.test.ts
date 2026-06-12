@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parsedTaskSchema, parsedDiscoverySchema } from "../src/lib/schemas";
 import { classifyTask, generateParsed } from "../src/lib/parse";
 import { applyParsed } from "../src/lib/state";
+import { buildReviewQueue } from "../src/lib/provenance";
 import type { Person } from "../src/types";
 
 const jane: Person = {
@@ -147,5 +148,61 @@ describe("applyParsed completion-context propagation", () => {
     expect(task.completion?.candidate_pattern).toBe("weekly-report");
     expect(task.riskLevel).toBe("low");
     expect(task.evidence).toContain("every Friday");
+  });
+
+  it("session-review apply confirms accepted findings and leaves flagged exceptions queued", () => {
+    const parsed = {
+      [jane.id]: {
+        summary: "Owns forecast hygiene.",
+        responsibilities: [{
+          id: "R-001",
+          title: "Forecast hygiene",
+          evidence_quote: "Jane owns forecast hygiene",
+          tasks: { delegatable: ["Compile weekly forecast report", "Clean stale records"], approval: [], not_delegatable: [] },
+          taskDetails: [
+            {
+              name: "Compile weekly forecast report",
+              delegation_class: "delegatable" as const,
+              risk_level: "low" as const,
+              requires_human_approval: false,
+              evidence_quote: "I compile the forecast every Friday",
+              trigger: "every Friday",
+              inputs: ["Salesforce export"],
+              outputs: ["Forecast summary"],
+              tools_mentioned: ["Salesforce"],
+              definition_of_done: "Posted to shared drive",
+              readiness: "ready" as const,
+              open_questions: null,
+              candidate_pattern: "weekly-report",
+            },
+            {
+              name: "Clean stale records",
+              delegation_class: "delegatable" as const,
+              risk_level: "low" as const,
+              requires_human_approval: false,
+              evidence_quote: "I clean stale records",
+              trigger: null,
+              inputs: null,
+              outputs: null,
+              tools_mentioned: null,
+              definition_of_done: null,
+              readiness: null,
+              open_questions: null,
+              candidate_pattern: null,
+            },
+          ],
+        }],
+      },
+    };
+    const next = applyParsed([jane], parsed, {}, {
+      sessionLabel: "Leadership Session",
+      confirmedBy: "reviewer@x.co",
+      exceptionKeys: new Set([`${jane.id}::R-001::clean stale records`]),
+    });
+    const row = next[jane.id];
+    expect(row.responsibilities[0].provenance?.state).toBe("human_confirmed");
+    expect(row.tasks.delegatable.find((item) => item.label === "Compile weekly forecast report")?.provenance?.state).toBe("human_confirmed");
+    expect(row.tasks.delegatable.find((item) => item.label === "Clean stale records")?.provenance?.state).toBe("evidenced");
+    expect(buildReviewQueue([jane], next).map((item) => item.label)).toEqual(["Clean stale records"]);
   });
 });

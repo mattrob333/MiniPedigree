@@ -44,6 +44,7 @@ flagged every Monday and either revived or closed-lost by Friday.`;
 export function demoCompanyContext(companyName: string): CompanyContext {
   const now = new Date().toISOString();
   return {
+    companyId: "",
     company: companyName,
     url: "https://lumenbay.example",
     whatWeDo:

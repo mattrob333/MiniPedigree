@@ -18,7 +18,7 @@ export function LoginScreen({ onSignIn, existingProfile }: Props) {
   const [mission, setMission] = useState(existingProfile?.companyContext.mission ?? "");
   const [initiatives, setInitiatives] = useState(existingProfile?.companyContext.initiatives ?? "");
   const [terminology, setTerminology] = useState(existingProfile?.companyContext.terminology ?? "");
-  const [role, setRole] = useState<UserRole>(existingProfile?.role ?? "editor");
+  const [role, setRole] = useState<UserRole>(existingProfile?.role ?? "reviewer");
   const [err, setErr] = useState<string | null>(null);
 
   const submit = () => {

@@ -6,6 +6,7 @@ import { initials } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
 import { directReports, teamMapped, recommendSessionType, SESSION_LABEL, isMapped } from "@/lib/sessions";
 import type { CreateAgentCtx } from "./Drawer";
+import { deriveOperationalState, taskActionLabel } from "@/lib/taskState";
 
 interface Props {
   person: Person;
@@ -96,7 +97,7 @@ export function ProfileScreen({ person, people, pedigree, onBack, onOpenPerson, 
         {/* Progress stat strip */}
         <div className="profile-stats">
           <Stat v={ped.responsibilities.length} l="Responsibilities" />
-          <Stat v={ped.tasks.delegatable.length} l="Delegatable" color="cy" />
+          <Stat v={ped.tasks.delegatable.length} l="Delegation candidates" color="cy" />
           <Stat v={ped.tasks.approval.length} l="Approval req." color="yl" />
           <Stat v={agents.length} l="Agents" color="gr" />
           {reports.length > 0 && <Stat v={`${team.mapped}/${team.total}`} l="Team mapped" />}
@@ -117,17 +118,28 @@ export function ProfileScreen({ person, people, pedigree, onBack, onOpenPerson, 
                 </div>
                 {delegatable.length > 0 && (
                   <div className="rc-group">
-                    <div className="rc-label cy">Delegatable</div>
+                    <div className="rc-label cy">Delegation candidate</div>
                     {delegatable.map((t) => {
                       const created = createdTaskIds.has(t.id);
+                      const agent = agents.find((x) => x.taskId === t.id);
+                      const operationalState = deriveOperationalState(t, undefined, agent);
+                      const canCreate = operationalState === "agent_ready";
                       return (
                         <div key={t.id} className={"task-row" + (created ? " created" : "")}>
                           <div className="marker">{created ? <Icon name="checkmark" size={10} /> : "T"}</div>
                           <div className="label">{t.label}</div>
+                          <span className="tag cyan">{operationalState.replace(/_/g, " ")}</span>
                           {created ? (
-                            <button className="btn btn-sm btn-ghost" onClick={() => { const a = agents.find((x) => x.taskId === t.id); if (a) onOpenAgent(a); }}>Open agent <Icon name="external" size={11} /></button>
+                            <button className="btn btn-sm btn-ghost" onClick={() => { if (agent) onOpenAgent(agent); }}>Open agent <Icon name="external" size={11} /></button>
                           ) : (
-                            <button className="btn btn-sm btn-outline-cyan" onClick={() => onCreateAgent({ person, task: t, respTitle: t.respTitle })}><Icon name="sparkles" size={11} /> Create Agent</button>
+                            <button
+                              className="btn btn-sm btn-outline-cyan"
+                              disabled={!canCreate}
+                              title={!canCreate ? `Workflow incomplete: ${(t.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
+                              onClick={() => onCreateAgent({ person, task: t, respTitle: t.respTitle })}
+                            >
+                              <Icon name="sparkles" size={11} /> {taskActionLabel(operationalState)}
+                            </button>
                           )}
                         </div>
                       );

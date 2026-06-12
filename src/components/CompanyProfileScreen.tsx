@@ -176,7 +176,7 @@ export function CompanyProfileScreen({ context, people = [], onSave, onBack }: P
                       disabled={!isDemoCompany}
                       title={isDemoCompany
                         ? "Load the curated Lumen Bay demo context: goals, KPIs, systems, SOPs, approval rules, SOD docs — readiness 16/16"
-                        : `Blocked: this demo context belongs to "Lumen Bay", but the active company is "${activeName}". Open the Lumen Bay demo company to use it — mixing client context is never allowed.`}
+                        : `This demo context belongs to Lumen Bay. You are editing ${activeName}. Open the Lumen Bay demo company to use it.`}
                       onClick={() => {
                         const demo = demoCompanyContext(activeName);
                         setProfile(demo);

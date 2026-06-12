@@ -1,6 +1,6 @@
-import { openaiEnabled } from "../openai.js";
+import { ENRICH_MODEL, openaiEnabled } from "../openai.js";
 import { callStructured } from "./openaiCall.js";
-import { parsedDiscoverySchema } from "../../src/lib/schemas.js";
+import { parsedDiscoverySchema, type ParsedDiscovery } from "../../src/lib/schemas.js";
 
 const SYSTEM_PROMPT = `You are Pedigree's Responsibility Parser and Task Decomposition engine.
 
@@ -159,6 +159,96 @@ const responseSchema = {
   },
 } as const;
 
+const ENRICH_PROMPT = `You enrich already-extracted Pedigree tasks into agent-ready drafts.
+
+Rules:
+1. Use the full transcript, session brief/capture text if present, company context, and person title/tools.
+2. Ground every field in supplied text. Do not invent systems, cadence, recipients, dependencies, or completion criteria.
+3. If the transcript does not answer something, leave the field empty/null and add a concise open question.
+4. Return multiple short evidence quotes with speakers when available.
+5. This enrichment is AI-drafted; it does not confirm the finding.`;
+
+const enrichResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    tasks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          person_email: { type: "string" },
+          responsibility_name: { type: "string" },
+          task_name: { type: "string" },
+          plain_language_description: { type: "string" },
+          trigger: { type: ["string", "null"] },
+          cadence: { type: ["string", "null"] },
+          inputs: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { source: { type: "string" }, description: { type: "string" } },
+              required: ["source", "description"],
+            },
+          },
+          outputs: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { artifact: { type: "string" }, recipient: { type: "string" } },
+              required: ["artifact", "recipient"],
+            },
+          },
+          dependencies: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              upstream: { type: "array", items: { type: "string" } },
+              downstream: { type: "array", items: { type: "string" } },
+            },
+            required: ["upstream", "downstream"],
+          },
+          definition_of_done: { type: "array", items: { type: "string" } },
+          approval_boundary: { type: ["string", "null"] },
+          tools_required: { type: "array", items: { type: "string" } },
+          confidence: { type: "number" },
+          evidence_quotes: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: { quote: { type: "string" }, speaker: { type: "string" } },
+              required: ["quote", "speaker"],
+            },
+          },
+          open_questions: { type: "array", items: { type: "string" } },
+        },
+        required: [
+          "person_email",
+          "responsibility_name",
+          "task_name",
+          "plain_language_description",
+          "trigger",
+          "cadence",
+          "inputs",
+          "outputs",
+          "dependencies",
+          "definition_of_done",
+          "approval_boundary",
+          "tools_required",
+          "confidence",
+          "evidence_quotes",
+          "open_questions",
+        ],
+      },
+    },
+  },
+  required: ["tasks"],
+} as const;
+
 export interface ParseInput {
   transcript?: unknown;
   people?: unknown;
@@ -190,10 +280,86 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
       schema: responseSchema.schema as Record<string, unknown>,
     });
     const discovery = parsedDiscoverySchema.parse(parsed);
+    await enrichDiscoverySafely(discovery, { transcript, people, company_context });
     return { mode: "ai", discovery };
   } catch (e) {
     const msg = (e as Error).message || String(e);
     console.error("discovery parse failed:", msg);
     return { mode: "demo", reason: "ai_error: " + msg.slice(0, 200) };
   }
+}
+
+interface EnrichTask {
+  person_email: string;
+  responsibility_name: string;
+  task_name: string;
+  plain_language_description: string;
+  trigger: string | null;
+  cadence: string | null;
+  inputs: { source: string; description: string }[];
+  outputs: { artifact: string; recipient: string }[];
+  dependencies: { upstream: string[]; downstream: string[] };
+  definition_of_done: string[];
+  approval_boundary: string | null;
+  tools_required: string[];
+  confidence: number;
+  evidence_quotes: { quote: string; speaker: string }[];
+  open_questions: string[];
+}
+
+async function enrichDiscoverySafely(discovery: ParsedDiscovery, context: ParseInput): Promise<void> {
+  const candidates = discovery.people_updates.flatMap((person) =>
+    person.responsibilities.flatMap((responsibility) =>
+      responsibility.tasks.map((task) => ({
+        person_email: person.person_email,
+        matched_name: person.matched_name,
+        responsibility_name: responsibility.name,
+        task_name: task.name,
+        current_evidence: task.evidence_quote || responsibility.evidence_quote || "",
+      })),
+    ),
+  );
+  if (!candidates.length) return;
+  try {
+    const enriched = await callStructured<{ tasks: EnrichTask[] }>({
+      system: ENRICH_PROMPT,
+      user: JSON.stringify({ ...context, extracted_tasks: candidates }),
+      schemaName: "discovery_task_enrichment",
+      schema: enrichResponseSchema as Record<string, unknown>,
+      model: ENRICH_MODEL,
+    });
+    mergeEnrichment(discovery, enriched.tasks ?? []);
+  } catch (e) {
+    const msg = (e as Error).message || String(e);
+    discovery.global_notes.push(`Task enrichment unavailable; showing extraction-only findings. ${msg.slice(0, 120)}`);
+  }
+}
+
+function mergeEnrichment(discovery: ParsedDiscovery, enrichedTasks: EnrichTask[]): void {
+  const byKey = new Map(enrichedTasks.map((task) => [enrichKey(task.person_email, task.responsibility_name, task.task_name), task]));
+  for (const person of discovery.people_updates) {
+    for (const responsibility of person.responsibilities) {
+      for (const task of responsibility.tasks) {
+        const enriched = byKey.get(enrichKey(person.person_email, responsibility.name, task.name));
+        if (!enriched) continue;
+        task.plain_language_description = enriched.plain_language_description;
+        task.trigger = enriched.trigger ?? enriched.cadence ?? task.trigger ?? null;
+        task.inputs = enriched.inputs.length ? enriched.inputs.map((input) => `${input.source}: ${input.description}`) : task.inputs ?? null;
+        task.outputs = enriched.outputs.length ? enriched.outputs.map((output) => `${output.artifact}${output.recipient ? ` -> ${output.recipient}` : ""}`) : task.outputs ?? null;
+        task.dependencies = enriched.dependencies;
+        task.tools_mentioned = enriched.tools_required.length ? enriched.tools_required : task.tools_mentioned ?? null;
+        task.definition_of_done = enriched.definition_of_done.length ? enriched.definition_of_done.join("; ") : task.definition_of_done ?? null;
+        task.approval_boundary = enriched.approval_boundary;
+        task.evidence_quotes = enriched.evidence_quotes;
+        task.enrichment_confidence = enriched.confidence;
+        if (!task.evidence_quote && enriched.evidence_quotes[0]?.quote) task.evidence_quote = enriched.evidence_quotes[0].quote;
+        task.open_questions = enriched.open_questions.length ? enriched.open_questions : task.open_questions ?? null;
+        task.readiness = task.trigger && task.inputs?.length && task.outputs?.length && task.definition_of_done ? "ready" : "needs_clarification";
+      }
+    }
+  }
+}
+
+function enrichKey(email: string, responsibility: string, task: string): string {
+  return [email, responsibility, task].map((part) => part.trim().toLowerCase().replace(/\s+/g, " ")).join("::");
 }

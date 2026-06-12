@@ -1,4 +1,4 @@
-import type { CompanyContext, ParsedMap, ParsedResponsibility, Person } from "@/types";
+import type { CompanyContext, ParsedMap, ParsedResponsibility, Person, TaskCompletionContext } from "@/types";
 import { generateParsed } from "./parse";
 import { recommendMcp } from "./mcpCatalog";
 import { companyContextSchema, parsedDiscoverySchema } from "./schemas";
@@ -238,6 +238,54 @@ export async function requestSessionBrief(args: BriefRequestArgs): Promise<Brief
     // fall through to template
   }
   return { brief: buildTemplateBrief(args), source: "template" };
+}
+
+export interface TaskEnrichRequestItem {
+  taskId: string;
+  label: string;
+  description?: string;
+  reviewer_note?: string;
+  completion?: TaskCompletionContext;
+  evidence_quote?: string;
+  responsibility: string;
+  owner: { name: string; title: string; department: string };
+}
+
+export interface EnrichedTaskDraft {
+  taskId: string;
+  plainLanguageDescription: string;
+  suggestedInputs: string[];
+  suggestedOutputs: string[];
+  suggestedTools: string[];
+  definitionOfDone: string[];
+  openQuestions: string[];
+}
+
+export async function taskEnrichmentAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/health");
+    if (!res.ok) return false;
+    const json = await res.json();
+    return Boolean(json?.openai);
+  } catch {
+    return false;
+  }
+}
+
+export async function requestTaskEnrichment(args: {
+  tasks: TaskEnrichRequestItem[];
+  companyContext?: CompanyContext;
+}): Promise<EnrichedTaskDraft[] | null> {
+  const res = await fetch("/api/tasks/enrich", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tasks: args.tasks, company_context: args.companyContext }),
+  });
+  if (res.status === 503) return null;
+  if (!res.ok) throw new Error("Task enrichment failed");
+  const json = await res.json();
+  if (json?.mode === "ai" && Array.isArray(json.tasks)) return json.tasks as EnrichedTaskDraft[];
+  return null;
 }
 
 // ── Living Stack: maintenance parse (AI with deterministic fallback) ───

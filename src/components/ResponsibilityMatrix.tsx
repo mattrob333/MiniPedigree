@@ -5,6 +5,7 @@ import type { AgentRecord, PedigreeState, Person, ResponsibilityRow, TaskItem } 
 import { getDepartmentColor } from "@/lib/departments";
 import { initials } from "@/lib/util";
 import { taskFreshness, DEFAULT_FRESHNESS_CONFIG } from "@/lib/freshness";
+import { deriveOperationalState, taskActionLabel } from "@/lib/taskState";
 
 // ── UX reset Sprint 3: the Responsibility Matrix ───────────────────────
 // The serious working surface between discovery and agent creation: which
@@ -92,7 +93,7 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
           <tr>
             <th>Owner</th>
             <th>Responsibility</th>
-            <th>Ready for delegation</th>
+            <th>Delegation candidates</th>
             <th>Approval required</th>
             <th>Not delegatable</th>
             <th>Agents</th>
@@ -135,7 +136,7 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
                   <td>
                     {row.agents.length
                       ? <span className="tag green"><Icon name="robot" size={10} /> {row.agents.length}</span>
-                      : counts.delegatable > 0 ? <span className="dim" style={{ fontSize: 12 }}>candidates ready</span> : <span className="dim">—</span>}
+                      : counts.delegatable > 0 ? <span className="dim" style={{ fontSize: 12 }}>workflow review needed</span> : <span className="dim">—</span>}
                   </td>
                   <td>{provenance ? <ProvenanceBadge provenance={provenance} compact /> : <span className="dim">—</span>}</td>
                 </tr>
@@ -150,11 +151,14 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
                         {row.tasks.map(({ task, cls }) => {
                           const agent = row.agents.find((a) => a.taskId === task.id);
                           const freshness = taskFreshness(task, DEFAULT_FRESHNESS_CONFIG);
+                          const operationalState = deriveOperationalState(task, undefined, agent);
+                          const canCreate = operationalState === "agent_ready";
                           return (
                             <div className="matrix-task" key={task.id}>
                               <span className={"tag " + (cls === "delegatable" ? "cyan" : cls === "approval" ? "yellow" : "")}>
-                                {cls === "delegatable" ? "ready for delegation" : cls === "approval" ? "approval required" : "not delegatable"}
+                                {cls === "delegatable" ? "delegation candidate" : cls === "approval" ? "approval required" : "not delegatable"}
                               </span>
+                              {cls === "delegatable" && <span className="tag">{operationalState.replace(/_/g, " ")}</span>}
                               <span className="matrix-task-label">{task.label}</span>
                               {task.completion?.trigger && <span className="dim" style={{ fontSize: 12 }}>{task.completion.trigger}</span>}
                               {task.completion?.tools_mentioned?.length ? <span className="dim" style={{ fontSize: 12 }}>{task.completion.tools_mentioned.join(", ")}</span> : null}
@@ -164,8 +168,13 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
                               {agent ? (
                                 <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); onOpenAgent(agent); }}>Open agent <Icon name="external" size={10} /></button>
                               ) : cls === "delegatable" ? (
-                                <button className="btn btn-sm btn-outline-cyan" onClick={(e) => { e.stopPropagation(); onCreateAgent({ person: row.person, task, respTitle: row.responsibility.title }); }}>
-                                  <Icon name="sparkles" size={10} /> Create agent
+                                <button
+                                  className="btn btn-sm btn-outline-cyan"
+                                  disabled={!canCreate}
+                                  title={!canCreate ? `Workflow incomplete: ${(task.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
+                                  onClick={(e) => { e.stopPropagation(); onCreateAgent({ person: row.person, task, respTitle: row.responsibility.title }); }}
+                                >
+                                  <Icon name="sparkles" size={10} /> {taskActionLabel(operationalState)}
                                 </button>
                               ) : null}
                             </div>

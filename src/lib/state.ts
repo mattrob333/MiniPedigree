@@ -1,4 +1,5 @@
 import type {
+  ItemProvenance,
   ParsedMap,
   ParsedResponsibility,
   ParsedTask,
@@ -10,6 +11,8 @@ import type {
 } from "@/types";
 import { suggestedAgentName } from "./parse";
 import { deriveProvenance, deriveResponsibilityProvenance } from "./provenance";
+import { GLOBAL_WORKFLOW_TEMPLATES } from "./workflowSeeds";
+import { matchWorkflow, missingFieldsForWorkflow } from "./workflowMatch";
 import Papa from "papaparse";
 
 export function initialPedigreeState(people: Person[]): PedigreeState {
@@ -32,6 +35,10 @@ export interface ApplyOptions {
   sessionLabel?: string;
   /** Map of personId -> manager name, for lineage ("assigned by manager"). */
   people?: Person[];
+  /** Applying from session review is the human confirmation, unless an item was flagged. */
+  confirmedBy?: string;
+  /** Parsed finding keys to route to the exception queue instead of confirming now. */
+  exceptionKeys?: Set<string>;
 }
 
 /** Apply a parsed-discovery map onto the pedigree state (PRD §6 step 6). */
@@ -65,22 +72,29 @@ export function applyParsed(
     const not_delegatable: TaskItem[] = [];
     const responsibilities = data.responsibilities.map((r) => {
       r.tasks.delegatable.forEach((t, i) =>
-        delegatable.push(toTaskItem(`${r.id}-d-${i}`, t, r, opts.sessionLabel)),
+        delegatable.push(toTaskItem(`${r.id}-d-${i}`, t, r, person.id, opts)),
       );
       r.tasks.approval.forEach((t, i) =>
-        approval.push(toTaskItem(`${r.id}-a-${i}`, t, r, opts.sessionLabel)),
+        approval.push(toTaskItem(`${r.id}-a-${i}`, t, r, person.id, opts)),
       );
       r.tasks.not_delegatable.forEach((t, i) =>
-        not_delegatable.push(toTaskItem(`${r.id}-n-${i}`, t, r, opts.sessionLabel)),
+        not_delegatable.push(toTaskItem(`${r.id}-n-${i}`, t, r, person.id, opts)),
+      );
+      const source = r.source === "role_template" ? "role_template" : opts.sessionLabel;
+      const provenance = maybeConfirm(
+        deriveResponsibilityProvenance({ ...r, source } as ParsedResponsibility, source),
+        opts.confirmedBy,
+        opts.exceptionKeys?.has(responsibilityKey(person.id, r.id)),
       );
       return {
         id: r.id,
         title: r.title,
+        description: r.description,
         suggestedAgent: suggestedAgentName(r.title),
-        source: opts.sessionLabel,
+        source,
         assignedByName: managerName(person),
         confidence: r.confidence,
-        provenance: deriveResponsibilityProvenance(r, opts.sessionLabel),
+        provenance,
         last_confirmed_at: new Date().toISOString(),
       };
     });
@@ -109,22 +123,61 @@ export function applyParsed(
 }
 
 /** Build a TaskItem, carrying over per-task detail (risk, evidence, completion context) when parsed. */
-function toTaskItem(id: string, label: string, r: ParsedResponsibility, sessionLabel?: string): TaskItem {
+function toTaskItem(id: string, label: string, r: ParsedResponsibility, personId: string, opts: ApplyOptions): TaskItem {
   const detail = r.taskDetails?.find((d) => d.name.trim().toLowerCase() === label.trim().toLowerCase());
   // The discovery session itself is the first confirmation — freshness
   // windows start counting from here.
   const item: TaskItem = { id, label, respId: r.id, respTitle: r.title, last_confirmed_at: new Date().toISOString() };
   if (detail) {
+    if (detail.plain_language_description) item.description = detail.plain_language_description;
     item.riskLevel = detail.risk_level;
     if (detail.evidence_quote) item.evidence = detail.evidence_quote;
     item.completion = extractCompletion(detail);
   }
-  item.provenance = deriveProvenance({
+  const source = detail?.source === "role_template" || r.source === "role_template" ? "role_template" : opts.sessionLabel;
+  const matches = matchWorkflow(item, GLOBAL_WORKFLOW_TEMPLATES);
+  item.suggestedWorkflowMatches = matches.slice(0, 3);
+  if (matches[0]?.confidence >= 0.6) {
+    item.workflowTemplateId = matches[0].templateId;
+    item.workflowMatchConfidence = matches[0].confidence;
+    item.operationalState = "workflow_matched";
+    item.missingSpecFields = missingFieldsForWorkflow(item, GLOBAL_WORKFLOW_TEMPLATES.find((template) => template.id === matches[0].templateId));
+  } else {
+    item.operationalState = "workflow_needed";
+    item.missingSpecFields = [
+      "workflow template or custom workflow spec",
+      ...(detail?.inputs?.length ? [] : ["required inputs"]),
+      ...(detail?.tools_mentioned?.length ? [] : ["required tools"]),
+      ...(detail?.outputs?.length ? [] : ["output format"]),
+      ...(detail?.definition_of_done ? [] : ["definition of done"]),
+      "approval boundary",
+      "test case",
+    ];
+  }
+  item.provenance = maybeConfirm(deriveProvenance({
     evidence: detail?.evidence_quote || r.evidence_quote,
     confidence: r.confidence,
-    source: sessionLabel,
-  });
+    source,
+  }), opts.confirmedBy, opts.exceptionKeys?.has(taskKey(personId, r.id, label)));
   return item;
+}
+
+function maybeConfirm(provenance: ItemProvenance, by?: string, exception?: boolean): ItemProvenance {
+  if (!by || exception) return provenance;
+  return {
+    ...provenance,
+    state: "human_confirmed",
+    confirmed_by: by,
+    confirmed_at: new Date().toISOString(),
+  };
+}
+
+function responsibilityKey(personId: string, respId: string): string {
+  return `${personId}::${respId}`;
+}
+
+function taskKey(personId: string, respId: string, taskLabel: string): string {
+  return `${personId}::${respId}::${taskLabel.trim().toLowerCase()}`;
 }
 
 function extractCompletion(detail: ParsedTask): TaskItem["completion"] {
@@ -132,8 +185,12 @@ function extractCompletion(detail: ParsedTask): TaskItem["completion"] {
     trigger: detail.trigger ?? null,
     inputs: detail.inputs ?? null,
     outputs: detail.outputs ?? null,
+    dependencies: detail.dependencies ?? null,
     tools_mentioned: detail.tools_mentioned ?? null,
     definition_of_done: detail.definition_of_done ?? null,
+    approval_boundary: detail.approval_boundary ?? null,
+    evidence_quotes: detail.evidence_quotes ?? null,
+    enrichment_confidence: detail.enrichment_confidence ?? null,
     readiness: detail.readiness ?? null,
     open_questions: detail.open_questions ?? null,
     candidate_pattern: detail.candidate_pattern ?? null,

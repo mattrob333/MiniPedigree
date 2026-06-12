@@ -64,6 +64,8 @@ Skip this to launch faster; the app persists to `localStorage` without it. Add i
    | `OPENAI_MODEL` | `gpt-4o-2024-08-06` | optional |
    | `OPENAI_TRANSCRIPTION_MODEL` | `gpt-4o-transcribe` | optional |
    | `TRANSCRIPTION_PROVIDER` | `openai` | optional |
+   | `RESEND_API_KEY` | server-side invite email provider | optional, future Schedule & Invite email sending |
+   | `SMTP_URL` | SMTP fallback for server-side invites | optional, future Schedule & Invite email sending |
    | `VITE_SUPABASE_URL` | your Supabase Project URL | only if using Supabase |
    | `VITE_SUPABASE_ANON_KEY` | your Supabase anon key | only if using Supabase |
 
@@ -76,7 +78,9 @@ Skip this to launch faster; the app persists to `localStorage` without it. Add i
 - Visit the URL, click **Use Demo CSV** (or a sample org), open the **Org Map**, and run a
   **Mapping Session** → it should parse and show a **GPT** badge in Review.
 - Visit `https://<project>.vercel.app/api/health` — it should return
-  `{"ok":true,"openai":true,...}` confirming the key is wired.
+  `{"ok":true,"openai":true,...}` confirming the key is wired. The `email` flag is
+  `true` only when future invite-sending credentials such as `RESEND_API_KEY` or
+  `SMTP_URL` are configured.
 
 ---
 

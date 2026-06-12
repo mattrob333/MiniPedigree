@@ -89,7 +89,7 @@ export function nextAction(stage: CompanyStage, s: MaturityInput): NextAction {
       };
     }
     case "review_findings":
-      return { label: "Review findings", hint: `${s.reviewQueueCount} item${s.reviewQueueCount === 1 ? "" : "s"} waiting for confirmation — evidence in, trusted map out.`, target: { kind: "tab", tab: "review" } };
+      return { label: "Resolve exceptions", hint: `${s.reviewQueueCount} exception${s.reviewQueueCount === 1 ? "" : "s"} need a reviewer decision.`, target: { kind: "tab", tab: "review" } };
     case "plan_agents":
       return { label: "Plan agents", hint: "Choose which delegatable tasks become agents, under which human owner.", target: { kind: "tab", tab: "agentplan" } };
     case "export":
@@ -177,7 +177,7 @@ export function stageMetrics(stage: CompanyStage, s: MaturityInput): StageMetric
       ];
     case "review_findings":
       return [
-        { label: "Review queue", value: s.reviewQueueCount, delta: "awaiting confirmation", up: false },
+        { label: "Exceptions", value: s.reviewQueueCount, delta: "need a decision", up: false },
         { label: "Responsibilities", value: respCount, delta: "extracted", up: respCount > 0 },
         { label: "Tasks ready for delegation", value: deleg, delta: "classified", up: deleg > 0 },
         { label: "People covered", value: `${mapped}/${active.length}`, up: mapped === active.length },
@@ -207,7 +207,7 @@ const LADDER: { id: CompanyStage; label: string }[] = [
   { id: "validate_roster", label: "Validate roster" },
   { id: "add_context", label: "Add company context" },
   { id: "run_sessions", label: "Conduct discovery" },
-  { id: "review_findings", label: "Review extracted work" },
+  { id: "review_findings", label: "Resolve exceptions" },
   { id: "plan_agents", label: "Plan agents" },
   { id: "export", label: "Approve & export" },
 ];

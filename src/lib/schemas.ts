@@ -20,11 +20,19 @@ export const parsedTaskSchema = z.object({
   requires_human_approval: z.boolean().default(false),
   reason: z.string().optional().default(""),
   evidence_quote: z.string().optional().default(""),
+  plain_language_description: z.string().optional().default(""),
   trigger: z.string().nullable().optional().default(null),
   inputs: z.array(z.string()).nullable().optional().default(null),
   outputs: z.array(z.string()).nullable().optional().default(null),
+  dependencies: z.object({
+    upstream: z.array(z.string()).default([]),
+    downstream: z.array(z.string()).default([]),
+  }).nullable().optional().default(null),
   tools_mentioned: z.array(z.string()).nullable().optional().default(null),
   definition_of_done: z.string().nullable().optional().default(null),
+  approval_boundary: z.string().nullable().optional().default(null),
+  evidence_quotes: z.array(z.object({ quote: z.string(), speaker: z.string().optional().default("") })).nullable().optional().default(null),
+  enrichment_confidence: z.number().min(0).max(1).nullable().optional().default(null),
   readiness: taskReadiness.nullable().optional().default(null),
   open_questions: z.array(z.string()).nullable().optional().default(null),
   candidate_pattern: z.string().nullable().optional().default(null),
@@ -111,6 +119,7 @@ export const companyKpiSchema = z.object({
 });
 
 export const companyContextSchema = z.object({
+  companyId: z.string().optional().default(""),
   company: z.string().default(""),
   url: z.string().optional().default(""),
   rawNotes: z.string().optional().default(""),

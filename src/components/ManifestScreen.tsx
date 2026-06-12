@@ -91,8 +91,12 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
 
   // "Governance preserved" pre-export checks (P0-4): visible, and gate the download.
   const preservation = governancePreservedChecks(agent, row ?? undefined);
-  const exportOk = validation.ok && preservationPassed(preservation);
-  const exportBlockReason = !validation.ok ? validation.failures[0] : preservation.find((c) => c.status === "fail")?.detail;
+  const hasTestPack = testPrompts.length > 0;
+  const exportOk = validation.ok && preservationPassed(preservation) && hasTestPack;
+  const exportBlockReason = !validation.ok
+    ? validation.failures[0]
+    : preservation.find((c) => c.status === "fail")?.detail
+      ?? (!hasTestPack ? "A test case is required before export." : undefined);
 
   // Enforcement reality (P0-2): per-control tags that change with runtime target.
   const enforcement = enforcementProfile(enforcementRuntime);
@@ -151,6 +155,8 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
     const extras = [
       { path: "SETUP.md", content: setupGuide },
       { path: "GOVERNANCE-SUMMARY.html", content: buildGovernanceSummaryHtml(compiled) },
+      { path: "TEST-PACK.md", content: testPrompts.length ? testPrompts.map((test, i) => `${i + 1}. ${test}`).join("\n") : "No test pack available. Export should be blocked." },
+      { path: "EVIDENCE-PACKET.md", content: [taskProvenance?.evidence_quote, agent.task.evidence].filter(Boolean).map((quote, i) => `## Evidence ${i + 1}\n\n${quote}`).join("\n\n") || "No evidence packet available." },
     ];
     await downloadZip(`${slug}.deployment-package.zip`, artifacts, extras);
     if (registry && onRegistryChange) {
