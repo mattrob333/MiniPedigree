@@ -137,11 +137,13 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
     return direct?.[1]?.trim() ?? "";
   };
 
+  const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+
   const targetChip = (q: BriefQuestion) => {
     const person = participants.find((p) => p.id === q.target_person_id);
     const systemMatch = systemName(q);
-    if (systemMatch && person) return `${nameOf(q.target_person_id)} - ${systemMatch}`;
-    return `${nameOf(q.target_person_id)}${systemMatch && person ? ` · ${systemMatch[1].trim()}` : ""}`;
+    if (systemMatch && person) return `${nameOf(q.target_person_id)} · ${systemMatch}`;
+    return nameOf(q.target_person_id);
   };
 
   const normalizedText = (q: BriefQuestion) => q.text
@@ -173,41 +175,45 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
     });
   };
 
-  const renderQuestion = (q: BriefQuestion, nested = false) => (
-    <li className="brief-question" key={q.id}>
-      <div className="brief-q-body">
-        {editingId === q.id ? (
-          <div style={{ display: "flex", gap: 6 }}>
-            <input
-              className="input"
-              value={editText}
-              autoFocus
-              placeholder="Walk me through the last time you..."
-              onChange={(e) => setEditText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(q.id); if (e.key === "Escape") setEditingId(null); }}
-            />
-            <button className="btn btn-sm btn-outline-cyan" onClick={() => saveEdit(q.id)}>Save</button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }} title={`Why: ${q.why}`}>
-            <span className="brief-q-text" style={{ flex: 1 }}>{q.text || <em className="dim">empty question</em>}</span>
-            <span className="brief-q-intent" style={{ color: INTENT_COLOR[q.intent] }}>{INTENT_LABEL[q.intent]}</span>
+  const renderQuestion = (q: BriefQuestion, nested = false) => {
+    const hasMeta = (q.target_person_id !== "group" && !nested) || nested || showNotes;
+    return (
+      <li className={"brief-question" + (nested ? " nested" : "")} key={q.id}>
+        <div className="brief-q-body">
+          {editingId === q.id ? (
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                className="input"
+                value={editText}
+                autoFocus
+                placeholder="Walk me through the last time you..."
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveEdit(q.id); if (e.key === "Escape") setEditingId(null); }}
+              />
+              <button className="btn btn-sm btn-outline-cyan" onClick={() => saveEdit(q.id)}>Save</button>
+            </div>
+          ) : (
+            <div className="brief-q-line" title={showNotes ? undefined : `Why: ${q.why}`}>
+              <span className="brief-q-text">{q.text ? cap(q.text) : <em className="dim">empty question</em>}</span>
+            </div>
+          )}
+          {hasMeta && (
+            <div className="brief-q-meta">
+              {q.target_person_id !== "group" && <span className="tag">{targetChip(q)}</span>}
+              {showNotes && <span className="brief-q-intent" style={{ color: INTENT_COLOR[q.intent] }}>{INTENT_LABEL[q.intent]}</span>}
+              {showNotes && <span className="brief-q-why">{q.why}</span>}
+            </div>
+          )}
+        </div>
+        {editable && editingId !== q.id && (
+          <div className="brief-q-controls">
+            <button className="icon-btn" aria-label="Edit" onClick={() => { setEditingId(q.id); setEditText(q.text); }}><Icon name="build" size={11} /></button>
+            <button className="icon-btn" aria-label="Delete" onClick={() => remove(q.id)}><Icon name="close" size={11} /></button>
           </div>
         )}
-        <div className="brief-q-meta">
-          {q.target_person_id !== "group" && <span className="brief-q-target">{targetChip(q)}</span>}
-          {showNotes && <span className="brief-q-why">{q.why}</span>}
-          {nested && <span className="tag">individual</span>}
-        </div>
-      </div>
-      {editable && editingId !== q.id && (
-        <div className="brief-q-controls">
-          <button className="icon-btn" aria-label="Edit" onClick={() => { setEditingId(q.id); setEditText(q.text); }}><Icon name="build" size={11} /></button>
-          <button className="icon-btn" aria-label="Delete" onClick={() => remove(q.id)}><Icon name="close" size={11} /></button>
-        </div>
-      )}
-    </li>
-  );
+      </li>
+    );
+  };
 
   const renderGroup = (group: { key: string; items: BriefQuestion[]; displayText: string }) => {
     if (group.items.length === 1) return renderQuestion(group.items[0]);
@@ -216,14 +222,16 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
     return (
       <li className="brief-question grouped" key={group.key}>
         <div className="brief-q-body">
-          <button className="brief-group-toggle" onClick={() => toggleGroup(group.key)} title="Show individual questions and edit controls">
-            <Icon name={expanded ? "chevron-down" : "chevron-right"} size={11} />
-            <span className="brief-q-text" style={{ flex: 1 }}>{group.displayText}</span>
-            <span className="brief-q-intent" style={{ color: INTENT_COLOR[first.intent] }}>{INTENT_LABEL[first.intent]}</span>
-          </button>
+          <div className="brief-q-line">
+            <span className="brief-q-text">{cap(group.displayText)}</span>
+          </div>
           <div className="brief-q-meta">
-            <span className="brief-q-target">ask each:</span>
+            <span className="brief-q-askeach">Ask each:</span>
             {group.items.map((q) => <span className="tag" key={q.id}>{targetChip(q)}</span>)}
+            <button className="brief-q-expand" onClick={() => toggleGroup(group.key)}>
+              {expanded ? "Hide individual questions" : "Edit individually"}
+            </button>
+            {showNotes && <span className="brief-q-intent" style={{ color: INTENT_COLOR[first.intent] }}>{INTENT_LABEL[first.intent]}</span>}
             {showNotes && <span className="brief-q-why">{first.why}</span>}
           </div>
           {expanded && <ol className="brief-question-list nested">{group.items.map((q) => renderQuestion(q, true))}</ol>}
@@ -292,15 +300,17 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
         </div>
       </div>
 
-      {SECTIONS.map((section) => {
+      {SECTIONS.filter((s) => brief.questions.some((q) => s.intents.includes(q.intent))).map((section, index) => {
         const questions = brief.questions.filter((q) => section.intents.includes(q.intent));
-        if (!questions.length) return null;
         return (
           <details className="brief-section" key={section.id} open={section.expanded}>
             <summary className="brief-section-head">
-              <Icon name="chevron-right" size={11} className="brief-section-chevron" />
-              {section.title} <span className="tag">{questions.length}</span>
-              <span className="brief-section-hint">{section.hint}</span>
+              <Icon name="chevron-right" size={12} className="brief-section-chevron" />
+              <span className="brief-section-heading">
+                <span className="brief-section-round">Round {index + 1}</span>
+                <span className="brief-section-title">{section.title} <span className="brief-section-count">{questions.length}</span></span>
+                <span className="brief-section-hint">{cap(section.hint)}</span>
+              </span>
             </summary>
             <ol className="brief-question-list">{groupedQuestions(questions).map(renderGroup)}</ol>
           </details>
@@ -310,15 +320,23 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
       {brief.probe_areas.length > 0 && (
         <details className="brief-section">
           <summary className="brief-section-head">
-            <Icon name="chevron-right" size={11} className="brief-section-chevron" />
-            System probe areas <span className="tag">{brief.probe_areas.length}</span>
-            <span className="brief-section-hint">system-by-system walk-through prompts</span>
+            <Icon name="chevron-right" size={12} className="brief-section-chevron" />
+            <span className="brief-section-heading">
+              <span className="brief-section-round">Reference</span>
+              <span className="brief-section-title">System probe areas <span className="brief-section-count">{brief.probe_areas.length}</span></span>
+              <span className="brief-section-hint">System-by-system walk-through prompts — use during the core topics round</span>
+            </span>
           </summary>
-          <div style={{ padding: "4px 0 8px" }}>
+          <ul className="brief-question-list">
             {brief.probe_areas.map((p) => (
-              <div className="brief-probe" key={p.system}><span className="tag cyan">{p.system}</span> {p.prompt}</div>
+              <li className="brief-question" key={p.system}>
+                <div className="brief-q-body">
+                  <div className="brief-q-line"><span className="brief-q-text">{cap(p.prompt)}</span></div>
+                  <div className="brief-q-meta"><span className="tag cyan">{p.system}</span></div>
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </details>
       )}
 

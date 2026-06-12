@@ -175,31 +175,77 @@
 }
 .org-mini-narrator { margin: 8px 2px 14px; font-size: 12px; color: var(--text-3); }
 
-.brief-view .brief-section { margin-top: 28px; padding: 0; }
-.brief-view .brief-section:not([open]) { padding-bottom: 0; }
+/* ── Session brief: a screen-shareable conversation guide ───────────────
+   Exactly three text levels: round heading (17px), question (15px),
+   meta/chips (12px). Numbers come from CSS counters; facilitator notes
+   (intent + why) only render behind the notes toggle. */
+.brief-view .brief-section { margin-top: 26px; padding: 0; border-top: 1px solid var(--border-1); }
+.brief-view .brief-section:first-of-type { border-top: 0; margin-top: 8px; }
+.brief-view .brief-section:not([open]) { padding-bottom: 2px; }
 .brief-view .brief-section-head {
-  min-height: 36px;
-  padding: 6px 0;
-  font-size: 16px;
-  line-height: 1.25;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 0 8px;
+  min-height: 0;
 }
-.brief-view .brief-section-hint,
-.brief-view .brief-q-meta,
-.brief-view .brief-q-target,
-.brief-view .brief-q-intent,
-.brief-view .brief-q-why {
+.brief-view .brief-section-chevron { margin-top: 7px; }
+.brief-section-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brief-section-round {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+.brief-view .brief-section-title { font-size: 17px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
+.brief-section-count { font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--text-4); margin-left: 6px; }
+.brief-view .brief-section-hint { font-size: 12.5px; font-weight: 400; color: var(--text-4); }
+.brief-view .brief-section:not([open]) .brief-section-hint { display: none; }
+
+ol.brief-question-list { counter-reset: brief-q; }
+ol.brief-question-list > .brief-question { counter-increment: brief-q; }
+ol.brief-question-list > .brief-question::before {
+  content: counter(brief-q) ".";
+  font-family: var(--font-mono);
   font-size: 12px;
+  color: var(--text-4);
+  min-width: 22px;
+  text-align: right;
+  padding-top: 4px;
+  flex-shrink: 0;
 }
-.brief-view .brief-question {
-  padding: 12px 10px;
+ol.brief-question-list.nested {
+  counter-reset: brief-q;
+  margin-top: 8px;
+  border-left: 2px solid var(--border-1);
+  padding-left: 8px;
 }
-.brief-view .brief-q-text {
-  font-size: 14.5px;
-  line-height: 1.45;
+ol.brief-question-list.nested > .brief-question::before { content: "–"; text-align: center; }
+
+.brief-view .brief-question { padding: 10px 8px; }
+.brief-view .brief-q-line { display: block; }
+.brief-view .brief-q-text { display: block; font-size: 15px; line-height: 1.55; color: var(--text-1); max-width: 72ch; }
+.brief-view .brief-q-meta { margin-top: 6px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 12px; }
+.brief-q-askeach {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-4);
 }
-.brief-view .brief-q-meta {
-  margin-top: 4px;
+.brief-q-expand {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-4);
+  cursor: pointer;
+  text-decoration: underline dotted;
 }
+.brief-q-expand:hover { color: var(--cyan); }
+.brief-view .brief-q-intent { font-size: 11px; font-family: var(--font-mono); }
+.brief-view .brief-q-why { font-size: 12px; color: var(--text-4); font-style: italic; }
 .evidence-drawer {
   width: 520px;
   max-width: min(520px, 92vw);
@@ -1460,19 +1506,13 @@ details[open] > .brief-section-head .brief-section-chevron { transform: rotate(9
 .brief-title { font-size: 13.5px; }
 .brief-objectives,
 .brief-coverage-targets { display: none; }
-.brief-section-head { font-size: 16px; padding: 10px 0 6px; }
-.brief-section-hint { font-size: 12px; }
 .brief-question-list { gap: 0; }
 .brief-question {
   border: 0;
   background: transparent;
-  padding: 8px 10px;
   border-radius: 6px;
 }
 .brief-question:hover { background: var(--bg-2); }
-.brief-question + .brief-question { border-top: 1px dashed var(--border-1); }
-.brief-q-text { font-size: 14.5px; line-height: 1.5; max-width: 72ch; }
-.brief-q-meta { margin-top: 4px; }
 .brief-q-controls { opacity: 0; transition: opacity 0.15s; }
 .brief-question:hover .brief-q-controls,
 .brief-question:focus-within .brief-q-controls { opacity: 1; }
