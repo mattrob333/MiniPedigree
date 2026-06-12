@@ -291,7 +291,7 @@ export function ReviewInbox({
     const spec = taskSpecs[detailItem.itemId];
     const completion = detailItem.completion;
     const missing = [
-      !completion?.trigger && "What triggers this work?",
+      !completion?.trigger && !completion?.cadence && "What triggers this work, and how often?",
       !completion?.inputs?.length && "What inputs are required?",
       !completion?.outputs?.length && "What output should be produced?",
       !completion?.tools_mentioned?.length && "What systems/tools are used?",
@@ -332,6 +332,7 @@ export function ReviewInbox({
               <div className="sh">Operating details</div>
               <div className="review-detail-kv">
                 <span>Trigger</span><strong>{notStated(completion?.trigger)}</strong>
+                <span>Cadence</span><strong>{notStated(completion?.cadence)}</strong>
                 <span>Inputs</span><strong>{notStated(completion?.inputs)}</strong>
                 <span>Outputs</span><strong>{notStated(completion?.outputs)}</strong>
                 <span>Dependencies</span><strong>{completion?.dependencies ? notStated([...completion.dependencies.upstream, ...completion.dependencies.downstream]) : "not stated in transcript"}</strong>

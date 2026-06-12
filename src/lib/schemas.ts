@@ -22,6 +22,7 @@ export const parsedTaskSchema = z.object({
   evidence_quote: z.string().optional().default(""),
   plain_language_description: z.string().optional().default(""),
   trigger: z.string().nullable().optional().default(null),
+  cadence: z.string().nullable().optional().default(null),
   inputs: z.array(z.string()).nullable().optional().default(null),
   outputs: z.array(z.string()).nullable().optional().default(null),
   dependencies: z.object({

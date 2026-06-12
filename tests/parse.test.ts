@@ -32,6 +32,27 @@ describe("enriched parse schema", () => {
     expect(task.candidate_pattern).toBe("weekly-report");
   });
 
+  it("keeps cadence distinct from trigger and defaults it to null", () => {
+    const task = parsedTaskSchema.parse({
+      name: "Compile weekly forecast report",
+      delegation_class: "delegatable",
+      risk_level: "low",
+      requires_human_approval: false,
+      trigger: "when the pipeline review ends",
+      cadence: "every Friday",
+    });
+    expect(task.trigger).toBe("when the pipeline review ends");
+    expect(task.cadence).toBe("every Friday");
+
+    const bare = parsedTaskSchema.parse({
+      name: "Clean stale records",
+      delegation_class: "delegatable",
+      risk_level: "low",
+      requires_human_approval: false,
+    });
+    expect(bare.cadence).toBeNull();
+  });
+
   it("nulls survive Zod (null means 'not stated in transcript')", () => {
     const task = parsedTaskSchema.parse({
       name: "Clean stale forecast records",

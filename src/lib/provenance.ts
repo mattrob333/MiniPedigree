@@ -187,6 +187,7 @@ export function buildReviewQueue(people: Person[], pedigree: PedigreeState): Rev
  * and anything AI-inferred — must be reviewed individually.
  */
 export function isBulkConfirmable(item: ReviewQueueItem): boolean {
+  if (item.provenance.source === "role_template") return false;
   if (item.provenance.state !== "evidenced") return false;
   if (item.kind === "task" && item.cls !== "delegatable") return false;
   return true;

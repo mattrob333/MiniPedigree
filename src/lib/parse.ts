@@ -210,6 +210,7 @@ function detailTasks(raw: string[], evidence?: string, source?: string): ParsedT
       reason: "",
       evidence_quote: evidence ?? "",
       trigger: null,
+      cadence: null,
       inputs: null,
       outputs: null,
       tools_mentioned: null,

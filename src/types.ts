@@ -133,6 +133,8 @@ export type TaskReadiness = "ready" | "needs_clarification";
  */
 export interface TaskCompletionContext {
   trigger: string | null;
+  /** Recurrence ("every Friday"), distinct from trigger ("when a deal closes"). */
+  cadence?: string | null;
   inputs: string[] | null;
   outputs: string[] | null;
   dependencies?: { upstream: string[]; downstream: string[] } | null;

@@ -343,7 +343,8 @@ function mergeEnrichment(discovery: ParsedDiscovery, enrichedTasks: EnrichTask[]
         const enriched = byKey.get(enrichKey(person.person_email, responsibility.name, task.name));
         if (!enriched) continue;
         task.plain_language_description = enriched.plain_language_description;
-        task.trigger = enriched.trigger ?? enriched.cadence ?? task.trigger ?? null;
+        task.trigger = enriched.trigger ?? task.trigger ?? null;
+        task.cadence = enriched.cadence ?? task.cadence ?? null;
         task.inputs = enriched.inputs.length ? enriched.inputs.map((input) => `${input.source}: ${input.description}`) : task.inputs ?? null;
         task.outputs = enriched.outputs.length ? enriched.outputs.map((output) => `${output.artifact}${output.recipient ? ` -> ${output.recipient}` : ""}`) : task.outputs ?? null;
         task.dependencies = enriched.dependencies;
@@ -354,7 +355,7 @@ function mergeEnrichment(discovery: ParsedDiscovery, enrichedTasks: EnrichTask[]
         task.enrichment_confidence = enriched.confidence;
         if (!task.evidence_quote && enriched.evidence_quotes[0]?.quote) task.evidence_quote = enriched.evidence_quotes[0].quote;
         task.open_questions = enriched.open_questions.length ? enriched.open_questions : task.open_questions ?? null;
-        task.readiness = task.trigger && task.inputs?.length && task.outputs?.length && task.definition_of_done ? "ready" : "needs_clarification";
+        task.readiness = (task.trigger || task.cadence) && task.inputs?.length && task.outputs?.length && task.definition_of_done ? "ready" : "needs_clarification";
       }
     }
   }

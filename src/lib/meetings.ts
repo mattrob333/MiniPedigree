@@ -71,7 +71,7 @@ export function buildCompactStackState(
     if (!row) continue;
     const push = (cls: CompactStackState["tasks"][number]["cls"], list: typeof row.tasks.delegatable) => {
       for (const t of list) {
-        tasks.push({ id: t.id, person_id: person.id, label: t.label, cadence: t.completion?.trigger ?? null, cls });
+        tasks.push({ id: t.id, person_id: person.id, label: t.label, cadence: t.completion?.cadence ?? t.completion?.trigger ?? null, cls });
       }
     };
     push("delegatable", row.tasks.delegatable);

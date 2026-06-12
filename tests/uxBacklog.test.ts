@@ -100,6 +100,14 @@ describe("P0-3 review inbox queue", () => {
     expect(bulk.some((i) => i.provenance.state === "ai_inferred")).toBe(false);
   });
 
+  it("role-template items are never bulk-confirmable, even if marked evidenced", () => {
+    const queue = buildReviewQueue([jane], pedigree);
+    const item = { ...queue.find((i) => i.itemId === task.id)! };
+    expect(isBulkConfirmable(item)).toBe(true);
+    const asTemplate = { ...item, provenance: { ...item.provenance, source: "role_template" } };
+    expect(isBulkConfirmable(asTemplate)).toBe(false);
+  });
+
   it("person-level confirm all labels only bulk-confirmable findings as automatic", () => {
     const queue = buildReviewQueue([jane], pedigree);
     const delegatable = queue.find((i) => i.itemId === task.id);

@@ -183,6 +183,7 @@ function taskKey(personId: string, respId: string, taskLabel: string): string {
 function extractCompletion(detail: ParsedTask): TaskItem["completion"] {
   return {
     trigger: detail.trigger ?? null,
+    cadence: detail.cadence ?? null,
     inputs: detail.inputs ?? null,
     outputs: detail.outputs ?? null,
     dependencies: detail.dependencies ?? null,
