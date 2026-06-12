@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
 import type { BriefQuestion, BriefQuestionIntent, Person, SessionBrief } from "@/types";
 import { downloadFile } from "@/lib/state";
@@ -84,7 +84,27 @@ export function briefToMarkdown(brief: SessionBrief, participants: Person[]): st
 export function SessionBriefView({ brief, participants, editable = true, onChange, onRegenerate, busy, onToast }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const actionsRef = useRef<HTMLDivElement>(null);
   const nameOf = (id: string) => (id === "group" ? "Group" : participants.find((p) => p.id === id)?.name?.split(/\s+/)[0] ?? id);
+
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) setActionsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActionsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [actionsOpen]);
 
   const update = (questions: BriefQuestion[]) => {
     onChange?.({ ...brief, questions: questions.map((q, i) => ({ ...q, order: i + 1 })), edited_by_user: true });
@@ -112,7 +132,48 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
     onToast?.(ok ? "Agenda copied" : "Copy failed", ok ? "Paste it into your meeting doc or Google Meet chat" : "Use the Brief.md download instead", ok);
   };
 
-  const renderQuestion = (q: BriefQuestion) => (
+  const systemName = (q: BriefQuestion) => {
+    const direct = q.text.match(/\b(?:what happened in|opened|inside|from|using|in)\s+([A-Z][A-Za-z0-9+&.\- ]{1,32}?)(?=\s+(?:the last time|last time|for real work|to|when|while)|[,.?]|$)/i);
+    return direct?.[1]?.trim() ?? "";
+  };
+
+  const targetChip = (q: BriefQuestion) => {
+    const person = participants.find((p) => p.id === q.target_person_id);
+    const systemMatch = systemName(q);
+    if (systemMatch && person) return `${nameOf(q.target_person_id)} - ${systemMatch}`;
+    return `${nameOf(q.target_person_id)}${systemMatch && person ? ` · ${systemMatch[1].trim()}` : ""}`;
+  };
+
+  const normalizedText = (q: BriefQuestion) => q.text
+    .replace(/^[A-Z][A-Za-z'-]+,\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const groupText = (q: BriefQuestion) => {
+    const text = normalizedText(q);
+    if (q.intent !== "system") return text;
+    const system = systemName(q);
+    return system ? text.replace(system, "[system]") : text;
+  };
+
+  const groupedQuestions = (questions: BriefQuestion[]) => {
+    const byKey = new Map<string, BriefQuestion[]>();
+    for (const q of questions) {
+      const key = `${q.intent}::${groupText(q).toLowerCase()}`;
+      byKey.set(key, [...(byKey.get(key) ?? []), q]);
+    }
+    return [...byKey.entries()].map(([key, items]) => ({ key, items, displayText: groupText(items[0]) }));
+  };
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const renderQuestion = (q: BriefQuestion, nested = false) => (
     <li className="brief-question" key={q.id}>
       <div className="brief-q-body">
         {editingId === q.id ? (
@@ -131,9 +192,10 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
           <div className="brief-q-text" title={`Why: ${q.why}`}>{q.text || <em className="dim">empty question</em>}</div>
         )}
         <div className="brief-q-meta">
-          <span className="brief-q-target">{nameOf(q.target_person_id)}</span>
+          {q.target_person_id !== "group" && <span className="brief-q-target">{targetChip(q)}</span>}
           <span className="brief-q-intent" style={{ color: INTENT_COLOR[q.intent] }}>{INTENT_LABEL[q.intent]}</span>
-          <span className="brief-q-why">{q.why}</span>
+          {showNotes && <span className="brief-q-why">{q.why}</span>}
+          {nested && <span className="tag">individual</span>}
         </div>
       </div>
       {editable && editingId !== q.id && (
@@ -145,6 +207,29 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
     </li>
   );
 
+  const renderGroup = (group: { key: string; items: BriefQuestion[]; displayText: string }) => {
+    if (group.items.length === 1) return renderQuestion(group.items[0]);
+    const first = group.items[0];
+    const expanded = expandedGroups.has(group.key);
+    return (
+      <li className="brief-question grouped" key={group.key}>
+        <div className="brief-q-body">
+          <button className="brief-group-toggle" onClick={() => toggleGroup(group.key)} title="Show individual questions and edit controls">
+            <Icon name={expanded ? "chevron-down" : "chevron-right"} size={11} />
+            <span className="brief-q-text">{group.displayText}</span>
+          </button>
+          <div className="brief-q-meta">
+            <span className="brief-q-target">ask each:</span>
+            {group.items.map((q) => <span className="tag" key={q.id}>{targetChip(q)}</span>)}
+            <span className="brief-q-intent" style={{ color: INTENT_COLOR[first.intent] }}>{INTENT_LABEL[first.intent]}</span>
+            {showNotes && <span className="brief-q-why">{first.why}</span>}
+          </div>
+          {expanded && <ol className="brief-question-list nested">{group.items.map((q) => renderQuestion(q, true))}</ol>}
+        </div>
+      </li>
+    );
+  };
+
   return (
     <div className="brief-view">
       <div className="brief-head">
@@ -153,20 +238,57 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
             <span className="tag">{brief.source === "ai" ? "AI-generated" : "template"}</span>
             {brief.edited_by_user && <span className="tag cyan">edited</span>}
           </div>
-          <p className="brief-objectives">{brief.objectives}</p>
         </div>
         <div className="brief-actions">
           <button className="btn btn-sm btn-outline-cyan" onClick={copyAgenda} title="Copy the agenda as Markdown — paste it into your meeting doc"><Icon name="copy" size={11} /> Copy agenda</button>
-          {onRegenerate && <button className="btn btn-sm btn-ghost" onClick={onRegenerate} disabled={busy} title="Regenerate from current company context and open questions"><Icon name="sparkles" size={11} /> {busy ? "Generating..." : "Regenerate"}</button>}
-          <button className="btn btn-sm btn-ghost" onClick={() => downloadFile("session-brief.md", briefToMarkdown(brief, participants), "text/markdown")} title="Run the session from a phone or printout"><Icon name="download" size={11} /> Brief.md</button>
+          <button
+            className="icon-btn"
+            aria-label="Show/hide facilitator notes"
+            aria-pressed={showNotes}
+            title="Show/hide facilitator notes"
+            onClick={() => setShowNotes((v) => !v)}
+            style={showNotes ? { borderColor: "var(--border-cyan)", color: "var(--cyan)" } : undefined}
+          >
+            <Icon name="info" size={12} />
+          </button>
+          <div className="brief-actions-menu-wrap" ref={actionsRef}>
+            <button
+              className="icon-btn"
+              aria-label="More brief actions"
+              aria-expanded={actionsOpen}
+              title="More brief actions"
+              onClick={() => setActionsOpen((v) => !v)}
+            >
+              <Icon name="menu-dots" size={13} />
+            </button>
+            {actionsOpen && (
+              <div className="brief-actions-menu" role="menu" aria-label="Brief actions">
+                {onRegenerate && (
+                  <button
+                    role="menuitem"
+                    disabled={busy}
+                    onClick={() => {
+                      setActionsOpen(false);
+                      onRegenerate();
+                    }}
+                  >
+                    <Icon name="sparkles" size={12} /> {busy ? "Generating..." : "Regenerate brief"}
+                  </button>
+                )}
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    downloadFile("session-brief.md", briefToMarkdown(brief, participants), "text/markdown");
+                  }}
+                >
+                  <Icon name="download" size={12} /> Download Brief.md
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {brief.coverage_targets.length > 0 && (
-        <div className="brief-coverage-targets">
-          <Icon name="target" size={11} /> Must not leave unmapped: {brief.coverage_targets.map((id) => nameOf(id)).join(", ")}
-        </div>
-      )}
 
       {SECTIONS.map((section) => {
         const questions = brief.questions.filter((q) => section.intents.includes(q.intent));
@@ -178,14 +300,10 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
               {section.title} <span className="tag">{questions.length}</span>
               <span className="brief-section-hint">{section.hint}</span>
             </summary>
-            <ol className="brief-question-list">{questions.map(renderQuestion)}</ol>
+            <ol className="brief-question-list">{groupedQuestions(questions).map(renderGroup)}</ol>
           </details>
         );
       })}
-
-      {editable && (
-        <button className="btn btn-sm btn-ghost" onClick={addQuestion}><Icon name="sparkles" size={11} /> Add question</button>
-      )}
 
       {brief.probe_areas.length > 0 && (
         <details className="brief-section">
@@ -200,6 +318,10 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
             ))}
           </div>
         </details>
+      )}
+
+      {editable && (
+        <button className="brief-add-question" onClick={addQuestion}><Icon name="sparkles" size={11} /> Add question</button>
       )}
     </div>
   );

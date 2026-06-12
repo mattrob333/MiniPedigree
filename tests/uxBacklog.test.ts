@@ -13,6 +13,7 @@ import { governancePreservedChecks, preservationPassed } from "../src/lib/valida
 import { enforcementProfile, enforcementSummary } from "../src/lib/enforcement";
 import { buildGovernanceSummaryHtml } from "../src/lib/governanceSummary";
 import { compileAgent } from "../src/lib/runtimes";
+import { confirmGroupLabel, reviewConfirmEligibility } from "../src/components/ReviewInbox";
 import type { PedigreeRow, PedigreeState, Person, TaskItem } from "../src/types";
 
 const jane: Person = {
@@ -58,8 +59,8 @@ describe("P0-1 provenance", () => {
     expect(r.responsibilities.every((resp) => resp.provenance)).toBe(true);
     const allTasks = [...r.tasks.delegatable, ...r.tasks.approval, ...r.tasks.not_delegatable];
     expect(allTasks.every((t) => t.provenance)).toBe(true);
-    // Role-template items with no transcript evidence must read ai_inferred.
-    expect(allTasks.some((t) => t.provenance!.state === "ai_inferred")).toBe(true);
+    // Transcript-derived fallback no longer mixes in role-template boilerplate.
+    expect(allTasks.every((t) => t.provenance!.state === "evidenced")).toBe(true);
   });
 
   it("confirmation records who and when; provenance survives into the manifest", () => {
@@ -97,6 +98,29 @@ describe("P0-3 review inbox queue", () => {
     expect(bulk.some((i) => i.cls === "approval")).toBe(false);
     expect(bulk.some((i) => i.cls === "not_delegatable")).toBe(false);
     expect(bulk.some((i) => i.provenance.state === "ai_inferred")).toBe(false);
+  });
+
+  it("person-level confirm all labels only bulk-confirmable findings as automatic", () => {
+    const queue = buildReviewQueue([jane], pedigree);
+    const delegatable = queue.find((i) => i.itemId === task.id);
+    const aiDraftedApproval = queue.find((i) => i.cls === "approval");
+    const blockedEvidenced = queue.find((i) => i.cls === "not_delegatable");
+
+    expect(delegatable).toBeTruthy();
+    expect(aiDraftedApproval).toBeTruthy();
+    expect(blockedEvidenced).toBeTruthy();
+
+    const mixed = reviewConfirmEligibility([delegatable!, aiDraftedApproval!]);
+    expect(mixed.eligibleCount).toBe(1);
+    expect(mixed.aiDrafted.map((i) => i.itemId)).toEqual([aiDraftedApproval!.itemId]);
+    expect(confirmGroupLabel(mixed.total, mixed.eligibleCount)).toBe("Confirm 1 evidenced");
+
+    const none = reviewConfirmEligibility([aiDraftedApproval!, blockedEvidenced!]);
+    expect(none.eligibleCount).toBe(0);
+    expect(confirmGroupLabel(none.total, none.eligibleCount)).toBe("Confirm evidenced");
+
+    const all = reviewConfirmEligibility([delegatable!]);
+    expect(confirmGroupLabel(all.total, all.eligibleCount)).toBe("Confirm all 1");
   });
 
   it("confirmations drop items from the queue and write audit events", () => {

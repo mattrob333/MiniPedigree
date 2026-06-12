@@ -37,13 +37,12 @@ export function Topbar({
   return (
     <header className="topbar">
       <div className="brand" onClick={onHome} style={onHome ? { cursor: "pointer" } : undefined} title={onHome ? "Home" : undefined}>
-        <div className="brand-mark">PD</div>
-        <div className="brand-text">
-          <span className="name">Pedigree</span>
-          <span className="tag" style={{ background: "transparent", border: 0, padding: 0, fontSize: 10.5 }}>
-            Discover Lite
-          </span>
-        </div>
+        <img
+          className="brand-wordmark"
+          src={resolvedTheme === "light" ? "/brand/pedigree-wordmark-dark-premium.png" : "/brand/pedigree-wordmark-white-premium.png"}
+          alt="Pedigree"
+        />
+        <span className="brand-product">Discover Lite</span>
       </div>
 
       {(screen === "workspace" || screen === "manifest" || screen === "profile" || screen === "company" || screen === "mcplibrary") && (

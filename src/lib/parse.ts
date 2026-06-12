@@ -199,7 +199,7 @@ function bucketTasks(raw: string[]): ParsedResponsibility["tasks"] {
  * Deterministic per-task detail records. Completion-context fields are all null:
  * the local fallback never invents triggers, inputs, or definitions of done.
  */
-function detailTasks(raw: string[], evidence?: string): ParsedTask[] {
+function detailTasks(raw: string[], evidence?: string, source?: string): ParsedTask[] {
   return raw.map((label) => {
     const { cls, risk } = classifyTask(label);
     return {
@@ -217,6 +217,7 @@ function detailTasks(raw: string[], evidence?: string): ParsedTask[] {
       readiness: null,
       open_questions: null,
       candidate_pattern: null,
+      source,
     };
   });
 }
@@ -251,21 +252,26 @@ export function generateParsed(people: Person[], transcript: string): ParsedMap 
           description: mentioned[0],
           confidence: 0.86,
           evidence_quote: mentioned[0],
+          source: "transcript",
           tasks: bucketTasks(extracted),
-          taskDetails: detailTasks(extracted, mentioned[0]),
+          taskDetails: detailTasks(extracted, mentioned[0], "transcript"),
         });
       }
     }
 
-    // 2) Role-template responsibilities (always, to give a complete map).
-    for (const r of roleResponsibilities(person.title)) {
-      responsibilities.push({
-        id: nextRespId(),
-        title: r.title,
-        confidence: mentioned.length ? 0.8 : 0.62,
-        tasks: bucketTasks(r.tasks),
-        taskDetails: detailTasks(r.tasks),
-      });
+    // 2) Role-template responsibilities only fill true gaps. They are clearly
+    // tagged so local boilerplate never impersonates transcript extraction.
+    if (!responsibilities.length) {
+      for (const r of roleResponsibilities(person.title)) {
+        responsibilities.push({
+          id: nextRespId(),
+          title: r.title,
+          confidence: 0.42,
+          source: "role_template",
+          tasks: bucketTasks(r.tasks),
+          taskDetails: detailTasks(r.tasks, undefined, "role_template"),
+        });
+      }
     }
 
     const hasDeleg = responsibilities.some((r) => r.tasks.delegatable.length > 0);

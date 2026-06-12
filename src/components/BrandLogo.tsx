@@ -18,6 +18,7 @@ export const BRAND_DEFINITIONS: BrandDefinition[] = [
   { id: "google-drive", label: "Google Drive", logo: "/brand-logos/google-drive.svg", aliases: ["google drive", "google drive mcp", "drive"] },
   { id: "google-docs", label: "Google Docs", logo: "/brand-logos/google-docs.svg", aliases: ["google docs", "docs"] },
   { id: "google-sheets", label: "Google Sheets", logo: "/brand-logos/google-sheets.svg", aliases: ["google sheets", "sheets"] },
+  { id: "google-meet", label: "Google Meet", logo: "/brand-logos/google-meet.svg", aliases: ["google meet", "meet"] },
   { id: "google-analytics", label: "Google Analytics", logo: "/brand-logos/google-analytics.svg", aliases: ["google analytics", "ga4"] },
   { id: "looker", label: "Looker", logo: "/brand-logos/looker.svg", aliases: ["looker", "looker mcp"] },
   { id: "snowflake", label: "Snowflake", logo: "/brand-logos/snowflake.svg", aliases: ["snowflake", "snowflake mcp"] },
@@ -43,6 +44,7 @@ export const BRAND_DEFINITIONS: BrandDefinition[] = [
   { id: "microsoft-copilot", label: "Microsoft Copilot", logo: "/brand-logos/microsoft-copilot.svg", aliases: ["microsoft copilot", "microsoft co pilot", "copilot", "copilot studio", "microsoft co-pilot"] },
   { id: "microsoft-excel", label: "Microsoft Excel", logo: "/brand-logos/microsoft-excel.svg", aliases: ["excel", "microsoft excel"] },
   { id: "microsoft-office", label: "Microsoft Office", logo: "/brand-logos/microsoft-office.svg", aliases: ["microsoft office", "microsoft 365", "m365", "office 365"] },
+  { id: "microsoft-teams", label: "Microsoft Teams", logo: "/brand-logos/microsoft-teams.svg", aliases: ["microsoft teams", "teams"] },
   { id: "monday", label: "Monday.com", logo: "/brand-logos/monday.svg", aliases: ["monday", "monday.com", "monday com"] },
   { id: "nousresearch-hermes", label: "NousResearch Hermes", logo: "/brand-logos/nousresearch-hermes.svg", aliases: ["hermes", "hermes agent", "nousresearch hermes", "nousresearch", "nous research hermes"] },
   { id: "okta", label: "Okta", logo: "/brand-logos/okta.svg", aliases: ["okta"] },
@@ -53,6 +55,7 @@ export const BRAND_DEFINITIONS: BrandDefinition[] = [
   { id: "supabase", label: "Supabase", logo: "/brand-logos/supabase.svg", aliases: ["supabase"] },
   { id: "vercel", label: "Vercel", logo: "/brand-logos/vercel.svg", aliases: ["vercel", "v0 vercel"] },
   { id: "webflow", label: "Webflow", logo: "/brand-logos/webflow.svg", aliases: ["webflow"] },
+  { id: "zoom", label: "Zoom", logo: "/brand-logos/zoom.svg", aliases: ["zoom", "zoom meetings"] },
 ];
 
 const MATCHERS = BRAND_DEFINITIONS.flatMap((brand) =>

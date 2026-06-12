@@ -7,6 +7,7 @@ import { getDepartmentColor } from "@/lib/departments";
 import { isMapped, recommendSessionType, SESSION_LABEL, teamMapped } from "@/lib/sessions";
 import { mergeSystemGrant } from "@/lib/authority";
 import { canAdminister } from "@/lib/rbac";
+import { deriveOperationalState, taskActionLabel } from "@/lib/taskState";
 
 export interface CreateAgentCtx {
   person: Person;
@@ -121,7 +122,7 @@ export function Drawer({ open, person, state, people, pedigree, role = "editor",
               {/* Delegatable tasks */}
               <section className="drawer-section">
                 <div className="sh">
-                  Delegatable tasks
+                  Delegation candidate tasks
                   <span className="count">{delegCount}</span>
                   <span className="meter"><span style={{ width: delegCount ? "100%" : "0%", background: "var(--cyan)" }} /></span>
                 </div>
@@ -130,16 +131,26 @@ export function Drawer({ open, person, state, people, pedigree, role = "editor",
                 ) : (
                   tasks.delegatable.map((t) => {
                     const created = createdTaskIds.has(t.id);
+                    const agent = agents.find((x) => x.taskId === t.id);
+                    const operationalState = deriveOperationalState(t, undefined, agent);
+                    const canCreate = operationalState === "agent_ready";
                     return (
                       <div key={t.id} className={"task-row" + (created ? " created" : "")}>
                         <div className="marker">{created ? <Icon name="checkmark" size={10} /> : "T"}</div>
                         <div className="label">{t.label}</div>
                         <ProvenanceBadge provenance={t.provenance} compact />
-                        <div className="meta">{t.respId}</div>
+                        <div className="meta">{t.respId} · {operationalState.replace(/_/g, " ")}</div>
                         {created ? (
-                          <button className="btn btn-sm btn-ghost" onClick={() => { const a = agents.find((x) => x.taskId === t.id); if (a) onOpenAgent(a); }}>Open agent <Icon name="external" size={11} /></button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => { if (agent) onOpenAgent(agent); }}>Open agent <Icon name="external" size={11} /></button>
                         ) : (
-                          <button className="btn btn-sm btn-outline-cyan" onClick={() => onCreateAgent({ person, task: t, respTitle: t.respTitle })}><Icon name="sparkles" size={11} /> Create Agent</button>
+                          <button
+                            className="btn btn-sm btn-outline-cyan"
+                            disabled={!canCreate}
+                            title={!canCreate ? `Workflow incomplete: ${(t.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
+                            onClick={() => onCreateAgent({ person, task: t, respTitle: t.respTitle })}
+                          >
+                            <Icon name="sparkles" size={11} /> {taskActionLabel(operationalState)}
+                          </button>
                         )}
                       </div>
                     );
@@ -184,8 +195,8 @@ export function Drawer({ open, person, state, people, pedigree, role = "editor",
               <button className="btn" onClick={onClose}>Close</button>
               <span style={{ flex: 1 }} />
               {tasks.delegatable.length > 0 && (
-                <button className="btn btn-ghost" onClick={() => { const next = tasks.delegatable.find((t) => !createdTaskIds.has(t.id)); if (next) onCreateAgent({ person, task: next, respTitle: next.respTitle }); }}>
-                  <Icon name="sparkles" size={12} /> Create Agent
+                <button className="btn btn-ghost" onClick={() => onOpenProfile(person.id)}>
+                  <Icon name="external" size={12} /> Open profile
                 </button>
               )}
               {sessionType && (

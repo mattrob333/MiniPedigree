@@ -4,12 +4,15 @@ import type {
   BriefQuestion,
   CompanyContext,
   MappingSessionType,
+  MeetingPlatform,
   ParsedMap,
   PedigreeState,
   Person,
+  PlannedSession,
   PlannedSessionStatus,
   QuestionBacklogItem,
   SessionBrief,
+  SessionSchedule,
   SessionNote,
   SessionNoteTag,
   SessionScope,
@@ -34,12 +37,15 @@ import {
   type GuidedCaptureState,
 } from "@/lib/guidedCapture";
 import { assessAgendaCoverage, type AgendaCoverage } from "@/lib/agendaCoverage";
-import { countFindings, filterParsedMap, responsibilityKey, taskKey, type FindingKey } from "@/lib/parseReview";
+import { countFindings, defaultFlaggedFindings, defaultRejectedFindings, filterParsedMap, responsibilityKey, taskKey, type FindingKey } from "@/lib/parseReview";
 import { demoTranscript } from "@/lib/demoKit";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { deriveProvenance } from "@/lib/provenance";
 import { initials } from "@/lib/util";
+import { copyText } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
+import { ScheduleSessionModal } from "./modals/ScheduleSessionModal";
+import { briefToParticipantMarkdown } from "@/lib/prepSheet";
 
 // ── UX V2: transcript-first discovery ──────────────────────────────────
 // Pedigree's job is "agenda → transcript → parsed work → evidence-backed
@@ -58,6 +64,7 @@ export interface ApplyMappingArgs {
   plannedSessionId?: string;
   brief?: SessionBrief;
   parkedNotes?: SessionNote[];
+  exceptionKeys?: FindingKey[];
 }
 
 type Mode = "brief" | "transcript" | "capture" | "review";
@@ -70,16 +77,52 @@ const TAGS: { id: SessionNoteTag; label: string }[] = [
   { id: "open_question", label: "open question" },
 ];
 
+const MEETING_PROVIDER_OPTIONS: { id: MeetingPlatform; label: string; logo: string }[] = [
+  { id: "google_meet", label: "Google Meet", logo: "/brand-logos/google-meet.svg" },
+  { id: "ms_teams", label: "Microsoft Teams", logo: "/brand-logos/microsoft-teams.svg" },
+  { id: "zoom", label: "Zoom", logo: "/brand-logos/zoom.svg" },
+];
+
+const PLATFORM_LABEL: Record<SessionSchedule["platform"], string> = {
+  google_meet: "Google Meet",
+  ms_teams: "Microsoft Teams",
+  zoom: "Zoom",
+};
+
+function meetingPlatformLabel(platform: SessionSchedule["platform"]): string {
+  return PLATFORM_LABEL[platform];
+}
+
+function sessionScheduleLabel(schedule: SessionSchedule): string {
+  if (schedule.mode === "instant") return "Now";
+  if (!schedule.scheduledFor) return "Scheduled";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(schedule.scheduledFor));
+}
+
 interface Props {
   person: Person;
   people: Person[];
   pedigree: PedigreeState;
   companyContext?: CompanyContext;
   plannedSessionId?: string;
+  plannedSession?: PlannedSession;
   questionBacklog?: QuestionBacklogItem[];
+  reviewQueueCount: number;
+  nextPendingSession?: PlannedSession;
+  discoveryJustCompleted?: boolean;
+  completionCoverage?: { covered: number; total: number };
   onClose: () => void;
   onApply: (args: ApplyMappingArgs) => void;
+  onReviewFindings: () => void;
+  onStartNextSession: (session: PlannedSession) => void;
   onPlanEvent?: (sessionId: string, status: PlannedSessionStatus, briefId?: string) => void;
+  onScheduleSession?: (sessionId: string, schedule: SessionSchedule) => void;
   onToast?: (t1: string, t2?: string, green?: boolean) => void;
 }
 
@@ -96,12 +139,13 @@ function cleanTranscriptFile(raw: string): string {
     .trim();
 }
 
-export function SessionWorkspace({ person, people, pedigree, companyContext, plannedSessionId, questionBacklog = [], onClose, onApply, onPlanEvent, onToast }: Props) {
+export function SessionWorkspace({ person, people, pedigree, companyContext, plannedSessionId, plannedSession, questionBacklog = [], reviewQueueCount, nextPendingSession, discoveryJustCompleted, completionCoverage, onClose, onApply, onReviewFindings, onStartNextSession, onPlanEvent, onScheduleSession, onToast }: Props) {
   const sessionType: MappingSessionType = useMemo(
     () => recommendSessionType(person, people, pedigree),
     [person, people, pedigree],
   );
   const [mode, setMode] = useState<Mode>("brief");
+  const [schedulePlatform, setSchedulePlatform] = useState<MeetingPlatform | null>(null);
   const [scope, setScope] = useState<SessionScope>(() => defaultScopeFor(sessionType));
   const [brief, setBrief] = useState<SessionBrief | null>(null);
   const [briefBusy, setBriefBusy] = useState(false);
@@ -111,11 +155,13 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [appliedSummary, setAppliedSummary] = useState<{ responsibilities: number; tasks: number; exceptions: number } | null>(null);
   const [parsed, setParsed] = useState<ParsedMap | null>(null);
   const [parseSource, setParseSource] = useState<"ai" | "local">("local");
   const [coverage, setCoverage] = useState<AgendaCoverage | null>(null);
   const [outcomeBrief, setOutcomeBrief] = useState<SessionBrief | null>(null);
   const [rejected, setRejected] = useState<Set<FindingKey>>(new Set());
+  const [flagged, setFlagged] = useState<Set<FindingKey>>(new Set());
   const [parkText, setParkText] = useState("");
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -129,6 +175,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
   const reports = directReports(person.id, people);
   const dept = getDepartmentColor(person.department);
   const sessionId = plannedSessionId ?? `PS-${sessionType}-${person.id}`;
+  const schedule = plannedSession?.schedule;
   const readiness = useMemo(
     () => computeReadiness(companyContext, companyContext?.contextDocuments ?? [], people),
     [companyContext, people],
@@ -279,7 +326,8 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
       const r = await parseDiscovery(scopedPeople, parseInput, scopeIds, companyContext);
       setParsed(r.parsed);
       setParseSource(r.source);
-      setRejected(new Set());
+      setRejected(defaultRejectedFindings(r.parsed, scopeIds));
+      setFlagged(defaultFlaggedFindings(r.parsed, scopeIds));
       // Agenda coverage: map the transcript back to the brief's questions so
       // unanswered topics carry into the open-questions backlog.
       if (brief) {
@@ -310,26 +358,86 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
     });
   };
 
+  const toggleFlagged = (key: FindingKey) => {
+    setFlagged((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const apply = () => {
     if (!parsed) return;
     const accepted = filterParsedMap(parsed, rejected);
     const finalBrief = outcomeBrief ?? brief ?? undefined;
+    const counts = countFindings(accepted, scopeIds);
+    const exceptionKeys = [...flagged].filter((key) => !rejected.has(key));
     onApply({
       scopeIds,
       sessionType,
       sessionLabel: SESSION_LABEL[sessionType] + " · " + person.name,
       parsed: accepted,
       plannedSessionId: sessionId,
+      exceptionKeys,
       ...(finalBrief ? { brief: finalBrief } : {}),
       ...(capture.parked.length ? { parkedNotes: capture.parked } : {}),
     });
+    setAppliedSummary({ ...counts, exceptions: exceptionKeys.length });
   };
 
   const wordCount = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
+  const scheduleLabel = schedule ? sessionScheduleLabel(schedule) : "";
+  const platformLabel = schedule ? meetingPlatformLabel(schedule.platform) : "";
+  const scheduleOpen = schedulePlatform !== null;
+  const invitePrep = brief ? briefToParticipantMarkdown(brief, scopedPeople, undefined, scheduleLabel || undefined) : "";
+  const inviteTitle = `${SESSION_LABEL[sessionType]} - ${person.name} · ${companyContext?.company || "Pedigree"}`;
   const canParse = usingCapture || Boolean(transcript.trim());
   const liveCoverage = brief ? participantCoverage(brief, capture.notes, scopedPeople) : [];
   const question = brief?.questions[currentQ];
   const surviving = parsed ? countFindings(filterParsedMap(parsed, rejected), scopeIds) : { responsibilities: 0, tasks: 0 };
+  const selectedFindings = surviving.responsibilities + surviving.tasks;
+  const activeExceptionCount = [...flagged].filter((key) => !rejected.has(key)).length;
+  const allCoverageTargets = Boolean(brief && scopedPeople.length > 0 && scopedPeople.every((p) => brief.coverage_targets.includes(p.id)));
+  const nextSessionPerson = nextPendingSession ? people.find((p) => p.id === nextPendingSession.anchor_person_id) : undefined;
+  const nextSessionLabel = nextPendingSession && nextSessionPerson ? `${SESSION_LABEL[nextPendingSession.type]} - ${nextSessionPerson.name}` : undefined;
+
+  if (appliedSummary) {
+    return (
+      <div className="session-screen">
+        <div className="session-head" style={{ borderTop: `3px solid ${dept.accent}` }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="chevron-left" size={12} /> Exit session</button>
+          <div className="session-title">
+            <h2><Icon name="check-circle" size={15} stroke="var(--green)" /> Findings applied</h2>
+            <span className="session-sub">{SESSION_LABEL[sessionType]} - {person.name}</span>
+          </div>
+        </div>
+        <div className="session-body apply-complete">
+          <section className="stage-complete-card session-apply-complete-card">
+            <div className="stage-complete-icon"><Icon name="checkmark" size={18} /></div>
+            <div>
+              <h3>{discoveryJustCompleted ? "Discovery complete" : "Session findings applied"}</h3>
+              {discoveryJustCompleted && completionCoverage ? (
+                <p>{completionCoverage.covered}/{completionCoverage.total} people covered. The discovery sprint is ready for human review.</p>
+              ) : (
+                <p>{appliedSummary.responsibilities} responsibilities and {appliedSummary.tasks} tasks confirmed from this session{appliedSummary.exceptions ? `; ${appliedSummary.exceptions} routed to exceptions.` : "."}</p>
+              )}
+            </div>
+            <div className="stage-complete-actions">
+              <button className="btn btn-primary" onClick={onReviewFindings}>
+                <Icon name="shield" size={13} /> Exceptions ({reviewQueueCount})
+              </button>
+              {!discoveryJustCompleted && nextPendingSession && nextSessionLabel && (
+                <button className="btn btn-ghost" onClick={() => onStartNextSession(nextPendingSession)}>
+                  <Icon name="arrow-right" size={13} /> Next session: {nextSessionLabel}
+                </button>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   const MODES: [Mode, string, string][] = [
     ["brief", "Brief", "The agenda that runs the meeting."],
@@ -345,6 +453,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
           <h2><Icon name="sparkles" size={15} stroke="var(--cyan)" /> {SESSION_LABEL[sessionType]} — {person.name}</h2>
           <span className="session-sub">
             {person.title} · {person.department} · {scopedPeople.length} participant{scopedPeople.length === 1 ? "" : "s"}
+            {schedule && <>{" · "}Invited · {scheduleLabel} · {platformLabel}</>}
             {" · "}{parsed ? "Review findings" : transcript.trim() ? "Ready to parse" : "Transcript needed"}
           </span>
         </div>
@@ -380,13 +489,15 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                   <option value="unmapped_reports">{person.name} + unmapped reports only</option>
                 </select>
               )}
+              {allCoverageTargets && <div className="scope-coverage-note">All {scopedPeople.length} must be mapped this session.</div>}
               {scopedPeople.map((p) => {
                 const openQs = openQuestions.filter((b) => b.person_id === p.id).length;
                 return (
                   <div className="scope-person" key={p.id}>
                     <span className="avatar">{initials(p.name)}</span>
-                    <div><div style={{ color: "var(--text-1)" }}>{p.name}</div><div className="mono" style={{ fontSize: 11, color: "var(--text-4)" }}>{p.title}</div></div>
+                    <div className="scope-person-copy"><span>{p.name}</span><small>{p.title}</small></div>
                     {!isMapped(pedigree[p.id]?.status) && <span className="tag yellow">unmapped</span>}
+                    {!allCoverageTargets && brief?.coverage_targets.includes(p.id) && <span className="tag cyan">must cover</span>}
                     {openQs > 0 && <span className="tag">{openQs} open Q</span>}
                   </div>
                 );
@@ -415,25 +526,101 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
           </aside>
 
           <main className="session-prepare-main">
-            <div className="howto-run">
-              <div className="howto-title"><Icon name="play" size={12} /> How to run this meeting</div>
+            <details className="howto-run session-howto-compact">
+              <summary className="howto-title"><Icon name="play" size={12} /> How to run this meeting (recording on · copy agenda · upload transcript)</summary>
               <ol>
                 <li>Keep the recording/transcript on (Google Meet, Zoom, Fireflies).</li>
                 <li><strong>Copy the agenda</strong> below into your meeting doc, or read from here.</li>
                 <li>Open with the round-robin and let people answer naturally — the follow-up sections are for when conversation stalls.</li>
                 <li>After the call, <strong>upload the transcript</strong>. Pedigree parses responsibilities, tasks, approvals, tools, and agent candidates with evidence.</li>
               </ol>
-            </div>
+            </details>
+            <section className={"schedule-bar" + (schedule ? " scheduled" : "")} aria-label="Schedule and invite">
+              {schedule ? (
+                <>
+                  <div className="schedule-bar-status">
+                    <Icon name="check-circle" size={14} stroke="var(--green)" />
+                    <span>{platformLabel} Â· {scheduleLabel} Â· {schedule.invitedPersonIds.length} invited</span>
+                  </div>
+                  <div className="schedule-bar-actions">
+                    <button className="btn btn-sm btn-ghost" disabled={!brief} onClick={() => setSchedulePlatform(schedule.platform)}>Re-send</button>
+                    <button
+                      className="btn btn-sm btn-ghost"
+                      disabled={!schedule.meetingLink}
+                      title={schedule.meetingLink ? "Copy meeting link" : "No meeting link saved yet"}
+                      onClick={async () => {
+                        if (!schedule.meetingLink) return;
+                        const ok = await copyText(schedule.meetingLink);
+                        onToast?.(ok ? "Meeting link copied" : "Copy failed", schedule.meetingLink, ok);
+                      }}
+                    >Copy link</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="schedule-bar-title"><Icon name="history" size={14} stroke="var(--cyan)" /> Schedule & invite</div>
+                  <div className="schedule-bar-platforms">
+                    {MEETING_PROVIDER_OPTIONS.map((provider) => (
+                      <button
+                        key={provider.id}
+                        className="schedule-platform-button"
+                        data-platform={provider.id}
+                        disabled={!brief}
+                        onClick={() => setSchedulePlatform(provider.id)}
+                        title={`Schedule with ${provider.label}`}
+                      >
+                        <img src={provider.logo} alt={`${provider.label} logo`} />
+                        <span>{provider.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="schedule-bar-meta">
+                    <span>{scopedPeople.length} invitee{scopedPeople.length === 1 ? "" : "s"} prefilled</span>
+                    <small>Choose a platform to prepare the invite.</small>
+                  </div>
+                </>
+              )}
+            </section>
             {brief ? (
               <SessionBriefView brief={brief} participants={scopedPeople} onChange={setBrief} onRegenerate={generateBrief} busy={briefBusy} onToast={onToast} />
             ) : (
               <div className="drawer-empty" style={{ marginTop: 40 }}>Preparing the agenda from the company context, KPIs, and open questions…</div>
             )}
           </main>
+
+          <aside className="session-howto-rail">
+            <section className="profile-section">
+              <div className="ps-head"><Icon name="play" size={13} stroke="var(--cyan)" /> How to run this meeting</div>
+              <ol className="howto-checklist">
+                <li>Keep the recording/transcript on (Google Meet, Zoom, Fireflies).</li>
+                <li><strong>Copy the agenda</strong> into your meeting doc, or read from here.</li>
+                <li>Open with the round-robin and let people answer naturally.</li>
+                <li>After the call, <strong>upload the transcript</strong> for evidence-backed parsing.</li>
+              </ol>
+            </section>
+          </aside>
         </div>
       )}
 
       {/* ── TRANSCRIPT: the default path ──────────────────────────────── */}
+      {scheduleOpen && brief && (
+        <ScheduleSessionModal
+          sessionId={sessionId}
+          title={inviteTitle}
+          attendees={scopedPeople.map((p) => ({ id: p.id, name: p.name, email: p.email, title: p.title }))}
+          agendaMarkdown={invitePrep}
+          defaultDuration={45}
+          existingSchedule={schedule}
+          initialPlatform={schedulePlatform ?? undefined}
+          onClose={() => setSchedulePlatform(null)}
+          onScheduled={(next) => {
+            onScheduleSession?.(sessionId, next);
+            onPlanEvent?.(sessionId, "briefed", brief.id);
+          }}
+          onToast={onToast}
+        />
+      )}
+
       {mode === "transcript" && (
         <div className="session-body" style={{ justifyContent: "center" }}>
           <main className="transcript-main">
@@ -601,16 +788,27 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
               <div>
                 <h3 style={{ margin: 0 }}>Review findings</h3>
                 <span className="dim" style={{ fontSize: 13 }}>
-                  Parsed by {parseSource === "ai" ? "AI" : "the local engine"}{usingCapture ? ` from ${captureNotesCount} attributed notes` : ""} · uncheck anything that isn't trustworthy — rejected items never enter the map
+                  Parsed by {parseSource === "ai" ? "AI" : "the local template engine"}{usingCapture ? ` from ${captureNotesCount} attributed notes` : ""} · evidence-backed items start selected; template or unevidenced items require an explicit click
                 </span>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span className="tag cyan">{surviving.responsibilities} responsibilities</span>
                 <span className="tag">{surviving.tasks} tasks</span>
+                {activeExceptionCount > 0 && <span className="tag yellow">{activeExceptionCount} exception{activeExceptionCount === 1 ? "" : "s"}</span>}
                 <button className="btn" onClick={() => setMode(usingCapture ? "capture" : "transcript")}>Back</button>
-                <button className="btn btn-primary" onClick={apply}><Icon name="checkmark" size={12} /> Apply {surviving.responsibilities} finding{surviving.responsibilities === 1 ? "" : "s"}</button>
+                <button className="btn btn-primary" onClick={apply}><Icon name="checkmark" size={12} /> Confirm & apply {selectedFindings} selected</button>
               </div>
             </div>
+
+            {parseSource === "local" && (
+              <div className="template-parse-warning">
+                <Icon name="warning" size={13} stroke="var(--yellow)" />
+                <div>
+                  <strong>Parsed by the local template engine.</strong>
+                  <span>Template items are role-based boilerplate, not transcript extraction. They start unchecked and carry a template badge; connect an API key for deep extraction.</span>
+                </div>
+              </div>
+            )}
 
             {coverage && coverage.total > 0 && (
               <div className="agenda-coverage">
@@ -639,6 +837,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                   {d.responsibilities.map((r) => {
                     const rKey = responsibilityKey(p.id, r.id);
                     const rRejected = rejected.has(rKey);
+                    const rFlagged = flagged.has(rKey);
                     const allTasks: { label: string; cls: string; color: string }[] = [
                       ...r.tasks.delegatable.map((label) => ({ label, cls: "delegatable", color: "cyan" })),
                       ...r.tasks.approval.map((label) => ({ label, cls: "approval required", color: "yellow" })),
@@ -649,22 +848,34 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                         <label className="review-finding-row">
                           <input type="checkbox" checked={!rRejected} onChange={() => toggleRejected(rKey)} aria-label={`Accept responsibility: ${r.title}`} />
                           <span className="review-finding-title">{r.title}</span>
-                          <ProvenanceBadge provenance={deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence })} compact />
+                          <ProvenanceBadge provenance={deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence, source: r.source })} compact />
                           {r.confidence !== undefined && <span className="dim mono" style={{ fontSize: 11 }}>{Math.round(r.confidence * 100)}%</span>}
                         </label>
+                        {!rRejected && (
+                          <button className={"btn btn-sm " + (rFlagged ? "btn-outline-cyan" : "btn-ghost")} onClick={() => toggleFlagged(rKey)}>
+                            <Icon name="flag" size={11} /> {rFlagged ? "Exception" : "Flag"}
+                          </button>
+                        )}
                         {r.evidence_quote && <blockquote className="digest-evidence" style={{ marginLeft: 26 }}>“{r.evidence_quote}”</blockquote>}
                         {!rRejected && (
                           <div className="review-tasks">
                             {allTasks.map((t) => {
                               const tKey = taskKey(p.id, r.id, t.label);
                               const tRejected = rejected.has(tKey);
+                              const tFlagged = flagged.has(tKey);
                               const detail = r.taskDetails?.find((x) => x.name.trim().toLowerCase() === t.label.trim().toLowerCase());
                               return (
                                 <label className={"review-task" + (tRejected ? " rejected" : "")} key={tKey}>
                                   <input type="checkbox" checked={!tRejected} onChange={() => toggleRejected(tKey)} aria-label={`Accept task: ${t.label}`} />
                                   <span className="review-task-label">{t.label}</span>
                                   <span className={"tag " + t.color}>{t.cls}</span>
+                                  <ProvenanceBadge provenance={deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source })} compact />
                                   {detail?.evidence_quote && <span className="dim" style={{ fontSize: 11.5 }} title={detail.evidence_quote}><Icon name="transcript" size={10} /> evidence</span>}
+                                  {!tRejected && (
+                                    <button type="button" className={"btn btn-sm " + (tFlagged ? "btn-outline-cyan" : "btn-ghost")} onClick={(e) => { e.preventDefault(); toggleFlagged(tKey); }}>
+                                      {tFlagged ? "Exception" : "Flag"}
+                                    </button>
+                                  )}
                                 </label>
                               );
                             })}

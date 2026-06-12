@@ -87,6 +87,8 @@ export function Icon({ name, size = 14, stroke = "currentColor", strokeWidth = 1
       return <svg {...props}><circle cx="12" cy="12" r="9" /><path d="M12 16v-4M12 8h.01" /></svg>;
     case "filter":
       return <svg {...props}><path d="M3 4h18l-7 9v6l-4 2v-8z" /></svg>;
+    case "flag":
+      return <svg {...props}><path d="M5 21V4" /><path d="M5 4h11l-1.5 4L16 12H5" /></svg>;
     case "sort":
       return <svg {...props}><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" /></svg>;
     case "branch":

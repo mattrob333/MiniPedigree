@@ -4,6 +4,7 @@ import { BrandChip } from "../BrandLogo";
 import type { AgentLifecycleClass, RiskLevel } from "@/types";
 import type { CreateAgentCtx } from "../Drawer";
 import { suggestedAgentName } from "@/lib/parse";
+import { deriveOperationalState, missingBirthCertificateFields } from "@/lib/taskState";
 
 export interface GenerateCtx extends CreateAgentCtx {
   agentName: string;
@@ -34,6 +35,9 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
   }, [ctx?.task.id]);
 
   if (!open || !ctx) return null;
+  const operationalState = deriveOperationalState(ctx.task);
+  const missing = missingBirthCertificateFields(ctx.task);
+  const ready = operationalState === "agent_ready";
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -41,7 +45,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
         <div className="modal-head">
           <div className="h">
             <h3><Icon name="robot" size={16} stroke="var(--cyan)" /> Create Agent</h3>
-            <div className="sub">An agent is born from a specific person, a specific responsibility, and a specific delegatable task.</div>
+            <div className="sub">An agent is born from a human owner, a responsibility, a task, and a reviewed workflow.</div>
           </div>
           <button className="close" onClick={onClose}><Icon name="close" size={14} /></button>
         </div>
@@ -62,6 +66,34 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
             </div>
           </div>
 
+          {!ready && (
+            <div className="manifest-card" style={{ border: "1px solid var(--yellow)", marginBottom: 14 }}>
+              <div className="manifest-card-body">
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Workflow incomplete</div>
+                <div className="dim" style={{ fontSize: 13, marginBottom: 8 }}>
+                  Pedigree found a delegation candidate, but this task does not yet have the full birth certificate required to generate an agent.
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {missing.map((field) => <span className="tag yellow" key={field}>{field}</span>)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="manifest-card" style={{ marginBottom: 14 }}>
+            <div className="manifest-card-body">
+              <div className="k" style={{ marginBottom: 4 }}>What this agent will do</div>
+              <div style={{ color: "var(--text-2)", fontSize: 13.5 }}>
+                {ready
+                  ? `${ctx.task.label} for ${ctx.person.name} under ${ctx.respTitle}.`
+                  : "Complete the workflow spec first: input sources, required tools, output format, definition of done, approval boundary, evidence, and a test case."}
+              </div>
+              {ctx.task.missingSpecFields?.length ? (
+                <div className="hint" style={{ marginTop: 8 }}>Missing: {ctx.task.missingSpecFields.join(", ")}</div>
+              ) : null}
+            </div>
+          </div>
+
           <div className="form-field">
             <div className="lbl">Suggested Agent Name</div>
             <input className="input" value={agentName} onChange={(e) => setAgentName(e.target.value)} />
@@ -69,7 +101,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
 
           <div className="form-row">
             <div className="form-field" style={{ marginBottom: 0 }}>
-              <div className="lbl">Default policy</div>
+              <div className="lbl">Operating mode</div>
               <select className="select" value={policy} onChange={(e) => setPolicy(e.target.value)}>
                 <option value="read-only">Read-only — surface findings, no writes</option>
                 <option value="auto-write-with-approval">Auto-write with human approval</option>
@@ -87,7 +119,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           </div>
 
           <div className="form-field">
-            <div className="lbl">Lifecycle</div>
+            <div className="lbl">Agent lifecycle</div>
             <select className="select" value={lifecycleClass} onChange={(e) => setLifecycleClass(e.target.value as AgentLifecycleClass)}>
               <option value="standing">Standing — persistent, tied to a recurring responsibility</option>
               <option value="task">Task — one-off, torn down on completion (audit log retained)</option>
@@ -99,7 +131,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           </div>
 
           <div className="form-field">
-            <div className="lbl">Agent construction</div>
+            <div className="lbl">Construction method</div>
             <div className="view-toggle" style={{ width: "100%" }}>
               <button style={{ flex: 1 }} data-active={aiAuthored} onClick={() => setAiAuthored(true)}>AI construction (GPT-5.5)</button>
               <button style={{ flex: 1 }} data-active={!aiAuthored} onClick={() => setAiAuthored(false)}>Standard template</button>
@@ -121,10 +153,10 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
         </div>
 
         <div className="modal-foot">
-          <span className="left"><Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Pedigree manifest, system prompt, and construction spec will be generated.</span>
+          <span className="left"><Icon name="shield" size={11} style={{ verticalAlign: -1, marginRight: 4 }} /> Pedigree manifest, system prompt, construction spec, test pack, and evidence packet are required.</span>
           <div className="right">
             <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass, aiAuthored })}>
+            <button className="btn btn-primary" disabled={!ready} title={!ready ? `Workflow incomplete: ${missing.join(", ")}` : undefined} onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass, aiAuthored })}>
               <Icon name="sparkles" size={12} /> Generate Agent Manifest
             </button>
           </div>

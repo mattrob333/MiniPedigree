@@ -10,6 +10,9 @@ import { syncDiffHandler } from "./routes/syncDiff.js";
 import { sessionBriefHandler } from "./routes/sessionBrief.js";
 import { maintenanceParseHandler } from "./routes/maintenanceParse.js";
 import { openaiEnabled, TRANSCRIPTION_PROVIDER } from "./openai.js";
+import { emailInviteConfigured } from "./core/sessionInvite.js";
+import { sessionInviteHandler } from "./routes/sessionInvite.js";
+import { taskEnrichHandler } from "./routes/taskEnrich.js";
 
 const app = express();
 const PORT = Number(process.env.API_PORT || 8787);
@@ -27,6 +30,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
     openai: openaiEnabled,
+    email: emailInviteConfigured(),
     transcription_provider: TRANSCRIPTION_PROVIDER,
   });
 });
@@ -38,6 +42,8 @@ app.post("/api/sync/diff", syncDiffHandler);
 app.post("/api/discovery/brief", sessionBriefHandler);
 app.post("/api/sync/maintenance", maintenanceParseHandler);
 app.post("/api/transcribe", upload.single("file"), transcribeHandler);
+app.post("/api/sessions/invite", sessionInviteHandler);
+app.post("/api/tasks/enrich", taskEnrichHandler);
 
 const server = app.listen(PORT);
 

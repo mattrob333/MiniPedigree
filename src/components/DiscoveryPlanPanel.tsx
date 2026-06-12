@@ -9,7 +9,7 @@ import type {
   QuestionBacklogItem,
 } from "@/types";
 import { SESSION_LABEL, isMapped } from "@/lib/sessions";
-import { discoveryCompletion } from "@/lib/discoveryPlan";
+import { discoveryCompletion, sessionDisplayStatus } from "@/lib/discoveryPlan";
 import { backlogByPerson } from "@/lib/questionBacklog";
 import { READINESS_MAX, readinessTier } from "@/lib/readiness";
 import { getDepartmentColor } from "@/lib/departments";
@@ -54,15 +54,18 @@ interface Props {
   pedigree: PedigreeState;
   backlog: QuestionBacklogItem[];
   readiness: ContextReadiness;
+  reviewQueueCount: number;
   onStartSession: (personId: string, plannedSessionId: string) => void;
+  onGoToReview: () => void;
   onOpenCompanyProfile: () => void;
   onResolveBacklogItem: (itemId: string) => void;
   onSelectPerson: (personId: string) => void;
 }
 
-export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness, onStartSession, onOpenCompanyProfile, onResolveBacklogItem, onSelectPerson }: Props) {
+export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness, reviewQueueCount, onStartSession, onGoToReview, onOpenCompanyProfile, onResolveBacklogItem, onSelectPerson }: Props) {
   const [showDone, setShowDone] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const completion = useMemo(() => discoveryCompletion(people, pedigree, backlog), [people, pedigree, backlog]);
   const grouped = useMemo(() => backlogByPerson(backlog), [backlog]);
   const tier = readinessTier(readiness);
@@ -74,24 +77,35 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
 
   const pending = plan.sessions.filter((s) => s.status !== "applied");
   const done = plan.sessions.filter((s) => s.status === "applied");
+  const activePeople = people.filter((p) => p.lifecycle !== "offboarded");
+  const coveredPeople = activePeople.filter((p) => isMapped(pedigree[p.id]?.status)).length;
+  const responsibilityCount = people.reduce((sum, p) => sum + (pedigree[p.id]?.responsibilities.length ?? 0), 0);
+  const taskCount = people.reduce((sum, p) => {
+    const tasks = pedigree[p.id]?.tasks;
+    return sum + (tasks ? tasks.delegatable.length + tasks.approval.length + tasks.not_delegatable.length : 0);
+  }, 0);
   const personOf = (id: string) => people.find((p) => p.id === id);
+  const toggleSession = (id: string) => {
+    setExpandedSessions((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   return (
     <div className="sheet-wrap plan-panel" style={{ padding: 20 }}>
       {/* Coverage strip */}
       <div className="plan-coverage-strip">
-        <button className="plan-chip" onClick={onOpenCompanyProfile} title="Discovery quality is the ceiling on everything downstream — open the Company Profile to fill gaps">
+        <button className="plan-chip" onClick={onOpenCompanyProfile} title="Discovery quality is the ceiling on everything downstream - open the Company Profile to fill gaps">
           <Icon name="check-circle" size={12} stroke={tierColor} />
           Readiness <span className="mono" style={{ color: tierColor }}>{readiness.overall}/{READINESS_MAX}</span>
         </button>
-        <span className="plan-chip"><Icon name="users" size={12} /> {plan.coverage.people_mapped}/{plan.coverage.people_total} people mapped</span>
-        <span className="plan-chip"><Icon name="network" size={12} /> {plan.coverage.departments_covered}/{plan.coverage.departments_total} departments covered</span>
-        <span className="plan-chip"><Icon name="history" size={12} /> {completion.open_backlog} open question{completion.open_backlog === 1 ? "" : "s"}</span>
         {completion.complete ? (
-          <span className="plan-chip complete"><Icon name="check-circle" size={12} /> Discovery complete — agent candidates are ready for the compiler</span>
+          <span className="plan-chip complete"><Icon name="check-circle" size={12} /> Discovery complete - agent candidates are ready for the compiler</span>
         ) : (
-          <span className="plan-chip dim">
-            Complete at: all managers + 80% of ICs mapped, backlog ≤ 10
+          <span className="plan-chip dim" title={`${plan.coverage.departments_covered}/${plan.coverage.departments_total} departments covered`}>
+            Complete at: all managers + 80% of ICs mapped, backlog under 10
             <span className="mono" style={{ marginLeft: 6 }}>({completion.managers_mapped}/{completion.managers_total} mgrs · {completion.ics_mapped}/{completion.ics_total} ICs)</span>
           </span>
         )}
@@ -100,27 +114,62 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
       <div className="plan-layout">
         {/* Session cascade: momentum, not a wall of meetings — top 3 expanded. */}
         <section className="plan-sessions">
-          <div className="howto-run" style={{ marginBottom: 12 }}>
-            <div className="howto-title"><Icon name="play" size={12} /> Run discovery in Google Meet</div>
+          {completion.complete && pending.length === 0 && (
+            <div className="stage-complete-card discovery-complete-card">
+              <div className="stage-complete-icon"><Icon name="checkmark" size={16} /></div>
+              <div>
+                <h3>Discovery complete</h3>
+                <p>{done.length} sessions run - {coveredPeople}/{activePeople.length} people covered - {responsibilityCount} responsibilities - {taskCount} tasks classified.</p>
+                <p>{reviewQueueCount} exceptions need a reviewer decision.</p>
+              </div>
+              <button className="btn btn-primary" onClick={onGoToReview}>
+                <Icon name="shield" size={13} /> Resolve exceptions
+              </button>
+            </div>
+          )}
+          {false && <details className="howto-run" style={{ marginBottom: 12 }} open={done.length === 0}>
+            <summary className="howto-title"><Icon name="play" size={12} /> Run discovery from the brief</summary>
             <ol>
               <li>Open the next session brief and <strong>copy the agenda</strong>.</li>
               <li>Run the call naturally with the recording on.</li>
               <li><strong>Upload the transcript</strong> after the call — Pedigree parses responsibilities, tasks, approvals, and agent candidates with evidence.</li>
             </ol>
-          </div>
-          <div className="sh" style={{ marginBottom: 10 }}>Recommended next sessions <span className="count">{pending.length} planned</span></div>
-          {pending.length === 0 && <div className="drawer-empty">Every planned session has been applied. New sessions appear here as the plan adapts.</div>}
-          {pending.slice(0, 3).map((session, i) => (
-            <PlanSessionCard key={session.id} session={session} person={personOf(session.anchor_person_id)} backlogCount={session.scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)} primary={i === 0} onStart={() => onStartSession(session.anchor_person_id, session.id)} />
-          ))}
-          {pending.length > 3 && (
+          </details>}
+          {!(completion.complete && pending.length === 0) && (
             <>
-              <button className="btn btn-sm btn-ghost" style={{ marginTop: 4 }} onClick={() => setShowMore((v) => !v)}>
-                <Icon name={showMore ? "chevron-down" : "chevron-right"} size={11} /> {pending.length - 3} more session{pending.length - 3 === 1 ? "" : "s"} planned
-              </button>
-              {showMore && pending.slice(3).map((session) => (
-                <PlanSessionCard key={session.id} session={session} person={personOf(session.anchor_person_id)} backlogCount={session.scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)} onStart={() => onStartSession(session.anchor_person_id, session.id)} />
+              <div className="sh" style={{ marginBottom: 10 }}>Up next <span className="count">{pending.length} planned</span></div>
+              {pending.length === 0 && <div className="drawer-empty">Every planned session has been applied. New sessions appear here as the plan adapts.</div>}
+            </>
+          )}
+          {pending[0] && (
+            <PlanSessionCard
+              key={pending[0].id}
+              session={pending[0]}
+              person={personOf(pending[0].anchor_person_id)}
+              backlogCount={pending[0].scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)}
+              primary
+              onStart={() => onStartSession(pending[0].anchor_person_id, pending[0].id)}
+            />
+          )}
+          {pending.length > 1 && (
+            <>
+              <div className="sh queue-sh">Queue <span className="count">{pending.length - 1}</span></div>
+              {pending.slice(1, showMore ? undefined : 5).map((session) => (
+                <PlanSessionQueueRow
+                  key={session.id}
+                  session={session}
+                  person={personOf(session.anchor_person_id)}
+                  backlogCount={session.scope_ids.reduce((n, id) => n + (grouped.get(id)?.length ?? 0), 0)}
+                  expanded={expandedSessions.has(session.id)}
+                  onToggle={() => toggleSession(session.id)}
+                  onStart={() => onStartSession(session.anchor_person_id, session.id)}
+                />
               ))}
+              {pending.length > 5 && (
+                <button className="btn btn-sm btn-ghost" style={{ marginTop: 4 }} onClick={() => setShowMore((v) => !v)}>
+                  <Icon name={showMore ? "chevron-down" : "chevron-right"} size={11} /> {showMore ? "Show fewer" : `${pending.length - 5} more session${pending.length - 5 === 1 ? "" : "s"}`}
+                </button>
+              )}
             </>
           )}
           {done.length > 0 && (
@@ -137,11 +186,22 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
 
         {/* Question backlog */}
         <aside className="plan-backlog">
-          <div className="sh" style={{ marginBottom: 10 }}>
+          {!completion.complete && <section className="plan-howto-card">
+            <div className="ps-head"><Icon name="play" size={13} stroke="var(--cyan)" /> How to run discovery</div>
+            <ol className="howto-checklist">
+              <li>Open the next session brief and <strong>copy the agenda</strong>.</li>
+              <li>Run the call naturally with the recording on.</li>
+              <li><strong>Upload the transcript</strong> after the call for evidence-backed parsing.</li>
+            </ol>
+          </section>}
+          <div className="sh">
             Open questions <span className="count">{completion.open_backlog}</span>
-            <span className="dim" style={{ marginLeft: "auto", fontSize: 10.5, textTransform: "none", letterSpacing: 0 }}>carried into the next relevant brief — never dropped silently</span>
           </div>
-          {grouped.size === 0 && <div className="drawer-empty">No open questions. Parser open-questions and unanswered brief questions land here.</div>}
+          {grouped.size === 0 ? (
+            <div className="plan-backlog-empty">Open questions appear here after your first parsed session.</div>
+          ) : (
+            <div className="plan-backlog-caption">Carried into the next relevant brief - never dropped silently.</div>
+          )}
           {[...grouped.entries()].map(([personId, items]) => {
             const person = personOf(personId);
             if (!person) return null;
@@ -157,7 +217,7 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
                 {items.map((item) => (
                   <div className="backlog-item" key={item.id}>
                     <span className="backlog-q">{item.question}</span>
-                    <span className="backlog-source">{item.source === "parser_open_question" ? "parser" : item.source === "parked" ? "parked" : "brief"}</span>
+                    <span className="tag">{item.source === "parser_open_question" ? "parser" : item.source === "parked" ? "parked" : "brief"}</span>
                     <button className="icon-btn" title="Mark resolved" aria-label="Mark resolved" onClick={() => onResolveBacklogItem(item.id)}><Icon name="checkmark" size={11} /></button>
                   </div>
                 ))}
@@ -170,31 +230,76 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
   );
 }
 
+function scheduleBadge(session: PlannedSession): string {
+  const schedule = session.schedule;
+  if (!schedule) return "";
+  const time = schedule.mode === "instant" ? "Now" : schedule.scheduledFor ? new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(schedule.scheduledFor)) : "Scheduled";
+  const platform = schedule.platform === "google_meet" ? "Meet" : schedule.platform === "ms_teams" ? "Teams" : "Zoom";
+  return `Invited · ${time} · ${platform}`;
+}
+
 function PlanSessionCard({ session, person, backlogCount, onStart, primary = false }: { session: PlannedSession; person?: Person; backlogCount: number; onStart: () => void; primary?: boolean }) {
   const meta = STATUS_META[session.status];
   const dept = person ? getDepartmentColor(person.department) : null;
   const applied = session.status === "applied";
+  const displayStatus = sessionDisplayStatus(session);
+  const statusColor = displayStatus === "Invited" ? "var(--cyan)" : meta.color;
   return (
-    <div className={"plan-session-card" + (session.status === "rerun_suggested" ? " rerun" : "") + (applied ? " done" : "")} style={dept ? { borderLeft: `3px solid ${dept.accent}` } : undefined}>
+    <div className={"plan-session-card" + (primary ? " next" : "") + (session.status === "rerun_suggested" ? " rerun" : "") + (applied ? " done" : "")} style={dept ? { borderLeft: `3px solid ${dept.accent}` } : undefined}>
       <div className="plan-session-main">
         <div className="plan-session-title">
           <span className="plan-session-n mono">#{session.priority}</span>
           {SESSION_LABEL[session.type]}
           {person && <span className="dim"> — {person.name}</span>}
-          <span className="plan-status" style={{ color: meta.color }}><span className="dot" style={{ background: meta.color }} /> {meta.label}</span>
+          <span className="plan-status" style={{ color: statusColor }}><span className="dot" style={{ background: statusColor }} /> {displayStatus}</span>
         </div>
         <div className="plan-session-purpose">{SESSION_PURPOSE[session.type].purpose}</div>
         <div className="plan-session-rationale"><Icon name="info" size={10} /> Why now: {session.rationale}</div>
         <div className="plan-session-meta">
           <span>{session.scope_ids.length} participant{session.scope_ids.length === 1 ? "" : "s"}</span>
-          <span className="dim">Expected output: {SESSION_PURPOSE[session.type].output}</span>
           {backlogCount > 0 && <span className="tag yellow">{backlogCount} carried-over question{backlogCount === 1 ? "" : "s"}</span>}
           {session.brief_id && <span className="tag cyan">briefed</span>}
+          {session.schedule && <span className="tag cyan">{scheduleBadge(session)}</span>}
         </div>
       </div>
       <button className={"btn btn-sm " + (applied ? "btn-ghost" : primary || session.status === "rerun_suggested" ? "btn-primary" : "")} onClick={onStart} title="Opens the session brief — copy the agenda, run the call, upload the transcript">
         <Icon name="sparkles" size={11} /> {applied ? "Re-run" : session.status === "rerun_suggested" ? "Re-run session" : "Open session brief"}
       </button>
+    </div>
+  );
+}
+
+function PlanSessionQueueRow({ session, person, backlogCount, expanded, onToggle, onStart }: { session: PlannedSession; person?: Person; backlogCount: number; expanded: boolean; onToggle: () => void; onStart: () => void }) {
+  const meta = STATUS_META[session.status];
+  const dept = person ? getDepartmentColor(person.department) : null;
+  const displayStatus = sessionDisplayStatus(session);
+  const statusColor = displayStatus === "Invited" ? "var(--cyan)" : meta.color;
+  return (
+    <div className="plan-session-queue-row" style={dept ? { borderLeft: `3px solid ${dept.accent}` } : undefined}>
+      <button className="plan-session-queue-main" onClick={onToggle}>
+        <Icon name={expanded ? "chevron-down" : "chevron-right"} size={11} />
+        <span className="mono">#{session.priority}</span>
+        <span>{SESSION_LABEL[session.type]}</span>
+        {person && <span className="dim">— {person.name}</span>}
+        <span className="dim">{session.scope_ids.length} participant{session.scope_ids.length === 1 ? "" : "s"}</span>
+        {backlogCount > 0 && <span className="tag yellow">{backlogCount} carried-over</span>}
+        {session.brief_id && <span className="tag cyan">briefed</span>}
+        {session.schedule && <span className="tag cyan">{scheduleBadge(session)}</span>}
+        <span className="plan-status" style={{ color: statusColor }}><span className="dot" style={{ background: statusColor }} /> {displayStatus}</span>
+      </button>
+      <button className="btn btn-sm btn-ghost" onClick={onStart}>{session.schedule ? "Open brief" : "Schedule"}</button>
+      {expanded && (
+        <div className="plan-session-queue-detail">
+          <div>{SESSION_PURPOSE[session.type].purpose}</div>
+          <div className="dim">Why now: {session.rationale}</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -35,13 +35,19 @@ describe("generateParsed", () => {
 
   it("derives a real responsibility title from a transcript mention (no 'discovery input' leak)", () => {
     const withTranscript = generateParsed(people, "Jane reviews CRM changes and cleans stale forecast records every week.");
-    const without = generateParsed(people, "");
     const titles = withTranscript["P-001"].responsibilities.map((r) => r.title);
     // never expose plumbing
     expect(titles.some((t) => /discovery input/i.test(t))).toBe(false);
-    // a transcript mention adds an extra, themed responsibility
-    expect(withTranscript["P-001"].responsibilities.length).toBeGreaterThan(without["P-001"].responsibilities.length);
+    // transcript-derived candidates take precedence over role boilerplate
+    expect(titles).toEqual(["Forecast hygiene"]);
     expect(titles).toContain("Forecast hygiene");
+  });
+
+  it("tags role-template fallback so it cannot impersonate transcript extraction", () => {
+    const out = generateParsed(people, "");
+    const resp = out["P-001"].responsibilities[0];
+    expect(resp.source).toBe("role_template");
+    expect(resp.taskDetails?.every((task) => task.source === "role_template")).toBe(true);
   });
 
   it("recommends MCP servers based on tools/text", () => {

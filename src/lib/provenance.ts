@@ -4,7 +4,9 @@ import type {
   PedigreeState,
   Person,
   ProvenanceState,
+  ResponsibilityRow,
   RiskLevel,
+  TaskCompletionContext,
   TaskItem,
   WorkspaceAuditEvent,
 } from "@/types";
@@ -42,7 +44,7 @@ export function confidenceTier(confidence?: number): "high" | "medium" | "low" {
 export function provenanceLabel(state: ProvenanceState): string {
   if (state === "evidenced") return "Evidenced";
   if (state === "human_confirmed") return "Human-confirmed";
-  return "AI-inferred";
+  return "AI-drafted";
 }
 
 function confirm(provenance: ItemProvenance | undefined, by: string): ItemProvenance {
@@ -97,10 +99,21 @@ export interface ReviewQueueItem {
   personName: string;
   department: string;
   label: string;
+  description?: string;
+  reviewer_note?: string;
   itemId: string;              // respId or taskId
   cls?: ReviewClass;           // tasks only
+  respId?: string;
+  respTitle?: string;
   riskLevel?: RiskLevel;
+  completion?: TaskCompletionContext;
   provenance: ItemProvenance;
+}
+
+export interface ReviewEditPatch {
+  label: string;
+  description?: string;
+  reviewer_note?: string;
 }
 
 const RISK_RANK: Record<RiskLevel, number> = { critical: 3, high: 2, medium: 1, low: 0 };
@@ -124,7 +137,11 @@ export function buildReviewQueue(people: Person[], pedigree: PedigreeState): Rev
         personName: person.name,
         department: person.department,
         label: r.title,
+        description: r.description,
+        reviewer_note: r.reviewer_note,
         itemId: r.id,
+        respId: r.id,
+        respTitle: r.title,
         provenance,
       });
     }
@@ -144,9 +161,14 @@ export function buildReviewQueue(people: Person[], pedigree: PedigreeState): Rev
           personName: person.name,
           department: person.department,
           label: t.label,
+          description: t.description,
+          reviewer_note: t.reviewer_note,
           itemId: t.id,
           cls,
+          respId: t.respId,
+          respTitle: t.respTitle,
           riskLevel: t.riskLevel,
+          completion: t.completion,
           provenance,
         });
       }
@@ -177,14 +199,21 @@ export function isBulkConfirmable(item: ReviewQueueItem): boolean {
 export function editReviewItem(
   pedigree: PedigreeState,
   item: ReviewQueueItem,
-  newLabel: string,
+  patch: string | ReviewEditPatch,
   by: string,
 ): { pedigree: PedigreeState; event: WorkspaceAuditEvent } {
   const row = pedigree[item.personId];
   let next = pedigree;
+  const edit = typeof patch === "string" ? { label: patch } : patch;
+  const newLabel = edit.label;
   if (row) {
     if (item.kind === "task") {
-      const rename = (tasks: TaskItem[]) => tasks.map((t) => (t.id === item.itemId ? { ...t, label: newLabel } : t));
+      const rename = (tasks: TaskItem[]) => tasks.map((t) => (t.id === item.itemId ? {
+        ...t,
+        label: edit.label,
+        description: edit.description?.trim() || undefined,
+        reviewer_note: edit.reviewer_note?.trim() || undefined,
+      } : t));
       next = {
         ...pedigree,
         [item.personId]: {
@@ -202,7 +231,12 @@ export function editReviewItem(
         ...pedigree,
         [item.personId]: {
           ...row,
-          responsibilities: row.responsibilities.map((r) => (r.id === item.itemId ? { ...r, title: newLabel } : r)),
+          responsibilities: row.responsibilities.map((r) => (r.id === item.itemId ? {
+            ...r,
+            title: edit.label,
+            description: edit.description?.trim() || undefined,
+            reviewer_note: edit.reviewer_note?.trim() || undefined,
+          } : r)),
         },
       };
       next = confirmResponsibilityProvenance(next, item.personId, item.itemId, by);
@@ -220,6 +254,18 @@ export function editReviewItem(
       ...(item.provenance.evidence_quote ? { evidence: item.provenance.evidence_quote } : {}),
     },
   };
+}
+
+export function findReviewTask(pedigree: PedigreeState, item: ReviewQueueItem): TaskItem | undefined {
+  const row = pedigree[item.personId];
+  if (!row || item.kind !== "task") return undefined;
+  return [...row.tasks.delegatable, ...row.tasks.approval, ...row.tasks.not_delegatable].find((task) => task.id === item.itemId);
+}
+
+export function findReviewResponsibility(pedigree: PedigreeState, item: ReviewQueueItem): ResponsibilityRow | undefined {
+  const row = pedigree[item.personId];
+  if (!row || item.kind !== "responsibility") return undefined;
+  return row.responsibilities.find((resp) => resp.id === item.itemId);
 }
 
 /** Apply confirmations and emit one audit event per confirmed item. */

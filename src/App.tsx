@@ -10,7 +10,7 @@ import { ProfileScreen } from "./components/ProfileScreen";
 import { OrgSyncModal } from "./components/OrgSyncModal";
 import { CompanyProfileScreen } from "./components/CompanyProfileScreen";
 import { applyOrgSync, type Changeset } from "./lib/orgSync";
-import type { CompanyContext, CompanyContextDocument, CompanyContextDocumentBucket, CompanyResearchSource } from "./types";
+import type { CompanyContext, CompanyContextDocument, CompanyContextDocumentBucket, CompanyResearchSource, TaskSpec, WorkflowTemplate } from "./types";
 import { Toasts, type Toast } from "./components/Toasts";
 import { LoginScreen } from "./components/LoginScreen";
 import { WorkspacesHome, type DemoCompany } from "./components/WorkspacesHome";
@@ -25,12 +25,12 @@ import { RiskBadge } from "./components/ProvenanceBadge";
 import { DiscoveryPlanPanel } from "./components/DiscoveryPlanPanel";
 import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
 import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
-import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewQueueItem } from "./lib/provenance";
-import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
+import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewEditPatch, type ReviewQueueItem } from "./lib/provenance";
+import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
-import { authorAgent } from "./lib/api";
+import { authorAgent, requestTaskEnrichment, taskEnrichmentAvailable } from "./lib/api";
 import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
 import {
@@ -40,7 +40,7 @@ import {
 import { refreshStaleness } from "./lib/registry";
 import { applyStackProposals } from "./lib/stackSync";
 import type { ApplyMappingArgs } from "./components/SessionWorkspace";
-import { adaptPlan, generatePlan, setSessionStatus } from "./lib/discoveryPlan";
+import { adaptPlan, discoveryCompletion, generatePlan, setSessionSchedule, setSessionStatus } from "./lib/discoveryPlan";
 import { ingestBriefOutcomes, ingestParserOpenQuestions, openBacklog, resolveBacklogFromParse, resolveBacklogItem } from "./lib/questionBacklog";
 import { computeReadiness } from "./lib/readiness";
 import { authorityAssertionSignals, deriveAuthorityFromRules, enforceLeaverInvariant, flagAgentsForMover, mergeApprovalAuthority, suspendAgentsForLeaver } from "./lib/authority";
@@ -64,6 +64,8 @@ import {
   shouldShowWorkspaceOnboarding,
   skipOnboarding,
 } from "./lib/onboarding";
+import { assertContextMatchesCompany, bindCompanyContext, emptyCompanyContext, safeHeaderDescription } from "./lib/contextGuard";
+import { deriveOperationalState } from "./lib/taskState";
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member" | "session";
 type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
@@ -79,6 +81,44 @@ const SURFACE_TAB: Record<WorkspaceSurface, Tab> = {
   digest: "digest",
   evidence: "audit",
 };
+
+function sessionReviewConfirmationEvents(args: ApplyMappingArgs, actor: string, exceptionKeys: Set<string>): WorkspaceAuditEvent[] {
+  const events: WorkspaceAuditEvent[] = [];
+  let seq = 0;
+  const timestamp = new Date().toISOString();
+  for (const personId of args.scopeIds) {
+    for (const resp of args.parsed[personId]?.responsibilities ?? []) {
+      const respKey = `${personId}::${resp.id}`;
+      if (!exceptionKeys.has(respKey)) {
+        events.push({
+          id: `EVT-${Date.now().toString(36)}-session-review-${seq++}`,
+          type: "provenance_confirmed",
+          actor,
+          timestamp,
+          summary: `Session review confirmed responsibility "${resp.title}" in ${args.sessionLabel}.`,
+          subject_id: resp.id,
+          ...(resp.evidence_quote ? { evidence: resp.evidence_quote } : {}),
+        });
+      }
+      const labels = [...resp.tasks.delegatable, ...resp.tasks.approval, ...resp.tasks.not_delegatable];
+      for (const label of labels) {
+        const taskKey = `${personId}::${resp.id}::${label.trim().toLowerCase()}`;
+        if (exceptionKeys.has(taskKey)) continue;
+        const detail = resp.taskDetails?.find((task) => task.name.trim().toLowerCase() === label.trim().toLowerCase());
+        events.push({
+          id: `EVT-${Date.now().toString(36)}-session-review-${seq++}`,
+          type: "provenance_confirmed",
+          actor,
+          timestamp,
+          summary: `Session review confirmed task "${label}" in ${args.sessionLabel}.`,
+          subject_id: taskKey,
+          ...(detail?.evidence_quote || resp.evidence_quote ? { evidence: detail?.evidence_quote || resp.evidence_quote } : {}),
+        });
+      }
+    }
+  }
+  return events;
+}
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
 const CONNECTED_CONTEXT_PREFIX = "connected-context:";
@@ -259,11 +299,15 @@ export default function App() {
   const [workspaceName, setWorkspaceName] = useState("Untitled Workspace");
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [companyContext, setCompanyContext] = useState<CompanyContext | undefined>(undefined);
+  const [contextWarning, setContextWarning] = useState<string | undefined>(undefined);
+  const [taskSpecs, setTaskSpecs] = useState<Record<string, TaskSpec>>({});
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
   const [mcpLibrary, setMcpLibrary] = useState<CompanyMcpServer[]>([]);
   const [registry, setRegistry] = useState<AgentRegistryEntry[]>([]);
   const [auditLog, setAuditLog] = useState<StackAuditRecord[]>([]);
   const [events, setEvents] = useState<WorkspaceAuditEvent[]>([]);
   const [discoveryPlan, setDiscoveryPlan] = useState<DiscoveryPlan | null>(null);
+  const [discoveryJustCompleted, setDiscoveryJustCompleted] = useState(false);
   const [sessionBriefs, setSessionBriefs] = useState<SessionBrief[]>([]);
   const [questionBacklog, setQuestionBacklog] = useState<QuestionBacklogItem[]>([]);
   const [meetings, setMeetings] = useState<RegisteredMeeting[]>([]);
@@ -276,6 +320,7 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStartStep, setTourStartStep] = useState<string | undefined>("upload-team");
+  const [aiTaskRefinementAvailable, setAiTaskRefinementAvailable] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -303,12 +348,15 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; contextWarning?: string; taskSpecs?: Record<string, TaskSpec>; workflowTemplates?: WorkflowTemplate[]; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
     setCurrentWorkspaceId(ws.id);
     setCompanyContext(ws.companyContext);
+    setContextWarning(ws.contextWarning);
+    setTaskSpecs(ws.taskSpecs ?? {});
+    setWorkflowTemplates(ws.workflowTemplates ?? []);
     setMcpLibrary(ws.mcpLibrary ?? []);
     setRegistry(ws.registry ?? []);
     setAuditLog(ws.auditLog ?? []);
@@ -368,6 +416,11 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (booting) return;
+    void taskEnrichmentAvailable().then(setAiTaskRefinementAvailable).catch(() => setAiTaskRefinementAvailable(false));
+  }, [booting]);
+
   // Persist the active workspace by its own id whenever it changes.
   // Debounced: bursts of state updates (digest applies, guided-capture
   // sessions, member confirms) collapse into one localStorage/Supabase write.
@@ -376,12 +429,12 @@ export default function App() {
     if (!(currentWorkspaceId && people.length && profile)) return;
     const handle = setTimeout(() => {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() },
         profile.email,
       );
     }, 800);
     return () => clearTimeout(handle);
-  }, [people, pedigree, workspaceName, companyContext, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -399,6 +452,9 @@ export default function App() {
     setPedigree({});
     setCurrentWorkspaceId(null);
     setCompanyContext(undefined);
+    setContextWarning(undefined);
+    setTaskSpecs({});
+    setWorkflowTemplates([]);
     setWorkspaces([]);
     setScreen("login");
   };
@@ -429,9 +485,12 @@ export default function App() {
   };
 
   const persistCompanyContext = (ctx: CompanyContext) => {
-    setCompanyContext(ctx);
+    const bound = currentWorkspaceId ? bindCompanyContext(ctx, currentWorkspaceId, workspaceName) ?? ctx : ctx;
+    if (currentWorkspaceId) assertContextMatchesCompany(bound, currentWorkspaceId, workspaceName);
+    setCompanyContext(bound);
+    setContextWarning(undefined);
     if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() }, profile?.email);
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: bound, contextWarning: undefined, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() }, profile?.email);
     }
   };
 
@@ -457,7 +516,7 @@ export default function App() {
 
   const onUploadContextFiles = async (files: FileList | null, bucket: CompanyContextDocumentBucket) => {
     if (!files?.length) return;
-    const current = companyContext ?? { company: workspaceName, whatWeDo: "" };
+    const current = companyContext ?? emptyCompanyContext(currentWorkspaceId ?? "", workspaceName);
     const uploads = await Promise.all(Array.from(files).map((file) => readContextFile(file, bucket)));
     const newNotes = uploads
       .map((upload) => upload.rawNote)
@@ -504,9 +563,9 @@ export default function App() {
     const name = nameOverride || result.workspaceName;
     const id = newWorkspaceId(name);
     const ped = initialPedigreeState(result.people);
-    const ctx: CompanyContext = { company: name, whatWeDo: "" };
+    const ctx: CompanyContext = emptyCompanyContext(id, name);
     const plan = generatePlan(result.people, ped, ctx);
-    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, discoveryPlan: plan, createdAt: new Date().toISOString() }, profile?.email);
+    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, taskSpecs: {}, workflowTemplates: [], discoveryPlan: plan, createdAt: new Date().toISOString() }, profile?.email);
     setLastWorkspaceId(profile?.email, id);
     openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, discoveryPlan: plan });
     refreshWorkspaces();
@@ -540,15 +599,25 @@ export default function App() {
     setDiscoveryPlan((prev) => (prev ? setSessionStatus(prev, sessionId, status, briefId) : prev));
   };
 
+  const onScheduleSession = (sessionId: string, schedule: SessionSchedule) => {
+    setDiscoveryPlan((prev) => (prev ? setSessionSchedule(prev, sessionId, schedule) : prev));
+  };
+
   // Stage 5 of the guided-discovery loop: apply → coverage update → question
   // ledger → plan adaptation. This is what makes session 3 smarter than session 1.
   const onApplyMapping = (args: ApplyMappingArgs) => {
+    const beforeCompletion = discoveryCompletion(people, pedigree, questionBacklog);
+    const exceptionKeys = new Set(args.exceptionKeys ?? []);
+    const reviewer = profile?.email ?? "unknown";
     const next = applyParsed(people, args.parsed, pedigree, {
       scopeIds: args.scopeIds,
       sessionLabel: args.sessionLabel,
       people,
+      confirmedBy: reviewer,
+      exceptionKeys,
     });
     setPedigree(next);
+    setEvents((prev) => [...prev, ...sessionReviewConfirmationEvents(args, reviewer, exceptionKeys)]);
 
     // Question ledger: resolve answered items, ingest new open questions and
     // unanswered/parked brief questions.
@@ -575,9 +644,8 @@ export default function App() {
       return adaptPlan({ plan: applied, people, pedigree: next, questionBacklog: backlog });
     });
 
-    setWizardPersonId(null);
-    setWizardPlannedSessionId(undefined);
-    setScreen("workspace");
+    const afterCompletion = discoveryCompletion(people, next, backlog);
+    setDiscoveryJustCompleted(!beforeCompletion.complete && afterCompletion.complete);
     const newQuestions = openBacklog(backlog).length - openBacklog(questionBacklog).length;
     pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}${newQuestions > 0 ? ` · ${newQuestions} open question${newQuestions === 1 ? "" : "s"} queued for the next brief` : ""}`, true);
   };
@@ -633,7 +701,7 @@ export default function App() {
     if (patch.pedigree) setPedigree(patch.pedigree);
     if (patch.registry) setRegistry(patch.registry);
     if (patch.backlog) setQuestionBacklog(patch.backlog);
-    if (patch.companyContext) setCompanyContext(patch.companyContext);
+    if (patch.companyContext) setCompanyContext(currentWorkspaceId ? bindCompanyContext(patch.companyContext, currentWorkspaceId, workspaceName) : patch.companyContext);
     if (patch.auditLog) setAuditLog(patch.auditLog);
     if (patch.people) setPeople(patch.people);
     if (patch.events?.length) setEvents((prev) => [...prev, ...patch.events!]);
@@ -658,6 +726,13 @@ export default function App() {
   const onGenerateAgent = async (ctx: GenerateCtx) => {
     const row = pedigree[ctx.person.id];
     if (!row) return;
+    const spec = taskSpecs[ctx.task.id];
+    const operationalState = deriveOperationalState(ctx.task, spec, row.agents.find((agent) => agent.taskId === ctx.task.id));
+    if (operationalState !== "agent_ready") {
+      pushToast("Workflow incomplete", "Complete the task spec and add a test case before generating an agent.");
+      setCreateAgentCtx(null);
+      return;
+    }
     const baseCtx = {
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
       agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
@@ -744,7 +819,7 @@ export default function App() {
       auditLog,
     });
     setPedigree(result.pedigree);
-    if (result.companyContext) setCompanyContext(result.companyContext);
+    if (result.companyContext) setCompanyContext(currentWorkspaceId ? bindCompanyContext(result.companyContext, currentWorkspaceId, workspaceName) : result.companyContext);
     if (result.people) setPeople(result.people);
     setRegistry(result.registry);
     setAuditLog(result.auditLog);
@@ -791,20 +866,138 @@ export default function App() {
 
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
   const reviewQueueCount = useMemo(() => buildReviewQueue(people, pedigree).length, [people, pedigree]);
-  const userRole = profile?.role ?? "editor";
+  const userRole = profile?.role ?? "reviewer";
+
+  const switchToReviewerDemo = () => {
+    setProfile((prev) => {
+      if (!prev) return prev;
+      const next: UserProfile = { ...prev, role: "reviewer" as UserRole };
+      saveProfile(next);
+      return next;
+    });
+    pushToast("Reviewer mode enabled", "Demo role switched so you can confirm extracted findings", true);
+  };
 
   const onConfirmReview = (items: ReviewQueueItem[]) => {
     const result = confirmReviewItems(pedigree, items, profile?.email ?? "unknown");
     setPedigree(result.pedigree);
     setEvents((prev) => [...prev, ...result.events]);
-    pushToast("Provenance confirmed", `${items.length} item${items.length === 1 ? "" : "s"} human-confirmed · audit recorded`, true);
   };
 
-  const onEditReview = (item: ReviewQueueItem, newLabel: string) => {
-    const result = editReviewItem(pedigree, item, newLabel, profile?.email ?? "unknown");
+  const onEditReview = (item: ReviewQueueItem, patch: ReviewEditPatch) => {
+    const newLabel = patch.label;
+    const result = editReviewItem(pedigree, item, patch, profile?.email ?? "unknown");
     setPedigree(result.pedigree);
     setEvents((prev) => [...prev, result.event]);
     pushToast("Edited and confirmed", `"${newLabel}" — the correction is itself a confirmation`, true);
+  };
+
+  const onAddReviewQuestion = (personId: string, question: string, sourceRef: string) => {
+    const clean = question.trim();
+    if (!clean) return;
+    setQuestionBacklog((prev) => {
+      const key = clean.toLowerCase().replace(/\s+/g, " ");
+      if (prev.some((item) => item.person_id === personId && item.question.trim().toLowerCase().replace(/\s+/g, " ") === key)) return prev;
+      return [...prev, {
+        id: `QB-${Date.now().toString(36)}-review`,
+        person_id: personId,
+        question: clean,
+        source: "parser_open_question",
+        source_ref: sourceRef,
+        created_at: new Date().toISOString(),
+      }];
+    });
+    pushToast("Follow-up queued", clean, true);
+  };
+
+  const onRefineReviewTasks = async (items: ReviewQueueItem[]) => {
+    const tasks = items.filter((item) => item.kind === "task");
+    if (!tasks.length) return;
+    const drafts = await requestTaskEnrichment({
+      companyContext,
+      tasks: tasks.map((item) => {
+        const owner = people.find((p) => p.id === item.personId);
+        return {
+          taskId: item.itemId,
+          label: item.label,
+          description: item.description,
+          reviewer_note: item.reviewer_note,
+          completion: item.completion,
+          evidence_quote: item.provenance.evidence_quote,
+          responsibility: item.respTitle ?? "",
+          owner: {
+            name: item.personName,
+            title: owner?.title ?? "",
+            department: item.department,
+          },
+        };
+      }),
+    });
+    if (!drafts?.length) return;
+    setTaskSpecs((prev) => {
+      const next = { ...prev };
+      for (const draft of drafts) {
+        const item = tasks.find((task) => task.itemId === draft.taskId);
+        if (!item) continue;
+        const existing = prev[draft.taskId];
+        next[draft.taskId] = {
+          id: draft.taskId,
+          name: item.label,
+          plainLanguageDescription: draft.plainLanguageDescription,
+          ownerId: item.personId,
+          parentResponsibilityId: item.respId ?? "",
+          trigger: existing?.trigger ?? "manual",
+          cadence: existing?.cadence,
+          inputSources: draft.suggestedInputs,
+          requiredTools: draft.suggestedTools,
+          outputFormat: draft.suggestedOutputs.join("; ") || existing?.outputFormat || "Draft for owner review",
+          recipient: existing?.recipient,
+          definitionOfDone: draft.definitionOfDone,
+          aiAllowedTo: existing?.aiAllowedTo ?? ["draft"],
+          aiMustNot: existing?.aiMustNot ?? ["send externally", "make final approval decisions"],
+          approvalRequiredFor: existing?.approvalRequiredFor ?? ["external sends", "authority-expanding actions"],
+          businessKpi: existing?.businessKpi,
+          operationalMetric: existing?.operationalMetric,
+          evidenceIds: item.provenance.evidence_quote ? [item.itemId] : [],
+          workflowTemplateId: existing?.workflowTemplateId,
+          workflowMatchConfidence: existing?.workflowMatchConfidence,
+          testCases: existing?.testCases,
+          readiness: "needs_clarification",
+        };
+      }
+      return next;
+    });
+    setQuestionBacklog((prev) => {
+      const next = [...prev];
+      for (const draft of drafts) {
+        const item = tasks.find((task) => task.itemId === draft.taskId);
+        if (!item) continue;
+        for (const question of draft.openQuestions) {
+          const clean = question.trim();
+          if (!clean) continue;
+          const key = clean.toLowerCase().replace(/\s+/g, " ");
+          if (next.some((q) => q.person_id === item.personId && q.question.trim().toLowerCase().replace(/\s+/g, " ") === key)) continue;
+          next.push({
+            id: `QB-${Date.now().toString(36)}-${next.length}-enrich`,
+            person_id: item.personId,
+            question: clean,
+            source: "parser_open_question",
+            source_ref: item.itemId,
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+      return next;
+    });
+    pushToast("AI drafts added", `${drafts.length} task spec${drafts.length === 1 ? "" : "s"} drafted for review`, true);
+  };
+
+  const onUpdateReviewTaskSpec = (taskId: string, patch: Partial<TaskSpec>) => {
+    setTaskSpecs((prev) => {
+      const existing = prev[taskId];
+      if (!existing) return prev;
+      return { ...prev, [taskId]: { ...existing, ...patch } };
+    });
   };
 
   // Recompute registry staleness whenever an ingredient (person record, task,
@@ -825,7 +1018,10 @@ export default function App() {
     () => computeReadiness(companyContext, companyContext?.contextDocuments ?? [], people),
     [companyContext, people],
   );
+  const discoveryCompletionState = useMemo(() => discoveryCompletion(people, pedigree, questionBacklog), [people, pedigree, questionBacklog]);
   const planPendingCount = discoveryPlan?.sessions.filter((s) => s.status !== "applied").length ?? 0;
+  const appliedSessionCount = discoveryPlan?.sessions.filter((s) => s.status === "applied").length ?? 0;
+  const nextPendingSession = discoveryPlan?.sessions.find((s) => s.status !== "applied");
   const digestPendingCount = pendingSignals(signalLedger).length;
   const recommendations = useMemo(
     () => buildRecommendations({ ledger: signalLedger, registry, people, pedigree, mcpLibrary }),
@@ -873,10 +1069,23 @@ export default function App() {
     setScreen("company");
   };
   const wizardPerson = wizardPersonId ? people.find((p) => p.id === wizardPersonId) ?? null : null;
-  const progressPct = metrics.peopleCount ? Math.round((metrics.mappedPeople / metrics.peopleCount) * 100) : 0;
+  const closeSessionWorkspace = () => {
+    setWizardPersonId(null);
+    setWizardPlannedSessionId(undefined);
+    setDiscoveryJustCompleted(false);
+    setScreen("workspace");
+  };
+  const goToReviewFromSession = () => {
+    closeSessionWorkspace();
+    setTab("review");
+  };
+  const startNextPendingSession = (session: DiscoveryPlan["sessions"][number]) => {
+    setDiscoveryJustCompleted(false);
+    onStartSession(session.anchor_person_id, session.id);
+  };
   const discoveryComplete = metrics.peopleCount > 0 && metrics.mappedPeople === metrics.peopleCount;
   const companyTitle = companyContext?.company?.trim() || workspaceName;
-  const companySubtitle = companyContext?.whatWeDo?.trim()
+  const companySubtitle = safeHeaderDescription(companyContext, currentWorkspaceId, workspaceName)
     || (discoveryComplete
       ? `Discovery complete - ${workspaceName} - use Org Sync to capture changes from new meetings`
       : `Company context not loaded yet - add goals, systems, policies, and SOD boundaries for future agents`);
@@ -938,10 +1147,15 @@ export default function App() {
                 <button className="btn btn-sm btn-ghost" onClick={openMyPedigree} title="Your own slice of the stack: confirm tasks, see your agents in plain language, answer questions, request agents"><Icon name="user" size={12} /> My Pedigree</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
                 {/* ONE state-routed primary action — the only saturated CTA on this surface. */}
-                <button data-tour="map-responsibilities" className="btn btn-primary" onClick={onPrimaryCta} title={action.hint}>
+                <button data-tour="map-responsibilities" className={tab === "plan" ? "btn btn-ghost" : "btn btn-primary"} onClick={onPrimaryCta} title={action.hint}>
                   <Icon name="sparkles" size={12} /> {action.label}
                 </button>
               </div>
+              {contextWarning && (
+                <div className="context-warning">
+                  <Icon name="warning" size={12} /> {contextWarning}
+                </div>
+              )}
             </div>
 
             {/* Persistent setup checklist until the company reaches operation. */}
@@ -957,19 +1171,13 @@ export default function App() {
             )}
 
             {/* Stage-aware metrics: only what is meaningful NOW — no zero-walls. */}
-            <div className="metrics funnel" data-tour="delegatable-tasks">
-              {headerMetrics.map((m, i) => (
-                <Metric key={m.label} label={m.label} value={m.value} delta={m.delta} up={m.up} arrow={i < headerMetrics.length - 1} />
-              ))}
-            </div>
-
-            <div className="map-progress">
-              <div className="lbl">
-                <span>Discovery Progress</span>
-                <span className="mono">{metrics.mappedPeople} / {metrics.peopleCount} people mapped</span>
+            {(metrics.mappedPeople > 0 || appliedSessionCount > 0) && (
+              <div className="metrics funnel" data-tour="delegatable-tasks">
+                {headerMetrics.map((m, i) => (
+                  <Metric key={m.label} label={m.label} value={m.value} delta={m.delta} up={m.up} arrow={i < headerMetrics.length - 1} />
+                ))}
               </div>
-              <div className="bar"><span style={{ width: `${progressPct}%` }} /></div>
-            </div>
+            )}
 
             <div className="tabs" role="tablist">
               <button className="tab" role="tab" aria-selected={tab === "spreadsheet"} onClick={() => setTab("spreadsheet")} title="People & Roles — validate the roster, then track everyone's discovery status">
@@ -981,8 +1189,8 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "plan"} onClick={() => setTab("plan")} title="The discovery campaign: session cascade, coverage, and the question backlog">
                 <Icon name="target" size={12} /> Discovery <span className="count">{planPendingCount}</span>
               </button>
-              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Review queue: extracted work awaiting confirmation, with evidence">
-                <Icon name="shield" size={12} /> Review <span className="count">{reviewQueueCount}</span>
+              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Exception queue: flagged or unconfirmed findings that need a decision">
+                <Icon name="shield" size={12} /> Exceptions <span className="count">{reviewQueueCount}</span>
               </button>
               <button className={"tab" + (metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => (metrics.delegTasks > 0 || metrics.agentsBuilt > 0) && setTab("agents")} title={metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? "Agent planning unlocks once tasks are extracted and classified" : "Plan agents under their human-owned responsibilities"}>
                 <Icon name="robot" size={12} /> Agent Plan <span className="count">{metrics.agentsBuilt}</span>
@@ -1037,14 +1245,16 @@ export default function App() {
                 pedigree={pedigree}
                 backlog={questionBacklog}
                 readiness={readiness}
+                reviewQueueCount={reviewQueueCount}
                 onStartSession={(personId, plannedSessionId) => onStartSession(personId, plannedSessionId)}
+                onGoToReview={() => setTab("review")}
                 onOpenCompanyProfile={() => setScreen("company")}
                 onResolveBacklogItem={(itemId) => setQuestionBacklog((prev) => resolveBacklogItem(prev, itemId, "manual"))}
                 onSelectPerson={onSelect}
               />
             )}
             {tab === "agents" && <AgentPlan people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} onCreateAgent={(ctx) => setCreateAgentCtx(ctx)} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
-            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} role={userRole} onConfirm={onConfirmReview} onEdit={onEditReview} />}
+            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} taskSpecs={taskSpecs} role={userRole} canRefineWithAi={aiTaskRefinementAvailable} onConfirm={onConfirmReview} onEdit={onEditReview} onPlanAgents={() => setTab("agents")} onSwitchToReviewerDemo={switchToReviewerDemo} onAddFollowUpQuestion={onAddReviewQuestion} onRefineTasks={onRefineReviewTasks} onUpdateTaskSpec={onUpdateReviewTaskSpec} onToast={pushToast} />}
             {tab === "digest" && (
               <DigestScreen
                 people={people}
@@ -1101,7 +1311,7 @@ export default function App() {
       )}
 
       {screen === "company" && profile && (
-        <CompanyProfileScreen context={companyContext ?? { company: workspaceName, whatWeDo: "" }} people={people} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
+        <CompanyProfileScreen context={companyContext ?? emptyCompanyContext(currentWorkspaceId ?? "", workspaceName)} people={people} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
       )}
 
       {screen === "session" && wizardPerson && (
@@ -1111,10 +1321,21 @@ export default function App() {
           pedigree={pedigree}
           companyContext={companyContext}
           plannedSessionId={wizardPlannedSessionId}
+          plannedSession={discoveryPlan?.sessions.find((s) => s.id === wizardPlannedSessionId)}
           questionBacklog={questionBacklog}
-          onClose={() => { setWizardPersonId(null); setWizardPlannedSessionId(undefined); setScreen("workspace"); }}
+          reviewQueueCount={reviewQueueCount}
+          nextPendingSession={nextPendingSession}
+          discoveryJustCompleted={discoveryJustCompleted}
+          completionCoverage={{
+            covered: discoveryCompletionState.managers_mapped + discoveryCompletionState.ics_mapped,
+            total: discoveryCompletionState.managers_total + discoveryCompletionState.ics_total,
+          }}
+          onClose={closeSessionWorkspace}
           onApply={onApplyMapping}
+          onReviewFindings={goToReviewFromSession}
+          onStartNextSession={startNextPendingSession}
           onPlanEvent={onPlanEvent}
+          onScheduleSession={onScheduleSession}
           onToast={pushToast}
         />
       )}

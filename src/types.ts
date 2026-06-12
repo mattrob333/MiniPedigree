@@ -45,6 +45,83 @@ export type DelegationClass =
   | "not_delegatable"
   | "unclear";
 
+export type TaskOperationalState =
+  | "extracted"
+  | "classified"
+  | "workflow_matched"
+  | "workflow_needed"
+  | "workflow_designed"
+  | "agent_ready"
+  | "agent_generated"
+  | "exported";
+
+export type WorkflowTemplateScope = "global" | "firm" | "company" | "person";
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  category:
+    | "summary"
+    | "research"
+    | "drafting"
+    | "monitoring"
+    | "reconciliation"
+    | "classification"
+    | "data_entry"
+    | "approval_prep"
+    | "reporting"
+    | "routing";
+  description: string;
+  delegationFit: "high" | "medium" | "low";
+  requiredInputs: { name: string; description: string; required: boolean; example?: string }[];
+  requiredTools: {
+    type: "mcp" | "web_search" | "document_store" | "spreadsheet" | "manual_upload" | "email" | "calendar";
+    name?: string;
+    permission: "read" | "draft" | "write_with_approval" | "write";
+    required: boolean;
+  }[];
+  steps: { order: number; instruction: string; toolRequired?: string }[];
+  outputSchema: {
+    format: "brief" | "table" | "email_draft" | "ticket_update" | "dashboard_note" | "manifest_section";
+    requiredSections: string[];
+  };
+  definitionOfDone: string[];
+  approvalPolicy: {
+    defaultMode: "read_only" | "draft_for_approval" | "execute_after_approval" | "autonomous_within_threshold";
+    approvalRequiredFor: string[];
+    blockedActions: string[];
+  };
+  riskChecks: string[];
+  evalTests: { name: string; inputExample: string; expectedOutput: string }[];
+  missingInfoQuestions: string[];
+  scope: WorkflowTemplateScope;
+}
+
+export interface TaskSpec {
+  id: string;
+  name: string;
+  plainLanguageDescription: string;
+  ownerId: string;
+  parentResponsibilityId: string;
+  trigger: "manual" | "scheduled" | "event_based";
+  cadence?: string;
+  inputSources: string[];
+  requiredTools: string[];
+  outputFormat: string;
+  recipient?: string;
+  definitionOfDone: string[];
+  aiAllowedTo: string[];
+  aiMustNot: string[];
+  approvalRequiredFor: string[];
+  businessKpi?: string;
+  operationalMetric?: string;
+  evidenceIds: string[];
+  workflowTemplateId?: string;
+  workflowMatchConfidence?: number;
+  testCases?: { name: string; inputExample: string; expectedOutput: string }[];
+  readiness: "needs_clarification" | "workflow_needed" | "workflow_matched" | "agent_ready";
+}
+
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 export type TaskReadiness = "ready" | "needs_clarification";
@@ -58,8 +135,12 @@ export interface TaskCompletionContext {
   trigger: string | null;
   inputs: string[] | null;
   outputs: string[] | null;
+  dependencies?: { upstream: string[]; downstream: string[] } | null;
   tools_mentioned: string[] | null;
   definition_of_done: string | null;
+  approval_boundary?: string | null;
+  evidence_quotes?: { quote: string; speaker: string }[] | null;
+  enrichment_confidence?: number | null;
   readiness: TaskReadiness | null;
   open_questions: string[] | null;
   candidate_pattern: string | null;
@@ -164,19 +245,31 @@ export interface ItemProvenance {
 export interface ResponsibilityRow {
   id: string;
   title: string;
+  description?: string;
+  reviewer_note?: string;
   suggestedAgent?: string;
   source?: string; // e.g. "Leadership Session", "Department Session · Dr. Claire Donovan"
   assignedByName?: string; // manager who assigned this responsibility (lineage)
   confidence?: number;
   provenance?: ItemProvenance;
+  ownershipRole?: OwnershipRole;
   last_confirmed_at?: string;
 }
+
+export type OwnershipRole = "accountable_owner" | "contributor" | "approver" | "informed";
 
 export interface TaskItem {
   id: string;
   label: string;
+  description?: string;
+  reviewer_note?: string;
   respId: string;
   respTitle: string;
+  operationalState?: TaskOperationalState;
+  workflowTemplateId?: string;
+  workflowMatchConfidence?: number;
+  suggestedWorkflowMatches?: { templateId: string; confidence: number }[];
+  missingSpecFields?: string[];
   riskLevel?: RiskLevel;
   evidence?: string;
   completion?: TaskCompletionContext;
@@ -230,6 +323,8 @@ export interface ParsedTask extends TaskCompletionContext {
   requires_human_approval: boolean;
   reason?: string;
   evidence_quote?: string;
+  plain_language_description?: string;
+  source?: string;
 }
 
 export interface ParsedResponsibility {
@@ -238,6 +333,7 @@ export interface ParsedResponsibility {
   description?: string;
   confidence?: number;
   evidence_quote?: string;
+  source?: string;
   tasks: {
     delegatable: string[];
     approval: string[];
@@ -294,6 +390,10 @@ export interface Workspace {
   pedigree: PedigreeState;
   createdAt: string;
   companyContext?: CompanyContext; // per-workspace company profile (one per client)
+  quarantinedContext?: CompanyContext;
+  contextWarning?: string;
+  taskSpecs?: Record<string, TaskSpec>;
+  workflowTemplates?: WorkflowTemplate[];
   mcpLibrary?: CompanyMcpServer[]; // the company's approved MCP tool surface
   registry?: AgentRegistryEntry[]; // the Agent Stack state (versioned, append-only)
   auditLog?: StackAuditRecord[];   // applied stack changes with approver + evidence
@@ -445,6 +545,19 @@ export interface CompanyKpi {
 
 export type PlannedSessionStatus = "planned" | "briefed" | "captured" | "parsed" | "applied" | "rerun_suggested";
 
+export type MeetingPlatform = "google_meet" | "ms_teams" | "zoom";
+
+export interface SessionSchedule {
+  platform: MeetingPlatform;
+  mode: "instant" | "scheduled";
+  scheduledFor?: string;
+  durationMinutes: number;
+  meetingLink?: string;
+  invitedPersonIds: string[];
+  invitesPreparedAt?: string;
+  invitesSentAt?: string;
+}
+
 export interface PlannedSession {
   id: string;
   type: MappingSessionType;
@@ -454,6 +567,7 @@ export interface PlannedSession {
   rationale: string;            // "CEO flagged Finance as bottleneck"
   status: PlannedSessionStatus;
   brief_id?: string;
+  schedule?: SessionSchedule;
 }
 
 export interface DiscoveryPlan {
@@ -609,6 +723,7 @@ export interface CompanyContextDocument {
 // Company Profile screen. Login captures the first three; the rest are optional
 // but make agents far more grounded.
 export interface CompanyContext {
+  companyId?: string;       // workspace binding; missing/empty means legacy payload
   company: string;
   url?: string;
   rawNotes?: string;

@@ -20,8 +20,8 @@ export const STATUS_LABEL: Record<Status, string> = {
   "needs-review": "Needs Review",
   parsed: "Mapped",
   mapped: "Mapped",
-  ready: "Agent Ready",
-  generated: "Agent Generated",
+  ready: "Agent candidates found",
+  generated: "Agents generated",
   blocked: "Needs Clarification",
 };
 

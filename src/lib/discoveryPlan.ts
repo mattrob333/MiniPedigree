@@ -5,6 +5,7 @@ import type {
   Person,
   PlannedSession,
   PlannedSessionStatus,
+  SessionSchedule,
   QuestionBacklogItem,
 } from "@/types";
 import { directReports, getScopePersonIds, isMapped, recommendSessionType } from "./sessions";
@@ -23,6 +24,20 @@ const STATUS_RANK: Record<PlannedSessionStatus, number> = {
   applied: 4,
   rerun_suggested: 5,
 };
+
+const STATUS_META_LABEL: Record<PlannedSessionStatus, string> = {
+  planned: "Planned",
+  briefed: "Briefed",
+  captured: "Captured",
+  parsed: "Parsed",
+  applied: "Applied",
+  rerun_suggested: "Re-run suggested",
+};
+
+export function sessionDisplayStatus(s: PlannedSession): string {
+  if (s.status === "briefed" && s.schedule) return "Invited";
+  return STATUS_META_LABEL[s.status];
+}
 
 /** Stable id so plan regeneration can preserve session status. */
 export function plannedSessionId(type: string, anchorPersonId: string): string {
@@ -54,9 +69,9 @@ export function generatePlan(
   const sessions: PlannedSession[] = [];
   const active = people.filter((p) => p.lifecycle !== "offboarded");
 
-  const carry = (id: string): Pick<PlannedSession, "status" | "brief_id"> => {
+  const carry = (id: string): Pick<PlannedSession, "status" | "brief_id" | "schedule"> => {
     const prev = prevById.get(id);
-    return prev ? { status: prev.status, ...(prev.brief_id ? { brief_id: prev.brief_id } : {}) } : { status: "planned" };
+    return prev ? { status: prev.status, ...(prev.brief_id ? { brief_id: prev.brief_id } : {}), ...(prev.schedule ? { schedule: prev.schedule } : {}) } : { status: "planned" };
   };
 
   // 1) Leadership: the top node + direct reports.
@@ -237,6 +252,16 @@ export function setSessionStatus(plan: DiscoveryPlan, sessionId: string, status:
     ...plan,
     sessions: plan.sessions.map((s) =>
       s.id === sessionId ? { ...s, status, ...(briefId ? { brief_id: briefId } : {}) } : s,
+    ),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function setSessionSchedule(plan: DiscoveryPlan, sessionId: string, schedule: SessionSchedule): DiscoveryPlan {
+  return {
+    ...plan,
+    sessions: plan.sessions.map((s) =>
+      s.id === sessionId ? { ...s, status: s.status === "planned" ? "briefed" : s.status, schedule } : s,
     ),
     updated_at: new Date().toISOString(),
   };

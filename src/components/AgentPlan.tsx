@@ -5,6 +5,7 @@ import type { AgentRecord, AgentRegistryEntry, PedigreeState, Person, TaskItem }
 import type { Recommendation } from "@/lib/optimizer";
 import { getDepartmentColor } from "@/lib/departments";
 import { initials } from "@/lib/util";
+import { deriveOperationalState, taskActionLabel } from "@/lib/taskState";
 
 // ── UX reset Sprint 3: Agent Plan ──────────────────────────────────────
 // Which tasks should become agents, under what human-owned boundary?
@@ -68,7 +69,7 @@ export function AgentPlan({ people, pedigree, registry, recommendations, onCreat
       <div className="sheet-wrap" style={{ padding: 24 }}>
         <div className="empty-state">
           <h3>No agent candidates yet</h3>
-          <p>Agent candidates appear after discovery sessions extract tasks and they are classified as ready for delegation. Run sessions, review the findings, and the candidates show up here grouped under their human owners.</p>
+          <p>Agent candidates appear after discovery sessions extract tasks and classify delegation fit. A task still needs a reviewed workflow, approval boundary, and test case before an agent can be generated.</p>
         </div>
       </div>
     );
@@ -129,24 +130,34 @@ export function AgentPlan({ people, pedigree, registry, recommendations, onCreat
               </span>
             </div>
 
-            {group.candidates.map((task) => (
-              <div className="agentplan-candidate" key={task.id}>
-                <Icon name="sparkles" size={12} stroke="var(--cyan)" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="agentplan-task">{task.label}</div>
-                  <div className="agentplan-meta">
-                    {task.completion?.trigger && <span>{task.completion.trigger}</span>}
-                    {task.completion?.tools_mentioned?.length ? <span>tools: {task.completion.tools_mentioned.join(", ")}</span> : null}
-                    {task.evidence && <span title={task.evidence}><Icon name="transcript" size={10} /> evidence</span>}
+            {group.candidates.map((task) => {
+              const state = deriveOperationalState(task);
+              const canCreate = state === "agent_ready";
+              return (
+                <div className="agentplan-candidate" key={task.id}>
+                  <Icon name="sparkles" size={12} stroke="var(--cyan)" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="agentplan-task">{task.label}</div>
+                    <div className="agentplan-meta">
+                      <span>{state.replace(/_/g, " ")}</span>
+                      {task.completion?.trigger && <span>{task.completion.trigger}</span>}
+                      {task.completion?.tools_mentioned?.length ? <span>tools: {task.completion.tools_mentioned.join(", ")}</span> : null}
+                      {task.evidence && <span title={task.evidence}><Icon name="transcript" size={10} /> evidence</span>}
+                    </div>
                   </div>
+                  <ProvenanceBadge provenance={task.provenance} compact />
+                  <RiskBadge level={task.riskLevel} />
+                  <button
+                    className="btn btn-sm btn-outline-cyan"
+                    disabled={!canCreate}
+                    title={!canCreate ? `Workflow incomplete: ${(task.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
+                    onClick={() => onCreateAgent({ person: group.person, task, respTitle: group.respTitle })}
+                  >
+                    {taskActionLabel(state)}
+                  </button>
                 </div>
-                <ProvenanceBadge provenance={task.provenance} compact />
-                <RiskBadge level={task.riskLevel} />
-                <button className="btn btn-sm btn-outline-cyan" onClick={() => onCreateAgent({ person: group.person, task, respTitle: group.respTitle })}>
-                  Plan this agent
-                </button>
-              </div>
-            ))}
+              );
+            })}
 
             {group.agents.map((agent) => {
               const manifestId = String((agent.manifest as Record<string, unknown> | undefined)?.agent_id ?? agent.id);

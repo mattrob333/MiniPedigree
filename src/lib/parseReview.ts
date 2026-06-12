@@ -44,6 +44,52 @@ export function filterParsedMap(parsed: ParsedMap, rejected: Set<FindingKey>): P
   return out;
 }
 
+export function defaultRejectedFindings(parsed: ParsedMap, scopeIds: string[]): Set<FindingKey> {
+  const rejected = new Set<FindingKey>();
+  for (const personId of scopeIds) {
+    for (const r of parsed[personId]?.responsibilities ?? []) {
+      const taskLabels = [...r.tasks.delegatable, ...r.tasks.approval, ...r.tasks.not_delegatable];
+      const templateResp = r.source === "role_template";
+      const hasRespEvidence = Boolean(r.evidence_quote?.trim());
+      const hasAnyTaskEvidence = taskLabels.some((label) => {
+        const detail = findDetail(parsed, personId, r.id, label);
+        return Boolean(detail?.evidence_quote?.trim() || r.evidence_quote?.trim());
+      });
+      if (templateResp || (!hasRespEvidence && !hasAnyTaskEvidence)) {
+        rejected.add(responsibilityKey(personId, r.id));
+      }
+      for (const label of taskLabels) {
+        const detail = findDetail(parsed, personId, r.id, label);
+        const templateTask = templateResp || detail?.source === "role_template";
+        if (templateTask || !(detail?.evidence_quote?.trim() || r.evidence_quote?.trim())) {
+          rejected.add(taskKey(personId, r.id, label));
+        }
+      }
+    }
+  }
+  return rejected;
+}
+
+export function defaultFlaggedFindings(parsed: ParsedMap, scopeIds: string[]): Set<FindingKey> {
+  const flagged = new Set<FindingKey>();
+  for (const personId of scopeIds) {
+    for (const r of parsed[personId]?.responsibilities ?? []) {
+      if ((r.confidence ?? 1) < 0.6 && r.source !== "role_template") {
+        flagged.add(responsibilityKey(personId, r.id));
+        for (const label of [...r.tasks.delegatable, ...r.tasks.approval, ...r.tasks.not_delegatable]) {
+          flagged.add(taskKey(personId, r.id, label));
+        }
+      }
+    }
+  }
+  return flagged;
+}
+
+function findDetail(parsed: ParsedMap, personId: string, respId: string, label: string) {
+  const resp = parsed[personId]?.responsibilities.find((r) => r.id === respId);
+  return resp?.taskDetails?.find((d) => d.name.trim().toLowerCase() === label.trim().toLowerCase());
+}
+
 /** Count surviving findings (for the apply CTA). */
 export function countFindings(parsed: ParsedMap, scopeIds: string[]): { responsibilities: number; tasks: number } {
   let responsibilities = 0;

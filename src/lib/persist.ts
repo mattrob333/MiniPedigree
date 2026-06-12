@@ -1,5 +1,6 @@
 import type { UserProfile, Workspace, WorkspaceSummary } from "@/types";
 import { supabase, supabaseEnabled } from "./supabase";
+import { assertContextMatchesCompany, sanitizeWorkspaceContext } from "./contextGuard";
 
 const WS_PREFIX = "pedigree.ws.";       // per-workspace blob
 const IDX_PREFIX = "pedigree.index.";   // per-owner list of summaries
@@ -68,6 +69,7 @@ export function setLastWorkspaceId(email: string | undefined, id: string | null)
 
 /** Persist a workspace (per id) and update this owner's index + last-open pointer. */
 export async function saveWorkspace(ws: Workspace, email?: string): Promise<void> {
+  assertContextMatchesCompany(ws.companyContext, ws.id, ws.name);
   const stamped: Workspace = { ...ws, ownerEmail: email, updatedAt: new Date().toISOString() };
   try {
     localStorage.setItem(wsKey(ws.id), JSON.stringify(stamped));
@@ -87,7 +89,7 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, quarantinedContext: ws.quarantinedContext, contextWarning: ws.contextWarning, taskSpecs: ws.taskSpecs, workflowTemplates: ws.workflowTemplates, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt },
         updated_at: stamped.updatedAt,
       });
       if (ws.mcpLibrary?.length) {
@@ -181,15 +183,17 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
       if (data?.snapshot) {
         const snap = data.snapshot as Partial<Workspace> & { people: Workspace["people"]; pedigree: Workspace["pedigree"] };
         if (snap.people?.length) {
-          return {
+          return sanitizeWorkspaceContext({
             id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree,
             companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry,
             auditLog: snap.auditLog, events: snap.events,
             discoveryPlan: snap.discoveryPlan, sessionBriefs: snap.sessionBriefs, questionBacklog: snap.questionBacklog,
             meetings: snap.meetings, signalLedger: snap.signalLedger, freshnessConfig: snap.freshnessConfig,
             rosterValidatedAt: snap.rosterValidatedAt,
+            quarantinedContext: snap.quarantinedContext, contextWarning: snap.contextWarning,
+            taskSpecs: snap.taskSpecs, workflowTemplates: snap.workflowTemplates,
             ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString(),
-          };
+          });
         }
       }
     } catch (e) {
@@ -198,7 +202,7 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
   }
   try {
     const raw = localStorage.getItem(wsKey(id));
-    if (raw) return JSON.parse(raw) as Workspace;
+    if (raw) return sanitizeWorkspaceContext(JSON.parse(raw) as Workspace);
   } catch {
     /* ignore */
   }
