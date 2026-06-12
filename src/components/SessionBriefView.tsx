@@ -189,11 +189,13 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
             <button className="btn btn-sm btn-outline-cyan" onClick={() => saveEdit(q.id)}>Save</button>
           </div>
         ) : (
-          <div className="brief-q-text" title={`Why: ${q.why}`}>{q.text || <em className="dim">empty question</em>}</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }} title={`Why: ${q.why}`}>
+            <span className="brief-q-text" style={{ flex: 1 }}>{q.text || <em className="dim">empty question</em>}</span>
+            <span className="brief-q-intent" style={{ color: INTENT_COLOR[q.intent] }}>{INTENT_LABEL[q.intent]}</span>
+          </div>
         )}
         <div className="brief-q-meta">
           {q.target_person_id !== "group" && <span className="brief-q-target">{targetChip(q)}</span>}
-          <span className="brief-q-intent" style={{ color: INTENT_COLOR[q.intent] }}>{INTENT_LABEL[q.intent]}</span>
           {showNotes && <span className="brief-q-why">{q.why}</span>}
           {nested && <span className="tag">individual</span>}
         </div>
@@ -216,12 +218,12 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
         <div className="brief-q-body">
           <button className="brief-group-toggle" onClick={() => toggleGroup(group.key)} title="Show individual questions and edit controls">
             <Icon name={expanded ? "chevron-down" : "chevron-right"} size={11} />
-            <span className="brief-q-text">{group.displayText}</span>
+            <span className="brief-q-text" style={{ flex: 1 }}>{group.displayText}</span>
+            <span className="brief-q-intent" style={{ color: INTENT_COLOR[first.intent] }}>{INTENT_LABEL[first.intent]}</span>
           </button>
           <div className="brief-q-meta">
             <span className="brief-q-target">ask each:</span>
             {group.items.map((q) => <span className="tag" key={q.id}>{targetChip(q)}</span>)}
-            <span className="brief-q-intent" style={{ color: INTENT_COLOR[first.intent] }}>{INTENT_LABEL[first.intent]}</span>
             {showNotes && <span className="brief-q-why">{first.why}</span>}
           </div>
           {expanded && <ol className="brief-question-list nested">{group.items.map((q) => renderQuestion(q, true))}</ol>}
@@ -235,7 +237,7 @@ export function SessionBriefView({ brief, participants, editable = true, onChang
       <div className="brief-head">
         <div>
           <div className="brief-title"><Icon name="doc" size={13} stroke="var(--cyan)" /> Session brief
-            <span className="tag">{brief.source === "ai" ? "AI-generated" : "template"}</span>
+            <span className="tag" title={brief.source === "ai" ? undefined : "Built from the standard question set - connect an API key for an agenda tailored to this company's context and open questions."}>{brief.source === "ai" ? "AI-generated" : "standard agenda"}</span>
             {brief.edited_by_user && <span className="tag cyan">edited</span>}
           </div>
         </div>

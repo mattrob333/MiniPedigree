@@ -866,6 +866,7 @@ export default function App() {
 
   const allAgents = useMemo(() => people.flatMap((p) => pedigree[p.id]?.agents ?? []), [people, pedigree]);
   const reviewQueueCount = useMemo(() => buildReviewQueue(people, pedigree).length, [people, pedigree]);
+  const openBacklogCount = useMemo(() => openBacklog(questionBacklog).length, [questionBacklog]);
   const userRole = profile?.role ?? "reviewer";
 
   const switchToReviewerDemo = () => {
@@ -1034,6 +1035,7 @@ export default function App() {
     reviewQueueCount, questionBacklog, registry, agentsBuilt: metrics.agentsBuilt,
   }), [people, pedigree, readiness, rosterValidatedAt, discoveryPlan, reviewQueueCount, questionBacklog, registry, metrics.agentsBuilt]);
   const stage = useMemo(() => deriveStage(maturityInput), [maturityInput]);
+  const inSetup = ["validate_roster", "add_context", "run_sessions", "review_findings"].includes(stage);
   const action = useMemo(() => nextAction(stage, maturityInput), [stage, maturityInput]);
   const checklist = useMemo(() => setupChecklist(stage), [stage]);
   const headerMetrics = useMemo(() => stageMetrics(stage, maturityInput), [stage, maturityInput]);
@@ -1147,7 +1149,7 @@ export default function App() {
                 <button className="btn btn-sm btn-ghost" onClick={openMyPedigree} title="Your own slice of the stack: confirm tasks, see your agents in plain language, answer questions, request agents"><Icon name="user" size={12} /> My Pedigree</button>
                 <button className="btn btn-sm btn-ghost" onClick={exitToHome} title="Switch company / back to all companies"><Icon name="network" size={12} /> Companies</button>
                 {/* ONE state-routed primary action — the only saturated CTA on this surface. */}
-                <button data-tour="map-responsibilities" className={tab === "plan" ? "btn btn-ghost" : "btn btn-primary"} onClick={onPrimaryCta} title={action.hint}>
+                <button data-tour="map-responsibilities" className={["plan", "review", "spreadsheet"].includes(tab) ? "btn btn-ghost" : "btn btn-primary"} onClick={onPrimaryCta} title={action.hint}>
                   <Icon name="sparkles" size={12} /> {action.label}
                 </button>
               </div>
@@ -1171,7 +1173,7 @@ export default function App() {
             )}
 
             {/* Stage-aware metrics: only what is meaningful NOW — no zero-walls. */}
-            {(metrics.mappedPeople > 0 || appliedSessionCount > 0) && (
+            {!["validate_roster", "add_context"].includes(stage) && appliedSessionCount > 0 && (
               <div className="metrics funnel" data-tour="delegatable-tasks">
                 {headerMetrics.map((m, i) => (
                   <Metric key={m.label} label={m.label} value={m.value} delta={m.delta} up={m.up} arrow={i < headerMetrics.length - 1} />
@@ -1189,8 +1191,8 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "plan"} onClick={() => setTab("plan")} title="The discovery campaign: session cascade, coverage, and the question backlog">
                 <Icon name="target" size={12} /> Discovery <span className="count">{planPendingCount}</span>
               </button>
-              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Exception queue: flagged or unconfirmed findings that need a decision">
-                <Icon name="shield" size={12} /> Exceptions <span className="count">{reviewQueueCount}</span>
+              <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Follow-ups: flagged or unconfirmed findings and open questions that need a decision">
+                <Icon name="shield" size={12} /> Follow-ups <span className="count">{reviewQueueCount + openBacklogCount}</span>
               </button>
               <button className={"tab" + (metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => (metrics.delegTasks > 0 || metrics.agentsBuilt > 0) && setTab("agents")} title={metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? "Agent planning unlocks once tasks are extracted and classified" : "Plan agents under their human-owned responsibilities"}>
                 <Icon name="robot" size={12} /> Agent Plan <span className="count">{metrics.agentsBuilt}</span>
@@ -1254,7 +1256,7 @@ export default function App() {
               />
             )}
             {tab === "agents" && <AgentPlan people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} onCreateAgent={(ctx) => setCreateAgentCtx(ctx)} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
-            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} taskSpecs={taskSpecs} role={userRole} canRefineWithAi={aiTaskRefinementAvailable} onConfirm={onConfirmReview} onEdit={onEditReview} onPlanAgents={() => setTab("agents")} onSwitchToReviewerDemo={switchToReviewerDemo} onAddFollowUpQuestion={onAddReviewQuestion} onRefineTasks={onRefineReviewTasks} onUpdateTaskSpec={onUpdateReviewTaskSpec} onToast={pushToast} />}
+            {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} taskSpecs={taskSpecs} backlog={questionBacklog} events={events} role={userRole} canRefineWithAi={aiTaskRefinementAvailable} onConfirm={onConfirmReview} onEdit={onEditReview} onPlanAgents={() => setTab("agents")} onSwitchToReviewerDemo={switchToReviewerDemo} onAddFollowUpQuestion={onAddReviewQuestion} onResolveBacklogItem={(itemId) => setQuestionBacklog((prev) => resolveBacklogItem(prev, itemId, "manual"))} onSelectPerson={onSelect} onRefineTasks={onRefineReviewTasks} onUpdateTaskSpec={onUpdateReviewTaskSpec} onToast={pushToast} />}
             {tab === "digest" && (
               <DigestScreen
                 people={people}
@@ -1300,6 +1302,7 @@ export default function App() {
           companyContext={companyContext}
           mcpLibrary={mcpLibrary}
           registry={registry}
+          events={events}
           role={userRole}
           currentUserEmail={profile?.email}
           onRegistryChange={setRegistry}

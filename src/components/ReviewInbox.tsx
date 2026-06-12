@@ -5,12 +5,16 @@ import { buildReviewQueue, isBulkConfirmable, provenanceLabel, type ReviewEditPa
 import { canReview as roleCanReview } from "@/lib/rbac";
 import { getDepartmentColor } from "@/lib/departments";
 import { initials } from "@/lib/util";
-import type { PedigreeState, Person, ProvenanceState, TaskSpec, UserRole } from "@/types";
+import { backlogByPerson } from "@/lib/questionBacklog";
+import type { PedigreeState, Person, ProvenanceState, QuestionBacklogItem, TaskSpec, UserRole, WorkspaceAuditEvent } from "@/types";
+import { AuditTrailDrawer } from "./AuditTrailDrawer";
 
 interface Props {
   people: Person[];
   pedigree: PedigreeState;
   taskSpecs: Record<string, TaskSpec>;
+  backlog?: QuestionBacklogItem[];
+  events?: WorkspaceAuditEvent[];
   role: UserRole;
   canRefineWithAi: boolean;
   onConfirm: (items: ReviewQueueItem[]) => void;
@@ -18,6 +22,8 @@ interface Props {
   onPlanAgents: () => void;
   onSwitchToReviewerDemo: () => void;
   onAddFollowUpQuestion: (personId: string, question: string, sourceRef: string) => void;
+  onResolveBacklogItem?: (itemId: string) => void;
+  onSelectPerson?: (personId: string) => void;
   onRefineTasks: (items: ReviewQueueItem[]) => Promise<void>;
   onUpdateTaskSpec: (taskId: string, patch: Partial<TaskSpec>) => void;
   onToast?: (t1: string, t2?: string, green?: boolean) => void;
@@ -74,6 +80,8 @@ export function ReviewInbox({
   people,
   pedigree,
   taskSpecs,
+  backlog = [],
+  events = [],
   role,
   canRefineWithAi,
   onConfirm,
@@ -81,6 +89,8 @@ export function ReviewInbox({
   onPlanAgents,
   onSwitchToReviewerDemo,
   onAddFollowUpQuestion,
+  onResolveBacklogItem,
+  onSelectPerson,
   onRefineTasks,
   onUpdateTaskSpec,
   onToast,
@@ -97,10 +107,12 @@ export function ReviewInbox({
   const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set());
   const [confirmPopover, setConfirmPopover] = useState<{ key: string; person: Person; items: ReviewQueueItem[] } | null>(null);
   const [detailItem, setDetailItem] = useState<ReviewQueueItem | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [refining, setRefining] = useState(false);
   const initialQueueSize = useRef<number | null>(null);
 
   const queue = useMemo(() => buildReviewQueue(people, pedigree), [people, pedigree]);
+  const groupedBacklog = useMemo(() => backlogByPerson(backlog), [backlog]);
   if (initialQueueSize.current === null || queue.length > initialQueueSize.current) initialQueueSize.current = queue.length;
 
   const departments = useMemo(() => Array.from(new Set(people.map((p) => p.department))).sort(), [people]);
@@ -289,6 +301,8 @@ export function ReviewInbox({
     if (!detailItem) return null;
     const person = people.find((p) => p.id === detailItem.personId);
     const spec = taskSpecs[detailItem.itemId];
+    const agent = person ? (pedigree[person.id]?.agents ?? []).find((a) => a.taskId === detailItem.itemId) : undefined;
+    const itemEvents = events.filter((event) => event.subject_id === detailItem.itemId);
     const completion = detailItem.completion;
     const missing = [
       !completion?.trigger && !completion?.cadence && "What triggers this work, and how often?",
@@ -381,10 +395,22 @@ export function ReviewInbox({
             <div className="review-detail-actions">
               <button className="btn btn-primary" disabled={!canReview} onClick={() => confirmItems([detailItem], `Confirmed ${detailItem.label}`)}>Confirm</button>
               <button className="btn" disabled={!onEdit || !canReview} onClick={() => beginEdit(detailItem)}>Edit</button>
+              <button className="btn btn-ghost" onClick={() => setAuditOpen(true)}>Audit trail</button>
               {canRefineWithAi && detailItem.kind === "task" && <button className="btn btn-ghost" disabled={refining} onClick={() => refine([detailItem])}>Refine with AI</button>}
             </div>
           </div>
         </aside>
+        <AuditTrailDrawer
+          open={auditOpen}
+          title={detailItem.label}
+          owner={person}
+          responsibility={detailItem.respTitle}
+          task={detailItem.kind === "task" ? detailItem.label : undefined}
+          provenance={detailItem.provenance}
+          events={itemEvents}
+          agent={agent}
+          onClose={() => setAuditOpen(false)}
+        />
       </>
     );
   };
@@ -393,9 +419,9 @@ export function ReviewInbox({
     <div className="review-inbox">
       <section className="review-purpose">
         <div>
-          <div className="review-purpose-eyebrow"><Icon name="shield" size={13} stroke="var(--cyan)" /> Exception queue</div>
-          <h2>Resolve exceptions</h2>
-          <p>Session review is the normal human sign-off. This queue only holds findings that were flagged, low-confidence, template-derived, or applied without a reviewer. Resolve, edit, or reject each exception before it can feed an agent.</p>
+          <div className="review-purpose-eyebrow"><Icon name="shield" size={13} stroke="var(--cyan)" /> Follow-ups</div>
+          <h2>Resolve follow-ups</h2>
+          <p>Things discovery couldn't settle: findings you flagged, low-confidence items, and open questions. Resolve them here - or let them carry into the next session's agenda.</p>
         </div>
         <div className="review-progress">
           <div className="review-progress-label"><span>{reviewedCount} of {totalForProgress} reviewed</span><span>{queue.length} pending</span></div>
@@ -518,6 +544,32 @@ export function ReviewInbox({
           </button>
           <button className="btn btn-sm btn-ghost" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
+      )}
+      {groupedBacklog.size > 0 && (
+        <section className="review-section">
+          <div className="review-section-head"><h3>Open questions</h3><span className="tag">{backlog.length}</span></div>
+          {[...groupedBacklog.entries()].map(([personId, items]) => {
+            const person = people.find((p) => p.id === personId);
+            if (!person) return null;
+            const dept = getDepartmentColor(person.department);
+            return (
+              <div className="backlog-person" key={personId}>
+                <button className="backlog-person-head" onClick={() => onSelectPerson?.(personId)}>
+                  <span className="avatar" style={{ borderColor: dept.border }}>{initials(person.name)}</span>
+                  <span className="backlog-person-name">{person.name}</span>
+                  <span className="tag">{items.length}</span>
+                </button>
+                {items.map((item) => (
+                  <div className="backlog-item" key={item.id}>
+                    <span className="backlog-q">{item.question}</span>
+                    <span className="backlog-source">{item.source}</span>
+                    {onResolveBacklogItem && <button className="icon-btn" title="Mark resolved" aria-label="Mark resolved" onClick={() => onResolveBacklogItem(item.id)}><Icon name="checkmark" size={11} /></button>}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </section>
       )}
       {renderDetailDrawer()}
     </div>

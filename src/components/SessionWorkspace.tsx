@@ -8,6 +8,7 @@ import type {
   ParsedMap,
   PedigreeState,
   Person,
+  ItemProvenance,
   PlannedSession,
   PlannedSessionStatus,
   QuestionBacklogItem,
@@ -38,7 +39,7 @@ import {
 } from "@/lib/guidedCapture";
 import { assessAgendaCoverage, type AgendaCoverage } from "@/lib/agendaCoverage";
 import { countFindings, defaultFlaggedFindings, defaultRejectedFindings, filterParsedMap, responsibilityKey, taskKey, type FindingKey } from "@/lib/parseReview";
-import { demoTranscript } from "@/lib/demoKit";
+import { applyDemoEnrichment, demoTranscript } from "@/lib/demoKit";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { deriveProvenance } from "@/lib/provenance";
 import { initials } from "@/lib/util";
@@ -46,6 +47,11 @@ import { copyText } from "@/lib/util";
 import { getDepartmentColor } from "@/lib/departments";
 import { ScheduleSessionModal } from "./modals/ScheduleSessionModal";
 import { briefToParticipantMarkdown } from "@/lib/prepSheet";
+import { OrgMapMini } from "./OrgMapMini";
+import { EvidenceDrawer } from "./EvidenceDrawer";
+
+const SHOW_NATIVE_CAPTURE = false;
+const SHOW_RECORD_AUDIO = false;
 
 // ── UX V2: transcript-first discovery ──────────────────────────────────
 // Pedigree's job is "agenda → transcript → parsed work → evidence-backed
@@ -162,14 +168,15 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
   const [outcomeBrief, setOutcomeBrief] = useState<SessionBrief | null>(null);
   const [rejected, setRejected] = useState<Set<FindingKey>>(new Set());
   const [flagged, setFlagged] = useState<Set<FindingKey>>(new Set());
+  const [evidenceDrawer, setEvidenceDrawer] = useState<{ title: string; provenance: ItemProvenance } | null>(null);
   const [parkText, setParkText] = useState("");
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const scopeIds = useMemo(
-    () => getScopePersonIds(scope, person, people, pedigree),
-    [scope, person, people, pedigree],
+    () => plannedSession?.scope_ids?.length ? plannedSession.scope_ids : getScopePersonIds(scope, person, people, pedigree),
+    [plannedSession?.scope_ids, scope, person, people, pedigree],
   );
   const scopedPeople = useMemo(() => people.filter((p) => scopeIds.includes(p.id)), [people, scopeIds]);
   const reports = directReports(person.id, people);
@@ -324,10 +331,11 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
     try {
       onPlanEvent?.(sessionId, "captured", brief?.id);
       const r = await parseDiscovery(scopedPeople, parseInput, scopeIds, companyContext);
-      setParsed(r.parsed);
+      const parsedResult = parseSource === "local" || r.source === "local" ? applyDemoEnrichment(r.parsed) : r.parsed;
+      setParsed(parsedResult);
       setParseSource(r.source);
-      setRejected(defaultRejectedFindings(r.parsed, scopeIds));
-      setFlagged(defaultFlaggedFindings(r.parsed, scopeIds));
+      setRejected(defaultRejectedFindings(parsedResult, scopeIds));
+      setFlagged(defaultFlaggedFindings(parsedResult, scopeIds));
       // Agenda coverage: map the transcript back to the brief's questions so
       // unanswered topics carry into the open-questions backlog.
       if (brief) {
@@ -335,7 +343,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
           setOutcomeBrief(applyQuestionOutcomes(brief, capture));
           setCoverage(null);
         } else {
-          const result = assessAgendaCoverage(brief, transcript, r.parsed);
+          const result = assessAgendaCoverage(brief, transcript, parsedResult);
           setOutcomeBrief(result.brief);
           setCoverage(result.coverage);
         }
@@ -420,18 +428,21 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
               {discoveryJustCompleted && completionCoverage ? (
                 <p>{completionCoverage.covered}/{completionCoverage.total} people covered. The discovery sprint is ready for human review.</p>
               ) : (
-                <p>{appliedSummary.responsibilities} responsibilities and {appliedSummary.tasks} tasks confirmed from this session{appliedSummary.exceptions ? `; ${appliedSummary.exceptions} routed to exceptions.` : "."}</p>
+                <>
+                <OrgMapMini people={people} pedigree={pedigree} highlightIds={scopedPeople.map((p) => p.id)} height={320} />
+                <p>{appliedSummary.responsibilities} responsibilities and {appliedSummary.tasks} tasks confirmed from this session{appliedSummary.exceptions ? `; ${appliedSummary.exceptions} follow-up${appliedSummary.exceptions === 1 ? "" : "s"} noted - they'll be raised in the next session.` : "."}</p>
+                </>
               )}
             </div>
             <div className="stage-complete-actions">
-              <button className="btn btn-primary" onClick={onReviewFindings}>
-                <Icon name="shield" size={13} /> Exceptions ({reviewQueueCount})
-              </button>
               {!discoveryJustCompleted && nextPendingSession && nextSessionLabel && (
-                <button className="btn btn-ghost" onClick={() => onStartNextSession(nextPendingSession)}>
+                <button className="btn btn-primary" onClick={() => onStartNextSession(nextPendingSession)}>
                   <Icon name="arrow-right" size={13} /> Next session: {nextSessionLabel}
                 </button>
               )}
+              <button className={nextPendingSession ? "btn btn-ghost" : "btn btn-primary"} onClick={onReviewFindings}>
+                <Icon name="shield" size={13} /> {reviewQueueCount ? `Follow-ups (${reviewQueueCount})` : "Plan agents"}
+              </button>
             </div>
           </section>
         </div>
@@ -482,13 +493,6 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
               <p className="session-objective">{brief?.objectives ?? "Generating the session brief…"}</p>
 
               <div className="ps-head" style={{ marginTop: 14 }}><Icon name="users" size={13} stroke="var(--cyan)" /> Participants</div>
-              {reports.length > 0 && (
-                <select className="select" style={{ marginBottom: 8 }} value={scope} onChange={(e) => setScope(e.target.value as SessionScope)} aria-label="Session scope">
-                  <option value="self">Only {person.name}</option>
-                  <option value="self_and_reports">{person.name} + {reports.length} direct reports</option>
-                  <option value="unmapped_reports">{person.name} + unmapped reports only</option>
-                </select>
-              )}
               {allCoverageTargets && <div className="scope-coverage-note">All {scopedPeople.length} must be mapped this session.</div>}
               {scopedPeople.map((p) => {
                 const openQs = openQuestions.filter((b) => b.person_id === p.id).length;
@@ -518,9 +522,9 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                 <button className="btn btn-primary" disabled={!brief || briefBusy} onClick={() => setMode("transcript")}>
                   <Icon name="upload" size={13} /> Upload transcript
                 </button>
-                <button className="btn btn-sm btn-ghost" disabled={!brief} onClick={() => setMode("capture")} title="Optional: Pedigree records notes per question during the call. Most teams run the meeting in Google Meet and upload the transcript afterward.">
+                {SHOW_NATIVE_CAPTURE && <button className="btn btn-sm btn-ghost" disabled={!brief} onClick={() => setMode("capture")} title="Optional: Pedigree records notes per question during the call. Most teams run the meeting in Google Meet and upload the transcript afterward.">
                   Use native capture (optional)
-                </button>
+                </button>}
               </div>
             </section>
           </aside>
@@ -647,9 +651,9 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
 
             <div className="transcript-actions">
               <button className="btn" onClick={() => fileRef.current?.click()}><Icon name="upload" size={12} /> Upload file</button>
-              {recording
+              {SHOW_RECORD_AUDIO && (recording
                 ? <button className="btn" onClick={stopRecording}><Icon name="stop" size={12} /> Stop & transcribe</button>
-                : <button className="btn btn-ghost" onClick={startRecording} title="Record in the browser and transcribe server-side"><Icon name="mic" size={12} /> Record audio</button>}
+                : <button className="btn btn-ghost" onClick={startRecording} title="Record in the browser and transcribe server-side"><Icon name="mic" size={12} /> Record audio</button>)}
               <button className="btn btn-ghost" onClick={() => setTranscript(demoTranscript(person, reports, sessionType))}><Icon name="play" size={11} /> Insert demo transcript</button>
               <span style={{ flex: 1 }} />
               <button className="btn btn-primary" disabled={!canParse || !!busy} onClick={runParse}>
@@ -788,13 +792,13 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
               <div>
                 <h3 style={{ margin: 0 }}>Review findings</h3>
                 <span className="dim" style={{ fontSize: 13 }}>
-                  Parsed by {parseSource === "ai" ? "AI" : "the local template engine"}{usingCapture ? ` from ${captureNotesCount} attributed notes` : ""} · evidence-backed items start selected; template or unevidenced items require an explicit click
+                  This is the approval step. Everything checked becomes the official map when you confirm - nothing is reviewed twice.
                 </span>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span className="tag cyan">{surviving.responsibilities} responsibilities</span>
                 <span className="tag">{surviving.tasks} tasks</span>
-                {activeExceptionCount > 0 && <span className="tag yellow">{activeExceptionCount} exception{activeExceptionCount === 1 ? "" : "s"}</span>}
+                {activeExceptionCount > 0 && <span className="tag yellow">{activeExceptionCount} follow-up{activeExceptionCount === 1 ? "" : "s"}</span>}
                 <button className="btn" onClick={() => setMode(usingCapture ? "capture" : "transcript")}>Back</button>
                 <button className="btn btn-primary" onClick={apply}><Icon name="checkmark" size={12} /> Confirm & apply {selectedFindings} selected</button>
               </div>
@@ -806,6 +810,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                 <div>
                   <strong>Parsed by the local template engine.</strong>
                   <span>Template items are role-based boilerplate, not transcript extraction. They start unchecked and carry a template badge; connect an API key for deep extraction.</span>
+                  <span>This demo includes curated action items to show what deep extraction produces.</span>
                 </div>
               </div>
             )}
@@ -848,16 +853,18 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                         <label className="review-finding-row">
                           <input type="checkbox" checked={!rRejected} onChange={() => toggleRejected(rKey)} aria-label={`Accept responsibility: ${r.title}`} />
                           <span className="review-finding-title">{r.title}</span>
-                          <ProvenanceBadge provenance={deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence, source: r.source })} compact />
+                          <ProvenanceBadge provenance={deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence, source: r.source })} compact onOpen={() => setEvidenceDrawer({ title: r.title, provenance: deriveProvenance({ evidence: r.evidence_quote, confidence: r.confidence, source: r.source }) })} />
                           {r.confidence !== undefined && <span className="dim mono" style={{ fontSize: 11 }}>{Math.round(r.confidence * 100)}%</span>}
                         </label>
                         {!rRejected && (
                           <button className={"btn btn-sm " + (rFlagged ? "btn-outline-cyan" : "btn-ghost")} onClick={() => toggleFlagged(rKey)}>
-                            <Icon name="flag" size={11} /> {rFlagged ? "Exception" : "Flag"}
+                            <Icon name="flag" size={11} /> {rFlagged ? "Will ask later" : "Ask later"}
                           </button>
                         )}
                         {r.evidence_quote && <blockquote className="digest-evidence" style={{ marginLeft: 26 }}>“{r.evidence_quote}”</blockquote>}
                         {!rRejected && (
+                          <>
+                          <div className="review-task-section-label">TASKS</div>
                           <div className="review-tasks">
                             {allTasks.map((t) => {
                               const tKey = taskKey(p.id, r.id, t.label);
@@ -869,17 +876,27 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
                                   <input type="checkbox" checked={!tRejected} onChange={() => toggleRejected(tKey)} aria-label={`Accept task: ${t.label}`} />
                                   <span className="review-task-label">{t.label}</span>
                                   <span className={"tag " + t.color}>{t.cls}</span>
-                                  <ProvenanceBadge provenance={deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source })} compact />
+                                  <ProvenanceBadge provenance={deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source })} compact onOpen={() => setEvidenceDrawer({ title: t.label, provenance: deriveProvenance({ evidence: detail?.evidence_quote || r.evidence_quote, confidence: r.confidence, source: detail?.source ?? r.source }) })} />
                                   {detail?.evidence_quote && <span className="dim" style={{ fontSize: 11.5 }} title={detail.evidence_quote}><Icon name="transcript" size={10} /> evidence</span>}
+                                  {detail?.plain_language_description && <span className="review-task-description">{detail.plain_language_description}</span>}
+                                  {(detail?.inputs?.length || detail?.outputs?.length || detail?.definition_of_done) ? (
+                                    <details className="review-action-items" onClick={(e) => e.stopPropagation()}>
+                                      <summary>ACTION ITEMS</summary>
+                                      {detail.inputs?.length ? <div><strong>Inputs</strong><ul>{detail.inputs.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+                                      {detail.outputs?.length ? <div><strong>Outputs</strong><ul>{detail.outputs.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+                                      {detail.definition_of_done ? <div><strong>Definition of done</strong><ul>{detail.definition_of_done.split(/\n|;|\.\s+/).map((item) => item.trim()).filter(Boolean).map((item) => <li key={item}>☐ {item}</li>)}</ul></div> : null}
+                                    </details>
+                                  ) : parseSource !== "ai" ? <span className="review-task-description">Action items unlock with deep extraction (API key required).</span> : null}
                                   {!tRejected && (
                                     <button type="button" className={"btn btn-sm " + (tFlagged ? "btn-outline-cyan" : "btn-ghost")} onClick={(e) => { e.preventDefault(); toggleFlagged(tKey); }}>
-                                      {tFlagged ? "Exception" : "Flag"}
+                                      {tFlagged ? "Will ask later" : "Ask later"}
                                     </button>
                                   )}
                                 </label>
                               );
                             })}
                           </div>
+                          </>
                         )}
                       </div>
                     );
@@ -888,6 +905,7 @@ export function SessionWorkspace({ person, people, pedigree, companyContext, pla
               );
             })}
           </main>
+          <EvidenceDrawer open={Boolean(evidenceDrawer)} provenance={evidenceDrawer?.provenance ?? null} title={evidenceDrawer?.title} onClose={() => setEvidenceDrawer(null)} />
         </div>
       )}
     </div>

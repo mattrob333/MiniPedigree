@@ -13,7 +13,7 @@ const STATE_STYLE: Record<ItemProvenance["state"], { color: string; icon: string
   human_confirmed: { color: "var(--green)", icon: "checkmark" },
 };
 
-export function ProvenanceBadge({ provenance, compact, quiet }: { provenance?: ItemProvenance; compact?: boolean; quiet?: boolean }) {
+export function ProvenanceBadge({ provenance, compact, quiet, onOpen }: { provenance?: ItemProvenance; compact?: boolean; quiet?: boolean; onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
   const p = provenance ?? { state: "ai_inferred" as const };
   const isTemplate = p.source === "role_template";
@@ -26,7 +26,7 @@ export function ProvenanceBadge({ provenance, compact, quiet }: { provenance?: I
     <span style={{ position: "relative", display: "inline-flex" }}>
       <button
         className="tag"
-        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        onClick={(e) => { e.stopPropagation(); onOpen ? onOpen() : setOpen((v) => !v); }}
         title={`${label} — click for source`}
         style={{
           cursor: "pointer",
@@ -37,7 +37,7 @@ export function ProvenanceBadge({ provenance, compact, quiet }: { provenance?: I
           alignItems: "center",
           gap: 4,
         }}
-        aria-expanded={open}
+        aria-expanded={onOpen ? undefined : open}
       >
         <Icon name={style.icon} size={10} stroke={badgeColor} />
         {!compact && label}

@@ -189,7 +189,7 @@ function roleArea(title: string, department: string): string {
 function roleArtifact(title: string): string {
   const t = title.toLowerCase();
   if (/finance|account/.test(t)) return "ledgers and variance";
-  if (/revenue|billing|claims|denial/.test(t)) return "claims and billing exceptions";
+  if (/revenue|billing|claims|denial/.test(t)) return "claims and billing follow-ups";
   if (/clinic|nurse|patient/.test(t)) return "scheduling and intake bottlenecks";
   if (/\bit\b|service desk|systems|security/.test(t)) return "tickets and incident trends";
   if (/hr|recruit|training/.test(t)) return "staffing and onboarding status";

@@ -14,6 +14,7 @@ import { backlogByPerson } from "@/lib/questionBacklog";
 import { READINESS_MAX, readinessTier } from "@/lib/readiness";
 import { getDepartmentColor } from "@/lib/departments";
 import { initials } from "@/lib/util";
+import { OrgMapMini } from "./OrgMapMini";
 
 // ── Guided Discovery: the plan as a visible campaign ───────────────────
 // The cascade over the org chart with per-session status, a coverage strip,
@@ -85,6 +86,8 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
     return sum + (tasks ? tasks.delegatable.length + tasks.approval.length + tasks.not_delegatable.length : 0);
   }, 0);
   const personOf = (id: string) => people.find((p) => p.id === id);
+  const nextSession = pending[0];
+  const nextAnchor = nextSession ? personOf(nextSession.anchor_person_id) : undefined;
   const toggleSession = (id: string) => {
     setExpandedSessions((prev) => {
       const next = new Set(prev);
@@ -120,10 +123,10 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
               <div>
                 <h3>Discovery complete</h3>
                 <p>{done.length} sessions run - {coveredPeople}/{activePeople.length} people covered - {responsibilityCount} responsibilities - {taskCount} tasks classified.</p>
-                <p>{reviewQueueCount} exceptions need a reviewer decision.</p>
+                <p>{reviewQueueCount} follow-up{reviewQueueCount === 1 ? "" : "s"} to resolve.</p>
               </div>
               <button className="btn btn-primary" onClick={onGoToReview}>
-                <Icon name="shield" size={13} /> Resolve exceptions
+                <Icon name="shield" size={13} /> Resolve follow-ups
               </button>
             </div>
           )}
@@ -186,6 +189,14 @@ export function DiscoveryPlanPanel({ plan, people, pedigree, backlog, readiness,
 
         {/* Question backlog */}
         <aside className="plan-backlog">
+          {nextSession && nextAnchor && (
+            <section className="plan-howto-card">
+              <div className="org-mini-narrator" style={{ marginTop: 0, marginBottom: 8 }}>
+                Discovery {done.length === 0 ? "starts at the top" : "continues"}: {SESSION_LABEL[nextSession.type]} with {nextAnchor.name} and {Math.max(0, nextSession.scope_ids.length - 1)} others. Mapped people turn green as sessions apply.
+              </div>
+              <OrgMapMini people={people} pedigree={pedigree} highlightIds={nextSession.scope_ids} dimOthers height={260} onSelectNode={onSelectPerson} />
+            </section>
+          )}
           {!completion.complete && <section className="plan-howto-card">
             <div className="ps-head"><Icon name="play" size={13} stroke="var(--cyan)" /> How to run discovery</div>
             <ol className="howto-checklist">

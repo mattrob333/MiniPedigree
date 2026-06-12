@@ -10,7 +10,7 @@ export const DEMO_PEOPLE: Person[] = [
 
 export const DEMO_TRANSCRIPT = `Jane runs sales operations for the revenue org. Her week is mostly spent
 keeping the forecast clean. She reviews CRM changes from reps, hunts down
-stale deals that should be closed-lost, and exports forecast exception
+stale deals that should be closed-lost, and exports forecast follow-up
 reports for the VP every Friday. When the forecast number needs to change
 officially, Jane is the only person who can sign off.
 
@@ -31,7 +31,7 @@ export const DEMO_PARSED: ParsedMap = {
       {
         id: "R-001", title: "Forecast hygiene",
         tasks: {
-          delegatable: ["Clean stale forecast records", "Compare Salesforce updates vs. last week's snapshot", "Summarize forecast exceptions for review", "Draft internal review notes for VP readout"],
+          delegatable: ["Clean stale forecast records", "Compare Salesforce updates vs. last week's snapshot", "Summarize forecast follow-ups for review", "Draft internal review notes for VP readout"],
           approval: ["Export forecast reports to Finance", "Notify leadership of material variance"],
           not_delegatable: ["Approve final forecast number", "Change official revenue forecast values"],
         },
@@ -45,8 +45,8 @@ export const DEMO_PARSED: ParsedMap = {
         tasks: { delegatable: ["Identify deals past expected close date", "Tag deals for rep follow-up"], approval: [], not_delegatable: [] },
       },
       {
-        id: "R-004", title: "Exception reporting",
-        tasks: { delegatable: ["Generate weekly exception digest"], approval: ["Distribute exception digest to leadership"], not_delegatable: [] },
+        id: "R-004", title: "Follow-up reporting",
+        tasks: { delegatable: ["Generate weekly follow-up digest"], approval: ["Distribute follow-up digest to leadership"], not_delegatable: [] },
       },
     ],
   },
@@ -92,7 +92,7 @@ export const DEMO_SUGGESTED_AGENT: Record<string, string> = {
   "R-001": "Forecast Cleanup Agent",
   "R-002": "CRM Change Reviewer",
   "R-003": "Stale Deal Detector",
-  "R-004": "Exception Digest Composer",
+  "R-004": "Follow-up Digest Composer",
   "R-101": "CRM Hygiene Agent",
   "R-102": "Pipeline Dashboard Refresher",
   "R-201": "Deal Stage Auditor",

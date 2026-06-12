@@ -147,6 +147,96 @@
   display: flex; align-items: center; gap: 8px; padding: 7px 9px;
   border: 1px solid var(--border-1); border-radius: var(--r-2); background: var(--bg-2); font-size: 12.5px;
 }
+
+.orgmap-mini { width: 100%; border: 1px solid var(--border-1); border-radius: 12px; background: var(--bg-1); overflow: hidden; }
+.orgmap-mini .react-flow__attribution { display: none; }
+.orgmap-mini .react-flow__edge-path { stroke: var(--slate-line); stroke-width: 1.5; }
+.orgmap-mini .react-flow__edge.edge-active .react-flow__edge-path { stroke: var(--cyan); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(56,213,255,0.6)); }
+.orgmap-mini .react-flow__edge.edge-dim .react-flow__edge-path { stroke: #2b3850; }
+.orgmap-mini .react-flow__node {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  width: auto;
+  font-size: inherit;
+  color: inherit;
+  cursor: default;
+}
+.orgmap-mini .react-flow__node.selected,
+.orgmap-mini .react-flow__node:focus,
+.orgmap-mini .react-flow__node:focus-visible { outline: none; box-shadow: none; }
+.orgmap-mini .react-flow__node .org-node { position: static; transform: none; }
+.orgmap-mini .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+.org-mini-narrator { margin: 8px 2px 14px; font-size: 12px; color: var(--text-3); }
+
+.brief-view .brief-section { margin-top: 28px; padding: 0; }
+.brief-view .brief-section:not([open]) { padding-bottom: 0; }
+.brief-view .brief-section-head {
+  min-height: 36px;
+  padding: 6px 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+.brief-view .brief-section-hint,
+.brief-view .brief-q-meta,
+.brief-view .brief-q-target,
+.brief-view .brief-q-intent,
+.brief-view .brief-q-why {
+  font-size: 12px;
+}
+.brief-view .brief-question {
+  padding: 12px 10px;
+}
+.brief-view .brief-q-text {
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.brief-view .brief-q-meta {
+  margin-top: 4px;
+}
+.evidence-drawer {
+  width: 520px;
+  max-width: min(520px, 92vw);
+}
+.evidence-drawer-quote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+.review-task-section-label {
+  margin: 8px 0 4px 26px;
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+}
+.review-task-description,
+.review-action-items {
+  grid-column: 2 / -1;
+  color: var(--text-4);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.review-action-items summary {
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.review-action-items ul {
+  margin: 4px 0 8px 16px;
+  padding: 0;
+}
+.audit-trail-drawer {
+  width: 520px;
+  max-width: min(520px, 92vw);
+}
 .scope-person .avatar {
   width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
   font-size: 10px; font-weight: 600; background: linear-gradient(135deg, var(--avatar-from), var(--avatar-to));

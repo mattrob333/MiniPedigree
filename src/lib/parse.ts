@@ -53,7 +53,7 @@ const TEMPLATES: Template[] = [
   {
     match: /(sales ops|revenue op|rev ?ops)/i,
     responsibilities: [
-      { title: "Forecast hygiene", tasks: ["Clean stale forecast records", "Compare CRM updates vs. last snapshot", "Summarize forecast exceptions", "Approve final forecast number"] },
+      { title: "Forecast hygiene", tasks: ["Clean stale forecast records", "Compare CRM updates vs. last snapshot", "Summarize forecast follow-ups", "Approve final forecast number"] },
       { title: "CRM change review", tasks: ["Diff CRM field changes weekly", "Compile missing-field list", "Recommend official forecast changes"] },
     ],
   },
@@ -103,7 +103,7 @@ const TEMPLATES: Template[] = [
     match: /(\bit\b|information technology|systems|security|infrastructure|helpdesk)/i,
     responsibilities: [
       { title: "Systems monitoring", tasks: ["Summarize open tickets", "Identify recurring issues", "Draft status update", "Grant system access"] },
-      { title: "Access & compliance", tasks: ["Compile access audit", "Flag policy exceptions"] },
+      { title: "Access & compliance", tasks: ["Compile access audit", "Flag policy follow-ups"] },
     ],
   },
   {

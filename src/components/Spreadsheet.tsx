@@ -5,6 +5,7 @@ import { BrandChip } from "./BrandLogo";
 import { StatusBadge } from "./StatusBadge";
 import { SESSION_LABEL, isMapped } from "@/lib/sessions";
 import { initials } from "@/lib/util";
+import { OrgMapMini } from "./OrgMapMini";
 
 function Empty() {
   return <span className="empty">Not mapped yet</span>;
@@ -107,6 +108,12 @@ export function Spreadsheet({ people, pedigree, department, rosterValidated, onV
     <div className="sheet-wrap" id="spreadsheet-pane">
       {/* Validation summary: the first decision is "did the roster import
           correctly enough to run discovery?" */}
+      {!rosterValidated && people.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <OrgMapMini people={people} pedigree={pedigree} height={300} />
+          <div className="org-mini-narrator">{people.length} people · {new Set(people.map((p) => p.department).filter(Boolean)).size} departments · reporting lines resolved</div>
+        </div>
+      )}
       {!rosterValidated && people.length > 0 && (
         <div className="roster-validation">
           <div className="roster-validation-copy">

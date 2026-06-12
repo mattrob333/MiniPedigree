@@ -14,6 +14,7 @@ import { findRegistryEntry, nextVersion, setRegistryStatus, upsertCompiledVersio
 import { enforcementProfile, enforcementSummary, ENFORCEMENT_LEGEND } from "@/lib/enforcement";
 import { buildGovernanceSummaryHtml } from "@/lib/governanceSummary";
 import { ProvenanceBadge, RiskBadge } from "./ProvenanceBadge";
+import { AuditTrailDrawer } from "./AuditTrailDrawer";
 
 function highlight(str: string): string {
   const escaped = str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -29,6 +30,7 @@ interface Props {
   companyContext?: CompanyContext;
   mcpLibrary?: CompanyMcpServer[];
   registry?: AgentRegistryEntry[];
+  events?: WorkspaceAuditEvent[];
   role?: UserRole;
   currentUserEmail?: string;
   onRegistryChange?: (registry: AgentRegistryEntry[]) => void;
@@ -53,9 +55,10 @@ const RUNTIME_BRANDS: Record<string, string> = {
   generic: "LangGraph",
 };
 
-export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registry, role, currentUserEmail, onRegistryChange, onAuditEvents, onBack, onSwitchToOrgMap, onToast }: Props) {
+export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registry, events = [], role, currentUserEmail, onRegistryChange, onAuditEvents, onBack, onSwitchToOrgMap, onToast }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [enforcementRuntime, setEnforcementRuntime] = useState<RuntimeTargetId>("hermes");
   if (!agent) return null;
 
@@ -507,9 +510,21 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
             <button className="btn" onClick={() => downloadFile(`${slug}.manifest.json`, json, "application/json")}><Icon name="download" size={12} /> Export manifest</button>
             <button className="btn" onClick={() => downloadFile(`${slug}.hermes.md`, hermes.markdown, "text/markdown")}><Icon name="download" size={12} /> Export Hermes Agent</button>
             <button className="btn" onClick={exportGovernanceSummary} title="One-page, print-ready summary for the non-technical approver"><Icon name="doc" size={12} /> Governance Summary</button>
+            <button className="btn btn-ghost" onClick={() => setAuditOpen(true)}><Icon name="history" size={12} /> Audit trail</button>
             <span style={{ flex: 1 }} />
             <button className="btn btn-primary" disabled={!exportOk} onClick={exportPackage} title={exportOk ? "Export all runtime artifacts and write the registry version" : exportBlockReason}><Icon name="download" size={12} /> Export Deployment Package</button>
           </div>
+          <AuditTrailDrawer
+            open={auditOpen}
+            title={agent.task.label}
+            owner={agent.person}
+            responsibility={agent.respTitle}
+            task={agent.task.label}
+            provenance={agent.task.provenance}
+            events={events.filter((event) => event.subject_id === agent.taskId || event.subject_id === agent.id)}
+            agent={agent}
+            onClose={() => setAuditOpen(false)}
+          />
 
           {/* Deployment Package (P1.2) */}
           <div className="manifest-card" style={{ marginTop: 16 }}>

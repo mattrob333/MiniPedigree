@@ -1,4 +1,4 @@
-import type { CompanyContext, MappingSessionType, Person } from "@/types";
+import type { CompanyContext, MappingSessionType, ParsedMap, ParsedTask, Person } from "@/types";
 import { buildDemoSessionText } from "./sessions";
 
 // ── Demo kit: curated inputs for every step of the flow ────────────────
@@ -174,6 +174,83 @@ export function demoTranscript(anchor: Person, reports: Person[], sessionType: M
     (t) => t.match.test(anchor.name) && (t.type === "any" || t.type === sessionType),
   );
   return curated?.text ?? buildDemoSessionText(anchor, reports, sessionType);
+}
+
+export const LUMEN_BAY_ENRICHED_DETAILS: Record<string, Partial<ParsedTask>> = {
+  "investor update": {
+    plain_language_description: "Pull the current company metrics, draft the board-facing update, and separate the mechanical data gathering from Avery's narrative judgment.",
+    inputs: ["HubSpot metrics", "margin dashboard data", "monthly KPI notes"],
+    outputs: ["draft investor update", "metric summary for Avery"],
+    definition_of_done: "Metrics are current; draft narrative is ready for Avery's final edit; board send date is clear.",
+  },
+  "vendor payment run": {
+    plain_language_description: "Collect invoices, match them to purchase orders, prepare the payment run, and leave release authority with Avery.",
+    inputs: ["vendor invoices", "PO records", "payment sheet"],
+    outputs: ["prepared payment run", "missing-invoice follow-up list"],
+    definition_of_done: "Every invoice is matched or flagged; payment run is ready for Avery to release.",
+  },
+  "roadmap update": {
+    plain_language_description: "Compile shipped work, slipped work, and customer feedback into the company roadmap update.",
+    inputs: ["Linear issues", "customer call notes", "feedback themes"],
+    outputs: ["Notion roadmap update"],
+    definition_of_done: "Update is published in Notion with shipped, slipped, and next-priority sections.",
+  },
+  "feedback inbox": {
+    plain_language_description: "Triage Intercom feedback, tag conversations, and surface recurring product themes for Maya's prioritization.",
+    inputs: ["Intercom conversations", "customer feedback tags"],
+    outputs: ["tagged feedback inbox", "theme summary"],
+    definition_of_done: "New feedback is tagged and recurring themes are summarized for roadmap review.",
+  },
+  "pipeline coverage": {
+    plain_language_description: "Review HubSpot coverage, verify deal-stage accuracy, and prepare the forecast summary for Priya and Avery.",
+    inputs: ["HubSpot deal list", "stage accuracy checks", "stale-deal notes"],
+    outputs: ["pipeline coverage summary", "forecast prep note"],
+    definition_of_done: "Coverage is reviewed before Monday noon and follow-ups are clearly called out.",
+  },
+  "discount": {
+    plain_language_description: "Review discount requests against approval thresholds and keep preparer and approver separate.",
+    inputs: ["discount request", "deal terms", "approval threshold"],
+    outputs: ["approved or escalated discount decision"],
+    definition_of_done: "Discount has the right approver and no seller approved their own follow-up.",
+  },
+  "equipment inventory": {
+    plain_language_description: "Maintain the Notion inventory of company equipment and identify replacements needing approval.",
+    inputs: ["Notion inventory", "replacement requests"],
+    outputs: ["updated equipment inventory", "replacement purchase list"],
+    definition_of_done: "Inventory is current and purchases above Jordan's ceiling are routed to Avery.",
+  },
+};
+
+function enrichmentFor(name: string): Partial<ParsedTask> {
+  const lower = name.toLowerCase();
+  const exact = Object.entries(LUMEN_BAY_ENRICHED_DETAILS).find(([key]) => lower.includes(key));
+  if (exact) return exact[1];
+  return {
+    plain_language_description: `Turn "${name}" into a repeatable operating task with named inputs, outputs, and a clear done state.`,
+    inputs: ["source system or transcript-mentioned inputs", "owner-provided context"],
+    outputs: [`completed ${name.toLowerCase()} artifact or decision`],
+    definition_of_done: "Inputs are checked; output is ready for the human owner to approve or use.",
+  };
+}
+
+export function applyDemoEnrichment(parsed: ParsedMap): ParsedMap {
+  const next: ParsedMap = {};
+  for (const [personId, row] of Object.entries(parsed)) {
+    next[personId] = {
+      ...row,
+      responsibilities: row.responsibilities.map((resp) => ({
+        ...resp,
+        taskDetails: resp.taskDetails?.map((task) => ({
+          ...task,
+          ...enrichmentFor(task.name),
+          delegation_class: task.delegation_class,
+          evidence_quote: task.evidence_quote,
+          source: task.source,
+        })),
+      })),
+    };
+  }
+  return next;
 }
 
 // ── Maintenance standups (Digest tab) ──────────────────────────────────
