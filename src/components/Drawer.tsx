@@ -133,20 +133,18 @@ export function Drawer({ open, person, state, people, pedigree, role = "editor",
                     const created = createdTaskIds.has(t.id);
                     const agent = agents.find((x) => x.taskId === t.id);
                     const operationalState = deriveOperationalState(t, undefined, agent);
-                    const canCreate = operationalState === "agent_ready";
                     return (
                       <div key={t.id} className={"task-row" + (created ? " created" : "")}>
                         <div className="marker">{created ? <Icon name="checkmark" size={10} /> : "T"}</div>
                         <div className="label">{t.label}</div>
                         <ProvenanceBadge provenance={t.provenance} compact />
-                        <div className="meta">{t.respId} · {operationalState.replace(/_/g, " ")}</div>
+                        <div className="meta">{t.respId}{created ? ` · ${operationalState.replace(/_/g, " ")}` : ""}</div>
                         {created ? (
                           <button className="btn btn-sm btn-ghost" onClick={() => { if (agent) onOpenAgent(agent); }}>Open agent <Icon name="external" size={11} /></button>
                         ) : (
                           <button
                             className="btn btn-sm btn-outline-cyan"
-                            disabled={!canCreate}
-                            title={!canCreate ? `Workflow incomplete: ${(t.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
+                            title="Pedigree drafts the spec from the task's evidence and generates the agent - you review the manifest before export."
                             onClick={() => onCreateAgent({ person, task: t, respTitle: t.respTitle })}
                           >
                             <Icon name="sparkles" size={11} /> {taskActionLabel(operationalState)}

@@ -1473,7 +1473,9 @@ button.plan-chip:hover { border-color: var(--border-cyan); }
 .agentplan-group-head .avatar { width: 28px; height: 28px; }
 .agentplan-resp { font-size: 14.5px; font-weight: 600; color: var(--text-1); }
 .agentplan-owner { font-size: 12.5px; color: var(--text-3); }
-.agentplan-candidate { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border-1); border-radius: 8px; background: var(--bg-1); margin-bottom: 6px; }
+.agentplan-candidate { padding: 8px 10px; border: 1px solid var(--border-1); border-radius: 8px; background: var(--bg-1); margin-bottom: 6px; }
+.agentplan-candidate-row, .agentplan-candidate.built { display: flex; gap: 10px; align-items: center; }
+.agentplan-desc { color: var(--text-3); }
 .agentplan-candidate.built { opacity: 0.92; }
 .agentplan-task { font-size: 13.5px; font-weight: 500; color: var(--text-1); }
 .agentplan-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-4); flex-wrap: wrap; }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AgentRecord, Person, TaskItem, TaskSpec } from "../src/types";
 import { deriveOperationalState, missingBirthCertificateFields, taskActionLabel } from "../src/lib/taskState";
+import { draftTaskSpec } from "../src/lib/workflowMatch";
+import { GLOBAL_WORKFLOW_TEMPLATES } from "../src/lib/workflowSeeds";
 
 const person: Person = {
   id: "p1",
@@ -54,12 +56,12 @@ const designedSpec: TaskSpec = {
 describe("taskState", () => {
   it("keeps classified candidates below agent-ready until a workflow is complete", () => {
     expect(deriveOperationalState(task)).toBe("workflow_needed");
-    expect(taskActionLabel("workflow_needed")).toBe("Design workflow");
+    expect(taskActionLabel("workflow_needed")).toBe("Design agent");
   });
 
   it("recognizes matched workflows separately from complete specs", () => {
     expect(deriveOperationalState({ ...task, workflowTemplateId: "wf-claims-summary" })).toBe("workflow_matched");
-    expect(taskActionLabel("workflow_matched")).toBe("Complete task spec");
+    expect(taskActionLabel("workflow_matched")).toBe("Design agent");
   });
 
   it("requires a test case before agent_ready", () => {
@@ -75,5 +77,33 @@ describe("taskState", () => {
 
   it("reports missing birth-certificate fields", () => {
     expect(missingBirthCertificateFields(task)).toEqual(expect.arrayContaining(["workflow template or custom spec", "required inputs", "required tools", "test case"]));
+  });
+});
+
+describe("draftTaskSpec (silent agent design)", () => {
+  it("always produces an agent-ready spec, even from a bare task", () => {
+    const bare: TaskItem = { id: "t9", label: "Track quarterly objectives", respId: "r9", respTitle: "Leadership operating cadence" };
+    const spec = draftTaskSpec(bare, person, "Leadership operating cadence", GLOBAL_WORKFLOW_TEMPLATES);
+    expect(deriveOperationalState(bare, spec)).toBe("agent_ready");
+    expect(spec.testCases?.length).toBeGreaterThan(0);
+    expect(spec.approvalRequiredFor.length).toBeGreaterThan(0);
+    expect(spec.aiMustNot.length).toBeGreaterThan(0);
+  });
+
+  it("prefers the task's own discovery evidence over template defaults", () => {
+    const spec = draftTaskSpec(task, person, task.respTitle, GLOBAL_WORKFLOW_TEMPLATES);
+    expect(spec.inputSources).toEqual(["claims records"]);
+    expect(spec.requiredTools).toEqual(["Salesforce"]);
+    expect(spec.definitionOfDone.join(" ")).toContain("aging");
+    expect(deriveOperationalState(task, spec)).toBe("agent_ready");
+  });
+
+  it("never overwrites human-entered spec fields", () => {
+    const existing = draftTaskSpec(task, person, task.respTitle, GLOBAL_WORKFLOW_TEMPLATES);
+    existing.definitionOfDone = ["Human-edited done state"];
+    existing.plainLanguageDescription = "Human-edited description";
+    const redrafted = draftTaskSpec(task, person, task.respTitle, GLOBAL_WORKFLOW_TEMPLATES, existing);
+    expect(redrafted.definitionOfDone).toEqual(["Human-edited done state"]);
+    expect(redrafted.plainLanguageDescription).toBe("Human-edited description");
   });
 });

@@ -4,7 +4,7 @@ import { Spreadsheet } from "./components/Spreadsheet";
 import { OrgMap } from "./components/OrgMap";
 import { Drawer, type CreateAgentCtx } from "./components/Drawer";
 import { SessionWorkspace } from "./components/SessionWorkspace";
-import { CreateAgentModal, type GenerateCtx } from "./components/modals/CreateAgentModal";
+import type { GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
 import { ProfileScreen } from "./components/ProfileScreen";
 import { OrgSyncModal } from "./components/OrgSyncModal";
@@ -66,6 +66,9 @@ import {
 } from "./lib/onboarding";
 import { assertContextMatchesCompany, bindCompanyContext, emptyCompanyContext, safeHeaderDescription } from "./lib/contextGuard";
 import { deriveOperationalState } from "./lib/taskState";
+import { suggestedAgentName } from "./lib/parse";
+import { draftTaskSpec } from "./lib/workflowMatch";
+import { GLOBAL_WORKFLOW_TEMPLATES } from "./lib/workflowSeeds";
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member" | "session";
 type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
@@ -327,7 +330,6 @@ export default function App() {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [wizardPersonId, setWizardPersonId] = useState<string | null>(null);
   const [orgSyncOpen, setOrgSyncOpen] = useState(false);
-  const [createAgentCtx, setCreateAgentCtx] = useState<CreateAgentCtx | null>(null);
   const [activeAgent, setActiveAgent] = useState<AgentRecord | null>(null);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -732,15 +734,35 @@ export default function App() {
     else pushToast("No people loaded", "Upload a team first");
   };
 
+  /** One click from any task: design the agent with governed defaults and
+   *  land on the manifest for human review. No modal, no workflow forms. */
+  const designAgent = (ctx: CreateAgentCtx) =>
+    onGenerateAgent({
+      ...ctx,
+      agentName: suggestedAgentName(ctx.respTitle),
+      policy: "auto-write-with-approval",
+      riskLevel: ctx.task.riskLevel ?? "low",
+      lifecycleClass: "standing",
+      aiAuthored: true, // falls back to the deterministic template when no API key
+    });
+
   const onGenerateAgent = async (ctx: GenerateCtx) => {
     const row = pedigree[ctx.person.id];
     if (!row) return;
-    const spec = taskSpecs[ctx.task.id];
-    const operationalState = deriveOperationalState(ctx.task, spec, row.agents.find((agent) => agent.taskId === ctx.task.id));
-    if (operationalState !== "agent_ready") {
-      pushToast("Workflow incomplete", "Complete the task spec and add a test case before generating an agent.");
-      setCreateAgentCtx(null);
+    const existingAgent = row.agents.find((agent) => agent.taskId === ctx.task.id);
+    if (existingAgent) {
+      setActiveAgent(existingAgent);
+      setScreen("manifest");
       return;
+    }
+    // The workflow library is backend machinery, not a user step: match a
+    // template or draft a custom spec on the spot, then generate. The human
+    // reviews and approves on the manifest screen.
+    let spec = taskSpecs[ctx.task.id];
+    if (deriveOperationalState(ctx.task, spec) !== "agent_ready") {
+      spec = draftTaskSpec(ctx.task, ctx.person, ctx.respTitle, GLOBAL_WORKFLOW_TEMPLATES, spec);
+      const drafted = spec;
+      setTaskSpecs((prev) => ({ ...prev, [ctx.task.id]: drafted }));
     }
     const baseCtx = {
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
@@ -753,7 +775,6 @@ export default function App() {
     if (ctx.aiAuthored) {
       // Deterministic build first to get the governance seeds, then let GPT-5.5 construct the richer spec.
       const seed = buildAgentArtifacts(baseCtx);
-      setCreateAgentCtx(null);
       pushToast("Constructing with GPT-5.5...", "Grounding in company profile + responsibility");
       authored = await authorAgent({
         agentName: ctx.agentName,
@@ -790,7 +811,6 @@ export default function App() {
       return { ...prev, [ctx.person.id]: nextRow };
     });
     setActiveAgent(agent);
-    setCreateAgentCtx(null);
     setScreen("manifest");
     pushToast("Agent generated", `${agent.name} - ${authored ? "constructed by GPT-5.5" : "standard template"} - owner ${ctx.person.name}`, true);
   };
@@ -1238,7 +1258,7 @@ export default function App() {
                     )}
                   </div>
                   {view === "matrix" ? (
-                    <ResponsibilityMatrix people={people} pedigree={pedigree} onCreateAgent={(ctx) => setCreateAgentCtx(ctx)} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} onStartSession={onStartSession} onSelectPerson={onSelect} />
+                    <ResponsibilityMatrix people={people} pedigree={pedigree} onCreateAgent={designAgent} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} onStartSession={onStartSession} onSelectPerson={onSelect} />
                   ) : (
                     <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
                   )}
@@ -1260,7 +1280,7 @@ export default function App() {
                 onSelectPerson={onSelect}
               />
             )}
-            {tab === "agents" && <AgentPlan people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} onCreateAgent={(ctx) => setCreateAgentCtx(ctx)} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "agents" && <AgentPlan people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} onCreateAgent={designAgent} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
             {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} taskSpecs={taskSpecs} backlog={questionBacklog} events={events} role={userRole} canRefineWithAi={aiTaskRefinementAvailable} onConfirm={onConfirmReview} onEdit={onEditReview} onPlanAgents={() => setTab("agents")} onSwitchToReviewerDemo={switchToReviewerDemo} onAddFollowUpQuestion={onAddReviewQuestion} onResolveBacklogItem={(itemId) => setQuestionBacklog((prev) => resolveBacklogItem(prev, itemId, "manual"))} onSelectPerson={onSelect} onRefineTasks={onRefineReviewTasks} onUpdateTaskSpec={onUpdateReviewTaskSpec} onToast={pushToast} />}
             {tab === "digest" && (
               <DigestScreen
@@ -1289,7 +1309,7 @@ export default function App() {
               pedigree={pedigree}
               role={userRole}
               onClose={() => setDrawerOpen(false)}
-              onCreateAgent={(ctx) => setCreateAgentCtx(ctx)}
+              onCreateAgent={designAgent}
               onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
               onStartSession={onStartSession}
               onOpenProfile={onOpenProfile}
@@ -1385,14 +1405,13 @@ export default function App() {
           pedigree={pedigree}
           onBack={() => setScreen("workspace")}
           onOpenPerson={(id) => setProfileId(id)}
-          onCreateAgent={(ctx) => setCreateAgentCtx(ctx)}
+          onCreateAgent={designAgent}
           onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
           onStartSession={onStartSession}
         />
       )}
 
 
-      <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
       <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} registry={registry} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
       <OnboardingTour

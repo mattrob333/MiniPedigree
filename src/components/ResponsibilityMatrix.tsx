@@ -136,7 +136,7 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
                   <td>
                     {row.agents.length
                       ? <span className="tag green"><Icon name="robot" size={10} /> {row.agents.length}</span>
-                      : counts.delegatable > 0 ? <span className="dim" style={{ fontSize: 12 }}>workflow review needed</span> : <span className="dim">—</span>}
+                      : counts.delegatable > 0 ? <span className="dim" style={{ fontSize: 12 }}>agent candidates ready</span> : <span className="dim">—</span>}
                   </td>
                   <td>{provenance ? <ProvenanceBadge provenance={provenance} compact /> : <span className="dim">—</span>}</td>
                 </tr>
@@ -152,7 +152,6 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
                           const agent = row.agents.find((a) => a.taskId === task.id);
                           const freshness = taskFreshness(task, DEFAULT_FRESHNESS_CONFIG);
                           const operationalState = deriveOperationalState(task, undefined, agent);
-                          const canCreate = operationalState === "agent_ready";
                           return (
                             <div className="matrix-task" key={task.id}>
                               <span className={"tag " + (cls === "delegatable" ? "cyan" : cls === "approval" ? "yellow" : "")}>
@@ -170,8 +169,7 @@ export function ResponsibilityMatrix({ people, pedigree, onCreateAgent, onOpenAg
                               ) : cls === "delegatable" ? (
                                 <button
                                   className="btn btn-sm btn-outline-cyan"
-                                  disabled={!canCreate}
-                                  title={!canCreate ? `Workflow incomplete: ${(task.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
+                                  title="Pedigree drafts the spec from the task's evidence and generates the agent - you review the manifest before export."
                                   onClick={(e) => { e.stopPropagation(); onCreateAgent({ person: row.person, task, respTitle: row.responsibility.title }); }}
                                 >
                                   <Icon name="sparkles" size={10} /> {taskActionLabel(operationalState)}

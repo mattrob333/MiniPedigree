@@ -30,20 +30,14 @@ export function deriveOperationalState(task: TaskItem, spec?: TaskSpec, agent?: 
 
 export function taskActionLabel(state: TaskOperationalState): string {
   switch (state) {
-    case "agent_ready":
-      return "Create agent";
     case "agent_generated":
     case "exported":
       return "View agent";
-    case "workflow_matched":
-      return "Complete task spec";
-    case "workflow_designed":
-      return "Add test";
-    case "classified":
-    case "workflow_needed":
-    case "extracted":
+    // Pre-agent states all offer the same action: Pedigree designs the spec
+    // (template match or custom draft) behind the scenes and generates the
+    // agent for human review on the manifest screen.
     default:
-      return "Design workflow";
+      return "Design agent";
   }
 }
 

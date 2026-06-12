@@ -1,11 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "./Icon";
 import { RiskBadge, ProvenanceBadge } from "./ProvenanceBadge";
 import type { AgentRecord, AgentRegistryEntry, PedigreeState, Person, TaskItem } from "@/types";
 import type { Recommendation } from "@/lib/optimizer";
 import { getDepartmentColor } from "@/lib/departments";
 import { initials } from "@/lib/util";
-import { deriveOperationalState, taskActionLabel } from "@/lib/taskState";
 
 // ── UX reset Sprint 3: Agent Plan ──────────────────────────────────────
 // Which tasks should become agents, under what human-owned boundary?
@@ -35,6 +34,7 @@ interface Props {
 }
 
 export function AgentPlan({ people, pedigree, registry, recommendations, onCreateAgent, onOpenAgent }: Props) {
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const registryById = useMemo(() => new Map(registry.map((e) => [e.agent_id, e])), [registry]);
   const suspended = registry.filter((e) => e.status === "suspended");
 
@@ -69,7 +69,7 @@ export function AgentPlan({ people, pedigree, registry, recommendations, onCreat
       <div className="sheet-wrap" style={{ padding: 24 }}>
         <div className="empty-state">
           <h3>No agent candidates yet</h3>
-          <p>Agent candidates appear after discovery sessions extract tasks and classify delegation fit. A task still needs a reviewed workflow, approval boundary, and test case before an agent can be generated.</p>
+          <p>Agent candidates appear after discovery sessions extract tasks and classify delegation fit. From there, one click designs the agent — Pedigree drafts the spec from the task's evidence, and you review the manifest before export.</p>
         </div>
       </div>
     );
@@ -131,30 +131,48 @@ export function AgentPlan({ people, pedigree, registry, recommendations, onCreat
             </div>
 
             {group.candidates.map((task) => {
-              const state = deriveOperationalState(task);
-              const canCreate = state === "agent_ready";
+              const expanded = expandedTaskId === task.id;
+              const completion = task.completion;
+              const done = completion?.definition_of_done ? completion.definition_of_done.split(/\n|;|\.\s+/).map((s) => s.trim()).filter(Boolean) : [];
+              const hasDetail = Boolean(task.description || completion?.inputs?.length || completion?.outputs?.length || completion?.tools_mentioned?.length || done.length);
               return (
-                <div className="agentplan-candidate" key={task.id}>
-                  <Icon name="sparkles" size={12} stroke="var(--cyan)" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="agentplan-task">{task.label}</div>
-                    <div className="agentplan-meta">
-                      <span>{state.replace(/_/g, " ")}</span>
-                      {task.completion?.trigger && <span>{task.completion.trigger}</span>}
-                      {task.completion?.tools_mentioned?.length ? <span>tools: {task.completion.tools_mentioned.join(", ")}</span> : null}
-                      {task.evidence && <span title={task.evidence}><Icon name="transcript" size={10} /> evidence</span>}
+                <div className={"agentplan-candidate" + (expanded ? " expanded" : "")} key={task.id}>
+                  <div className="agentplan-candidate-row" onClick={() => hasDetail && setExpandedTaskId(expanded ? null : task.id)} style={hasDetail ? { cursor: "pointer" } : undefined}>
+                    <Icon name={hasDetail ? (expanded ? "chevron-down" : "chevron-right") : "sparkles"} size={12} stroke="var(--cyan)" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="agentplan-task">{task.label}</div>
+                      <div className="agentplan-meta">
+                        {task.description && <span className="agentplan-desc">{task.description}</span>}
+                        {!task.description && completion?.cadence && <span>{completion.cadence}</span>}
+                        {!task.description && task.evidence && <span title={task.evidence}><Icon name="transcript" size={10} /> evidence</span>}
+                      </div>
                     </div>
+                    <ProvenanceBadge provenance={task.provenance} compact />
+                    <RiskBadge level={task.riskLevel} />
+                    <button
+                      className="btn btn-sm btn-outline-cyan"
+                      title="Pedigree drafts the spec from the task's evidence and generates the agent — you review the manifest before anything is exported."
+                      onClick={(e) => { e.stopPropagation(); onCreateAgent({ person: group.person, task, respTitle: group.respTitle }); }}
+                    >
+                      <Icon name="sparkles" size={11} /> Design agent
+                    </button>
                   </div>
-                  <ProvenanceBadge provenance={task.provenance} compact />
-                  <RiskBadge level={task.riskLevel} />
-                  <button
-                    className="btn btn-sm btn-outline-cyan"
-                    disabled={!canCreate}
-                    title={!canCreate ? `Workflow incomplete: ${(task.missingSpecFields ?? ["task spec", "test case"]).join(", ")}` : undefined}
-                    onClick={() => onCreateAgent({ person: group.person, task, respTitle: group.respTitle })}
-                  >
-                    {taskActionLabel(state)}
-                  </button>
+                  {expanded && hasDetail && (
+                    <div className="review-task-actionitems" style={{ margin: "10px 0 4px 24px" }}>
+                      {completion?.inputs?.length ? (
+                        <div><div className="ai-col-head">Inputs</div><ul>{completion.inputs.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                      ) : null}
+                      {completion?.outputs?.length ? (
+                        <div><div className="ai-col-head">Outputs</div><ul>{completion.outputs.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                      ) : null}
+                      {completion?.tools_mentioned?.length ? (
+                        <div><div className="ai-col-head">Tools</div><ul>{completion.tools_mentioned.map((item) => <li key={item}>{item}</li>)}</ul></div>
+                      ) : null}
+                      {done.length ? (
+                        <div><div className="ai-col-head">Definition of done</div><ul className="dod">{done.map((item) => <li key={item}>☐ {item}</li>)}</ul></div>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               );
             })}
