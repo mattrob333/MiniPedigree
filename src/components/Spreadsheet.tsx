@@ -110,7 +110,7 @@ export function Spreadsheet({ people, pedigree, department, rosterValidated, onV
           correctly enough to run discovery?" */}
       {!rosterValidated && people.length > 0 && (
         <div style={{ marginBottom: 12 }}>
-          <OrgMapMini people={people} pedigree={pedigree} height={300} />
+          <OrgMapMini people={people} pedigree={pedigree} height={people.length > 20 ? 460 : people.length > 10 ? 400 : 340} />
           <div className="org-mini-narrator">{people.length} people · {new Set(people.map((p) => p.department).filter(Boolean)).size} departments · reporting lines resolved</div>
         </div>
       )}

@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { ReactFlow, ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
+import { useEffect, useMemo, useRef } from "react";
+import { ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { PedigreeState, Person } from "@/types";
 import { OrgNodeCard, type OrgNodeData } from "./OrgNode";
@@ -18,7 +18,17 @@ interface OrgMapMiniProps {
   onSelectNode?: (id: string) => void;
 }
 
-export function OrgMapMini({ people, pedigree, highlightIds = [], dimOthers = false, height = 280, onSelectNode }: OrgMapMiniProps) {
+export function OrgMapMini(props: OrgMapMiniProps) {
+  return (
+    <ReactFlowProvider>
+      <MiniFlow {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function MiniFlow({ people, pedigree, highlightIds = [], dimOthers = false, height = 320, onSelectNode }: OrgMapMiniProps) {
+  const rf = useReactFlow();
+  const fitRef = useRef<number | null>(null);
   const positions = useMemo(() => layoutTree(people, DIMS), [people]);
   const highlight = useMemo(() => new Set(highlightIds), [highlightIds]);
   const dim = (id: string) => dimOthers && highlight.size > 0 && !highlight.has(id);
@@ -62,27 +72,38 @@ export function OrgMapMini({ people, pedigree, highlightIds = [], dimOthers = fa
     [people, positions, highlight, dimOthers],
   );
 
+  // Re-fit whenever the tree changes. The `fitView` prop only fits on mount,
+  // which leaves the root row clipped on larger orgs once the page settles.
+  useEffect(() => {
+    if (fitRef.current) window.clearTimeout(fitRef.current);
+    fitRef.current = window.setTimeout(() => {
+      rf.fitView({ padding: 0.12, duration: 240 });
+    }, 60);
+    return () => {
+      if (fitRef.current) window.clearTimeout(fitRef.current);
+    };
+  }, [people, positions, rf]);
+
   return (
     <div className="orgmap-mini" style={{ height }}>
-      <ReactFlowProvider>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          onNodeClick={onSelectNode ? (_, n) => onSelectNode(n.id) : undefined}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          zoomOnScroll={false}
-          zoomOnPinch={false}
-          zoomOnDoubleClick={false}
-          panOnDrag={false}
-          preventScrolling={false}
-          proOptions={{ hideAttribution: true }}
-          fitView
-          fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
-        />
-      </ReactFlowProvider>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodeClick={onSelectNode ? (_, n) => onSelectNode(n.id) : undefined}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        panOnDrag
+        zoomOnScroll
+        zoomOnPinch
+        zoomOnDoubleClick
+        minZoom={0.1}
+        maxZoom={1.5}
+        proOptions={{ hideAttribution: true }}
+        fitView
+        fitViewOptions={{ padding: 0.12 }}
+      />
     </div>
   );
 }
