@@ -1333,7 +1333,7 @@ export default function App() {
           onRegistryChange={setRegistry}
           onAuditEvents={(evts) => setEvents((prev) => [...prev, ...evts])}
           onBack={() => setScreen("workspace")}
-          onSwitchToOrgMap={() => { setScreen("workspace"); setTab("orgmap"); }}
+          onSwitchToOrgMap={() => { setScreen("workspace"); setTab("agents"); }}
           onToast={pushToast}
         />
       )}

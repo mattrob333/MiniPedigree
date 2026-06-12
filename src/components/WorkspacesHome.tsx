@@ -8,13 +8,15 @@ export interface DemoCompany {
   file: string;
   label: string;
   sub: string;
+  /** guided = full walkthrough kit (context + transcripts); roster_only = CSV sample. */
+  kind: "guided" | "roster_only";
 }
 
 const DEMOS: DemoCompany[] = [
-  { file: "01_lumen_bay_startup_8_people.csv", label: "Lumen Bay", sub: "Startup · 8 people" },
-  { file: "02_northstar_saas_20_people.csv", label: "Northstar SaaS", sub: "B2B SaaS · 20 people" },
-  { file: "03_summit_clinic_network_34_people.csv", label: "Summit Clinic", sub: "Healthcare · 34 people" },
-  { file: "04_atlas_channel_group_52_people.csv", label: "Atlas Channel Group", sub: "Channel · 52 people" },
+  { file: "01_lumen_bay_startup_8_people.csv", label: "Lumen Bay", sub: "Startup · 8 people", kind: "guided" },
+  { file: "02_northstar_saas_20_people.csv", label: "Northstar SaaS", sub: "B2B SaaS · 20 people", kind: "roster_only" },
+  { file: "03_summit_clinic_network_34_people.csv", label: "Summit Clinic", sub: "Healthcare · 34 people", kind: "roster_only" },
+  { file: "04_atlas_channel_group_52_people.csv", label: "Atlas Channel Group", sub: "Channel · 52 people", kind: "roster_only" },
 ];
 
 const HRIS_INTEGRATIONS = [
@@ -139,8 +141,8 @@ export function WorkspacesHome({ userName, workspaces, onOpen, onDelete, onUploa
         <div className="home-grid">
           {DEMOS.map((d) => (
             <div key={d.file} className="home-card demo" onClick={async () => { setLoadingDemo(d.file); await onOpenDemo(d); setLoadingDemo(null); }}>
-              <div className="hc-head"><div className="hc-name"><Icon name="csv" size={13} stroke="var(--cyan-dim)" style={{ verticalAlign: -2, marginRight: 6 }} />{d.label}</div></div>
-              <div className="hc-sub">{d.sub}</div>
+              <div className="hc-head"><div className="hc-name"><Icon name="csv" size={13} stroke="var(--cyan-dim)" style={{ verticalAlign: -2, marginRight: 6 }} />{d.label}</div>{d.kind === "guided" && <span className="tag cyan">Guided demo</span>}</div>
+              <div className="hc-sub">{d.sub}{d.kind === "roster_only" ? " · sample roster only — bring your own context and transcripts" : " · full walkthrough: demo context + transcripts included"}</div>
               <div className="hc-foot"><span className="mono">demo</span><span className="open">{loadingDemo === d.file ? "Loading…" : <>Open <Icon name="arrow-right" size={11} /></>}</span></div>
             </div>
           ))}

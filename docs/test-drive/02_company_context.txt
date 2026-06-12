@@ -1,0 +1,60 @@
+HARBOR PEAK SUPPLY CO. — RAW COMPANY CONTEXT
+(Paste this whole file into Company Context -> "Raw company context", then Parse Notes / Save.)
+
+What we do: Harbor Peak Supply Co. sells curated outdoor gear (packs, shelters, trail kitchens)
+through our own storefront and two wholesale channels. We design about a third of our catalog
+and source the rest from twelve vendors. Roughly 60% of revenue is DTC, 40% wholesale.
+
+Market: DTC outdoor enthusiasts in North America plus ~80 independent retail shops on
+wholesale terms. Average DTC order $140; average wholesale PO $4,200.
+
+Competitors: GearTrade, Backwoods Collective, and the big-box outdoor chains.
+
+Goals:
+1. Reach $6M revenue this year (currently tracking $4.8M run rate)
+2. Cut order-to-ship time from 3 days to 1 day
+3. Grow wholesale to 50% of revenue without adding headcount
+4. Keep return rate under 6%
+
+Initiatives: ShipStation automation rollout (Q3); wholesale portal pilot; vendor scorecard program.
+
+Bottlenecks: Purchase orders pile up on Lena every Monday — reorder points live in her head.
+Wholesale invoicing is manual and Maya loses two days a month reconciling Stripe payouts against
+QuickBooks. Support tickets spike after every product drop and Ryan triages them by hand.
+Marcus writes the weekly pipeline summary himself every Friday from HubSpot exports.
+
+Systems: HubSpot (CRM), NetSuite (inventory + purchasing), ShipStation (fulfillment),
+Zendesk (support), QuickBooks (accounting), Stripe (payments), Google Workspace, Slack,
+Notion (SOPs), Canva, Google Analytics.
+
+SOPs:
+- SOP-3 Order exceptions: any order stuck >24h gets flagged in #ops-exceptions with owner and reason.
+- SOP-8 Vendor reorder: reorder when stock cover falls below 21 days; POs above $5,000 need Sofia's sign-off.
+- SOP-11 Support escalation: refund requests above $200 escalate to Priya; warranty claims always get a human reply.
+
+Approval rules:
+- Purchases above $5,000 must be approved by Sofia Reyes.
+- Discounts above 20% require Marcus Bell's approval; above 30% the CEO signs off.
+- Customer refunds above $200 require Priya Nair's sign-off and must be logged in the refund register.
+- No AI-drafted email may be sent to a customer or vendor without human review.
+
+Segregation of duties:
+- The same person may not both create and approve a purchase order.
+- The same person may not both issue a customer refund and approve it.
+
+Compliance / security notes: Customer payment data lives only in Stripe. Customer PII must
+never leave Zendesk or HubSpot.
+
+KPIs (department · metric · cadence):
+- Executive · Revenue run rate · monthly
+- Revenue · Pipeline coverage (3x) · weekly
+- Sales · Stale-deal count · weekly
+- Marketing · DTC conversion rate · weekly
+- Operations · Order-to-ship time (days) · weekly
+- Operations · Stock cover (days) per top-50 SKU · weekly
+- Customer Experience · First-response time (hours) · weekly
+- Customer Experience · Return rate (%) · monthly
+- Finance · Days to close the books · monthly
+
+Terminology: stock cover, drop (product launch), trail kit, PO (purchase order),
+payout reconciliation, exception lane.

@@ -1,0 +1,22 @@
+DEPARTMENT SESSION — Revenue (anchor: Marcus Bell)
+Participants: Marcus Bell (Head of Revenue), Jake Coleman (Account Executive), Emily Chen (Marketing Manager)
+
+Marcus Bell: Quick frame: this session is about what each of you actually owns week to week. Jake, walk me through your last full week.
+
+Jake Coleman: My week runs on the pipeline. Monday I plan calls from Marcus's Friday summary — I'm blocked until I have it. I own the wholesale account follow-ups: every open deal gets a touch at least every ten days. I draft the follow-up emails myself in Gmail off HubSpot notes; that drafting is the most mechanical part of my job. I also tag deals past their close date every Monday — pull the HubSpot list, check last activity, update the next step field. I can send follow-ups on my own, but anything with custom pricing waits for Marcus. I'd never hand off the actual negotiation calls.
+
+Marcus Bell: What does a good follow-up draft look like?
+
+Jake Coleman: References the last conversation, names the next concrete step, and never invents a discount. If the data's missing it should ask me, not guess.
+
+Emily Chen: I own the drop calendar and DTC marketing. Every drop needs a campaign brief, the email sequence, and the post-drop performance report. The performance report is pure assembly: Google Analytics sessions and conversion, HubSpot attribution, revenue by channel, compared against the last three drops. It goes to Marcus on the Thursday after a drop. I'd happily hand off the assembly if a human still reviews the narrative. I also keep finding inventory surprises — I plan a drop and Operations finds out late. Sofia's team needs my calendar two weeks before any drop; that handoff keeps slipping.
+
+Marcus Bell: That's the dependency Dana flagged. Emily, who approves campaign sends?
+
+Emily Chen: I send DTC email campaigns on my own authority under five thousand recipients. Anything wholesale-facing goes through you. And nothing AI-drafted goes to a customer without me reading it — that's already policy.
+
+Marcus Bell: For me: I own the wholesale price list — reviewing it quarterly against vendor costs is a half-day of spreadsheet work I'd love drafted for me: pull vendor cost changes from NetSuite, flag SKUs where margin slips under 35%, propose new wholesale prices. I approve the final list; the draft just has to show its math.
+
+Jake Coleman: Open question from me: who owns the wholesale portal pilot once it launches? That's new surface nobody's claimed.
+
+Marcus Bell: Parked. Last boundary check — nobody on this team changes a HubSpot deal stage automatically. Flags and drafts only; a human moves the deal.

@@ -1,0 +1,16 @@
+DEPARTMENT SESSION — Customer Experience (anchor: Priya Nair)
+Participants: Priya Nair (Head of Customer Experience), Ryan Park (Support Specialist)
+
+Priya Nair: Ryan, walk me through your last full week, start to finish.
+
+Ryan Park: Tickets, mostly. I triage the Zendesk queue twice a day — categorize each ticket: order status, return, warranty, product question — and set priority. After a drop the queue doubles and triage eats half my day. The categorization is the most mechanical part: read the ticket, tag it, route it. Order-status tickets I could answer in my sleep — the answer is always in ShipStation, but I have to go look it up. If something drafted the order-status replies with the tracking link and current state, I'd just review and send. I handle refunds up to two hundred dollars on my own; above that I write it up and Priya signs off. Warranty claims always get a personal reply from me — that's SOP-11 and it should stay human.
+
+Priya Nair: What does a good drafted reply look like?
+
+Ryan Park: Uses the customer's name, states what actually happened to the order with the date, gives the next step, and never promises a refund or replacement — that's a human call. If the order data is ambiguous it should flag me instead of answering.
+
+Priya Nair: My side: I own returns policy and the post-purchase journey. The weekly support digest we discussed at leadership — volume by category, first-response time against four hours, pending refund approvals, warranty claims — that lands on me to assemble every Monday and I want it drafted. I also review every refund above two hundred dollars; I approve them, Ryan issues them, never the same person both ways. Monthly I report the return rate to Dana with the top three return reasons — that assembly is Zendesk tags plus NetSuite return records, very mechanical.
+
+Ryan Park: Dependency worth noting: my late-order tickets trace straight back to Tom's exception lane. If I could see his morning digest I'd answer half of them without asking.
+
+Priya Nair: Good — that's a handoff to wire up. Boundaries for this whole department: no AI-drafted message reaches a customer without one of us reading it, refunds above two hundred always come to me, and customer PII never leaves Zendesk or HubSpot. Open question to park: when the wholesale portal pilot launches, wholesale support tickets will land somewhere — nobody has claimed that queue.

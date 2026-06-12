@@ -1,0 +1,11 @@
+name,email,title,manager_email,department,known_tools
+Dana Whitfield,dana@harborpeak.example,CEO,,Executive,Google Workspace;Slack;Notion
+Marcus Bell,marcus@harborpeak.example,Head of Revenue,dana@harborpeak.example,Revenue,HubSpot;Gmail;Slack;Stripe
+Sofia Reyes,sofia@harborpeak.example,Head of Operations,dana@harborpeak.example,Operations,NetSuite;Google Sheets;Slack;ShipStation
+Priya Nair,priya@harborpeak.example,Head of Customer Experience,dana@harborpeak.example,Customer Experience,Zendesk;Slack;Notion
+Maya Sandoval,maya@harborpeak.example,Bookkeeper,dana@harborpeak.example,Finance,QuickBooks;Google Sheets;Gmail
+Jake Coleman,jake@harborpeak.example,Account Executive,marcus@harborpeak.example,Sales,HubSpot;Gmail;Slack
+Emily Chen,emily@harborpeak.example,Marketing Manager,marcus@harborpeak.example,Marketing,HubSpot;Canva;Google Analytics
+Tom Okafor,tom@harborpeak.example,Warehouse & Fulfillment Lead,sofia@harborpeak.example,Operations,ShipStation;Google Sheets;Slack
+Lena Vogel,lena@harborpeak.example,Purchasing Coordinator,sofia@harborpeak.example,Operations,NetSuite;Google Sheets;Gmail
+Ryan Park,ryan@harborpeak.example,Support Specialist,priya@harborpeak.example,Customer Experience,Zendesk;Slack

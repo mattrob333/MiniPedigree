@@ -1,0 +1,22 @@
+DEPARTMENT SESSION — Operations (anchor: Sofia Reyes)
+Participants: Sofia Reyes (Head of Operations), Tom Okafor (Warehouse & Fulfillment Lead), Lena Vogel (Purchasing Coordinator)
+
+Sofia Reyes: Same drill as leadership: real work, real cadences. Tom, your last full week.
+
+Tom Okafor: Fulfillment runs through me. Every morning I work the exception lane — orders stuck more than 24 hours per SOP-3. I pull the stuck list from ShipStation, figure out why — address issue, stock short, carrier problem — and post it to #ops-exceptions with an owner. That morning digest is the most repeatable thing I do: list each stuck order, age, reason code, suggested fix. If something could draft that by 8am I'd start my day unblocked. I also do the Friday carrier performance recap — on-time percentage by carrier from ShipStation, flag anyone under 95%. I'd never hand off talking to carriers about claims, and nothing reships without me approving it.
+
+Sofia Reyes: Who waits on your exception digest?
+
+Tom Okafor: Lena, when the reason is stock short — she can't reorder until she sees it. And Ryan, because support tickets about late orders land on him.
+
+Lena Vogel: Purchasing is mine. Monday mornings I build the reorder list: stock cover per SKU from NetSuite, anything under 21 days goes on the list per SOP-8, grouped by vendor with last PO date and lead time. Sofia approves anything over five thousand dollars — I prepare, she approves, never the same person doing both. The list-building is three hours of NetSuite exports and spreadsheet work; the judgment calls — vendor substitutions, expediting — that's me. I also chase PO confirmations with vendors midweek; drafting those chaser emails is mechanical, but they don't get sent without me reading them. I can place POs up to five thousand on my own authority.
+
+Sofia Reyes: And the vendor scorecards Dana mentioned?
+
+Lena Vogel: I'll own them if the data assembly is handled: on-time delivery rate, defect rate from returns, and price variance per vendor, quarterly. Building that by hand is why it hasn't happened.
+
+Sofia Reyes: Noted — that's a new responsibility for you with the assembly delegated. My own recurring piece beyond the Monday review: the weekly ops summary for Dana — order-to-ship trend, exception counts, stock-cover risks. Same shape every week, drafted from Tom's and Lena's data. Hard boundary for everything in this department: nothing writes to NetSuite or ShipStation automatically. Drafts, flags, and lists — a human clicks every button.
+
+Tom Okafor: Open question: when the ShipStation automation rollout lands in Q3, who re-checks the exception rules? They'll change.
+
+Sofia Reyes: Parked for the next session.

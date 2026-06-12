@@ -346,7 +346,7 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
               <div className="manifest-kv">
                 <div className="k">Goal</div>
                 <div className="v">{constructionSpec.goal ?? manifest.goal ?? manifest.purpose}</div>
-                <div className="k">Workflow</div>
+                <div className="k">Steps</div>
                 <div className="v" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {workflow.length ? workflow.slice(0, 5).map((step, idx) => <div key={idx} style={{ fontSize: 12 }}>{idx + 1}. {step}</div>) : <span className="dim">none</span>}
                 </div>
@@ -395,7 +395,7 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
           <span className="sub">v1.0</span>
           <span style={{ flex: 1 }} />
           <button className="btn btn-sm btn-ghost" onClick={() => doCopy(prompt, "prompt")}><Icon name="copy" size={11} /> {copied === "prompt" ? "Copied" : "Copy"}</button>
-          <button className="btn btn-sm" onClick={onSwitchToOrgMap}><Icon name="network" size={11} /> Back to Org Map</button>
+          <button className="btn btn-sm" onClick={onSwitchToOrgMap}><Icon name="robot" size={11} /> Back to Agent Plan</button>
         </div>
         <div className="manifest-body">
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, padding: "10px 12px", background: "var(--cyan-faint)", border: "1px solid var(--border-cyan)", borderRadius: 8, fontSize: 12, color: "var(--text-2)" }}>
@@ -570,7 +570,7 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
 
           <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
             <span style={{ flex: 1 }} />
-            <button className="btn btn-primary" onClick={onSwitchToOrgMap}><Icon name="checkmark" size={12} /> Done — back to Org Map</button>
+            <button className="btn btn-primary" onClick={onSwitchToOrgMap}><Icon name="checkmark" size={12} /> Done — back to Agent Plan</button>
           </div>
         </div>
       </div>

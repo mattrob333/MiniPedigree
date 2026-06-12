@@ -1,0 +1,22 @@
+LEADERSHIP SESSION — Harbor Peak Supply Co.
+Participants: Dana Whitfield (CEO), Marcus Bell (Head of Revenue), Sofia Reyes (Head of Operations), Priya Nair (Head of Customer Experience), Maya Sandoval (Bookkeeper)
+
+Dana Whitfield: Let me walk through how the company actually runs. At the company level I own strategy, the budget, and the board relationship. I write the monthly investor update myself — it takes me most of a day pulling numbers from QuickBooks and HubSpot. I approve anything over ten thousand dollars, all hiring, and any discount above thirty percent. I would never hand off final pricing or anything that goes to the board without my review.
+
+Marcus Bell: I own revenue end to end — pipeline, wholesale accounts, and marketing through Emily. Every Friday I build the weekly pipeline summary from HubSpot exports: coverage against the 3x target, stale deals, and which wholesale accounts need a touch. Jake is usually waiting on that summary before he plans his Monday calls. Honestly a competent assistant could draft that summary if it pulled the HubSpot deal list, checked stage accuracy, and flagged anything with no activity in fourteen days. I approve discounts up to twenty percent on my own; past that it goes to Dana.
+
+Dana Whitfield: And Marcus, what would you never hand off?
+
+Marcus Bell: Negotiating wholesale terms. And I'd never let anything go out to a wholesale buyer without reading it first.
+
+Sofia Reyes: I own operations — inventory, purchasing, and fulfillment. The recurring grind is the Monday purchasing review: Lena preps the reorder list from NetSuite, I sign off on anything above five thousand dollars per SOP-8. I'm also accountable for order-to-ship time; Tom reports the exception lane to me daily in #ops-exceptions. The piece I'd delegate tomorrow is the weekly stock-cover report — pull stock cover per top-50 SKU from NetSuite, flag anything under 21 days of cover, and draft the reorder candidates for Lena. Done right it lists SKU, days of cover, vendor, and last PO date, and it's ready before our Monday 9am review. I can approve purchase orders up to five thousand on my own authority; I prepare nothing — segregation of duties, Lena preps, I approve.
+
+Priya Nair: Customer experience is mine — support, returns, and the post-purchase journey. Ryan handles frontline tickets. After every product drop we get a spike and triage falls behind. I want a weekly support digest: ticket volume by category, first-response time against the four-hour target, refund requests over two hundred dollars that need my sign-off, and any warranty claims — those always get a human reply per SOP-11. I approve refunds above two hundred dollars; Ryan can issue up to two hundred on his own but he can't approve his own refunds above that, obviously.
+
+Maya Sandoval: I keep the books. Month-end close takes me about six days; the worst part is reconciling Stripe payouts against QuickBooks line by line — two full days. If something could match payouts to invoices and just give me the exceptions list, the close would shrink a lot. I draft the monthly P&L summary for Dana. I never approve spend — I record it. Dana signs the monthly financials.
+
+Dana Whitfield: Open question we should chase: nobody owns the vendor scorecard program yet — Sofia, that probably lands with you or Lena, let's decide next time. Also, Emily's drop calendar and how it syncs with inventory is fuzzy; we keep finding out about drops a week before they ship.
+
+Sofia Reyes: Agreed, park both. One more boundary: nothing changes a NetSuite record without a human clicking the button. Drafts and flags only.
+
+Dana Whitfield: Good. To summarize ownership: I hold strategy, budget, board. Marcus holds revenue and pipeline. Sofia holds inventory, purchasing, fulfillment. Priya holds support and returns. Maya holds the books. Let's get the department sessions scheduled.
