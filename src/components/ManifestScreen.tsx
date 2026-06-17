@@ -2,7 +2,7 @@ import { useState } from "react";
 import JSZip from "jszip";
 import { Icon } from "./Icon";
 import { BrandChip, BrandLogo } from "./BrandLogo";
-import type { AgentRecord, AgentRegistryEntry, CompanyContext, CompanyMcpServer, ItemProvenance, McpRecommendation, PedigreeRow, UserRole, WorkspaceAuditEvent } from "@/types";
+import type { AgentBirthCertificate, AgentRecord, AgentRegistryEntry, AiUseCaseRequest, CompanyContext, CompanyMcpServer, ControlManifest, DelegationGrant, ItemProvenance, McpRecommendation, PedigreeRow, SystemManifest, UserRole, WorkspaceAuditEvent } from "@/types";
 import { copyText, initials } from "@/lib/util";
 import { downloadFile } from "@/lib/state";
 import { slugify, buildDeploymentGuide, type AgentConstructionSpec } from "@/lib/agent";
@@ -13,6 +13,7 @@ import { governancePreservedChecks, preservationPassed, validateCompiledAgent } 
 import { findRegistryEntry, nextVersion, setRegistryStatus, upsertCompiledVersion } from "@/lib/registry";
 import { enforcementProfile, enforcementSummary, ENFORCEMENT_LEGEND } from "@/lib/enforcement";
 import { buildGovernanceSummaryHtml } from "@/lib/governanceSummary";
+import { createBirthCertificate, createDelegationGrantFromAgent, renderBirthCertificateMarkdown } from "@/lib/wescoGovernance";
 import { ProvenanceBadge, RiskBadge } from "./ProvenanceBadge";
 import { AuditTrailDrawer } from "./AuditTrailDrawer";
 
@@ -31,10 +32,20 @@ interface Props {
   mcpLibrary?: CompanyMcpServer[];
   registry?: AgentRegistryEntry[];
   events?: WorkspaceAuditEvent[];
+  requests?: AiUseCaseRequest[];
+  controls?: ControlManifest[];
+  systems?: SystemManifest[];
+  delegationGrants?: DelegationGrant[];
+  birthCertificates?: AgentBirthCertificate[];
   role?: UserRole;
   currentUserEmail?: string;
   onRegistryChange?: (registry: AgentRegistryEntry[]) => void;
   onAuditEvents?: (events: WorkspaceAuditEvent[]) => void;
+  onGovernanceRecords?: (patch: {
+    requests?: AiUseCaseRequest[];
+    delegationGrants?: DelegationGrant[];
+    birthCertificates?: AgentBirthCertificate[];
+  }) => void;
   onBack: () => void;
   onSwitchToOrgMap: () => void;
   onToast: (t1: string, t2?: string, green?: boolean) => void;
@@ -46,6 +57,12 @@ function auditEvent(type: WorkspaceAuditEvent["type"], actor: string, summary: s
   return { id: `EVT-${Date.now().toString(36)}-${eventSeq}`, type, actor, timestamp: new Date().toISOString(), summary, subject_id: subjectId, ...(details ? { details } : {}) };
 }
 
+function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
+  return items.some((existing) => existing.id === item.id)
+    ? items.map((existing) => existing.id === item.id ? item : existing)
+    : [item, ...items];
+}
+
 const RUNTIME_BRANDS: Record<string, string> = {
   pedigree: "Pedigree",
   hermes: "NousResearch Hermes",
@@ -55,7 +72,27 @@ const RUNTIME_BRANDS: Record<string, string> = {
   generic: "LangGraph",
 };
 
-export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registry, events = [], role, currentUserEmail, onRegistryChange, onAuditEvents, onBack, onSwitchToOrgMap, onToast }: Props) {
+export function ManifestScreen({
+  agent,
+  row,
+  companyContext,
+  mcpLibrary,
+  registry,
+  events = [],
+  requests = [],
+  controls = [],
+  systems = [],
+  delegationGrants = [],
+  birthCertificates = [],
+  role,
+  currentUserEmail,
+  onRegistryChange,
+  onAuditEvents,
+  onGovernanceRecords,
+  onBack,
+  onSwitchToOrgMap,
+  onToast,
+}: Props) {
   const [copied, setCopied] = useState<string | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
@@ -91,6 +128,60 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
   const validation = validateCompiledAgent(previewCompiled, mcpLibrary ?? []);
   const registryEntry = registry ? findRegistryEntry(registry, previewCompiled.agent_id) : undefined;
   const validationWarnings = Array.from(new Set([...(manifest.validation_warnings ?? []), ...hermes.warnings, ...validation.warnings]));
+  const linkedRequest = requests.find((request) => request.linkedTaskId === agent.taskId || request.linkedAgentId === previewCompiled.agent_id);
+  const existingBirthCertificate = birthCertificates.find((cert) => cert.agentId === previewCompiled.agent_id);
+  const existingDelegationGrant = delegationGrants.find((grant) => grant.id === existingBirthCertificate?.delegationGrantId || grant.taskId === agent.taskId);
+  const previewDelegationGrant = {
+    ...(existingDelegationGrant ?? {}),
+    ...createDelegationGrantFromAgent(agent, controls, systems, linkedRequest),
+    ...(existingDelegationGrant ? { id: existingDelegationGrant.id, createdAt: existingDelegationGrant.createdAt } : {}),
+  };
+  const previewBirthCertificate = createBirthCertificate({
+    compiled: previewCompiled,
+    agent,
+    controls,
+    systems,
+    request: linkedRequest,
+    delegationGrant: previewDelegationGrant,
+    existing: existingBirthCertificate,
+  });
+  const linkedControlNames = previewBirthCertificate.controlIds.map((controlId) => {
+    const control = controls.find((candidate) => candidate.id === controlId || candidate.controlId === controlId);
+    return control ? `${control.controlId} ${control.name}` : controlId;
+  });
+  const birthCertificateMarkdown = renderBirthCertificateMarkdown(previewBirthCertificate, controls, systems);
+
+  const recordBirthCertificate = (approvedBy?: string, compiled = previewCompiled): AgentBirthCertificate => {
+    const request = requests.find((candidate) => candidate.linkedTaskId === agent.taskId || candidate.linkedAgentId === compiled.agent_id);
+    const currentCert = birthCertificates.find((cert) => cert.agentId === compiled.agent_id);
+    const currentGrant = delegationGrants.find((grant) => grant.id === currentCert?.delegationGrantId || grant.taskId === agent.taskId);
+    const draftGrant = createDelegationGrantFromAgent(agent, controls, systems, request);
+    const grant = {
+      ...(currentGrant ?? {}),
+      ...draftGrant,
+      ...(currentGrant ? { id: currentGrant.id, createdAt: currentGrant.createdAt } : {}),
+    };
+    const cert = createBirthCertificate({
+      compiled,
+      agent,
+      controls,
+      systems,
+      request,
+      delegationGrant: grant,
+      approvedBy,
+      existing: currentCert,
+    });
+    onGovernanceRecords?.({
+      delegationGrants: upsertById(delegationGrants, grant),
+      birthCertificates: upsertById(birthCertificates, cert),
+      ...(request ? {
+        requests: requests.map((candidate) => candidate.id === request.id
+          ? { ...candidate, linkedAgentId: compiled.agent_id, updatedAt: new Date().toISOString() }
+          : candidate),
+      } : {}),
+    });
+    return cert;
+  };
 
   // "Governance preserved" pre-export checks (P0-4): visible, and gate the download.
   const preservation = governancePreservedChecks(agent, row ?? undefined);
@@ -107,15 +198,19 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
 
   // Provenance + approval (P0-1 / P0-5): an AI-inferred task cannot be approved.
   const taskProvenance = (manifest.task?.provenance ?? agent.task.provenance) as ItemProvenance | undefined;
-  const canApprove = role === "reviewer" && (!agent.generatedBy || agent.generatedBy !== currentUserEmail);
+  const approvalRoleOk = role === "reviewer" || role === "governance_reviewer";
+  const canApprove = approvalRoleOk && (!agent.generatedBy || agent.generatedBy !== currentUserEmail || role === "governance_reviewer");
   const approveBlockedByProvenance = (taskProvenance?.state ?? "ai_inferred") === "ai_inferred";
   const isApproved = registryEntry?.status === "approved" || registryEntry?.status === "deployed";
 
   const approveManifest = () => {
-    if (!registry || !onRegistryChange || !registryEntry) return;
-    onRegistryChange(setRegistryStatus(registry, previewCompiled.agent_id, "approved"));
-    onAuditEvents?.([auditEvent("manifest_approved", currentUserEmail ?? "unknown", `Approved manifest for ${agent.name} (v${Math.max(...registryEntry.versions.map((v) => v.version))}).`, previewCompiled.agent_id)]);
-    onToast("Manifest approved", `${agent.name} approved by ${currentUserEmail}`, true);
+    if (registry && onRegistryChange && registryEntry) {
+      onRegistryChange(setRegistryStatus(registry, previewCompiled.agent_id, "approved"));
+    }
+    const cert = recordBirthCertificate(currentUserEmail ?? "unknown");
+    const version = registryEntry ? Math.max(...registryEntry.versions.map((v) => v.version)) : previewCompiled.version;
+    onAuditEvents?.([auditEvent("manifest_approved", currentUserEmail ?? "unknown", `Approved manifest and Birth Certificate for ${agent.name} (v${version}).`, previewCompiled.agent_id, { birthCertificateId: cert.id })]);
+    onToast("Birth Certificate approved", `${agent.name} approved by ${currentUserEmail}`, true);
   };
 
   const downloadZip = async (filename: string, artifacts: RuntimeArtifact[], extra?: { path: string; content: string }[]) => {
@@ -155,9 +250,12 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
     const version = registry ? nextVersion(registry, previewCompiled.agent_id) : 1;
     const compiled = compileAgent({ agent, runtime: "pedigree", companyContext, mcpLibrary, version });
     const { artifacts } = emitAllRuntimes(compiled);
+    const exportedBirthCertificate = recordBirthCertificate(isApproved ? currentUserEmail ?? "unknown" : undefined, compiled);
     const extras = [
       { path: "SETUP.md", content: setupGuide },
       { path: "GOVERNANCE-SUMMARY.html", content: buildGovernanceSummaryHtml(compiled) },
+      { path: "BIRTH-CERTIFICATE.md", content: renderBirthCertificateMarkdown(exportedBirthCertificate, controls, systems) },
+      { path: "birth-certificate.json", content: JSON.stringify(exportedBirthCertificate, null, 2) },
       { path: "TEST-PACK.md", content: testPrompts.length ? testPrompts.map((test, i) => `${i + 1}. ${test}`).join("\n") : "No test pack available. Export should be blocked." },
       { path: "EVIDENCE-PACKET.md", content: [taskProvenance?.evidence_quote, agent.task.evidence].filter(Boolean).map((quote, i) => `## Evidence ${i + 1}\n\n${quote}`).join("\n\n") || "No evidence packet available." },
     ];
@@ -253,6 +351,38 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
                 <div className="v" style={{ display: "flex", alignItems: "center", gap: 8 }}>{task.label} <ProvenanceBadge provenance={taskProvenance} /></div>
                 <div className="k">Org Unit</div>
                 <div className="v"><span className="mono">{person.department}</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="manifest-card">
+            <div className="manifest-card-head">
+              <Icon name="doc" size={11} style={{ marginRight: 6 }} /> Agent Birth Certificate
+              <span className="right" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <span className={`tag ${previewBirthCertificate.approval.status === "approved" ? "" : "yellow"}`}>{previewBirthCertificate.approval.status}</span>
+                <button className="btn btn-sm btn-ghost" onClick={() => downloadFile(`${slug}.birth-certificate.md`, birthCertificateMarkdown, "text/markdown")}><Icon name="download" size={11} /> Export</button>
+              </span>
+            </div>
+            <div className="manifest-card-body">
+              <div className="manifest-kv">
+                <div className="k">Request</div>
+                <div className="v">{linkedRequest ? linkedRequest.title : <span className="dim">directly generated from confirmed discovery task</span>}</div>
+                <div className="k">Work Unit</div>
+                <div className="v">{previewBirthCertificate.taskLabel}</div>
+                <div className="k">Systems</div>
+                <div className="v" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {previewBirthCertificate.systems.length ? previewBirthCertificate.systems.map((system) => <span key={system} className="tag cyan">{system}</span>) : <span className="dim">none inferred</span>}
+                </div>
+                <div className="k">SOX</div>
+                <div className="v"><span className={`tag ${previewBirthCertificate.soxRelevant ? "yellow" : ""}`}>{previewBirthCertificate.soxRelevant ? "SOX relevant" : "not SOX scoped"}</span></div>
+                <div className="k">Controls</div>
+                <div className="v" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {linkedControlNames.length ? linkedControlNames.map((control) => <span key={control} className="tag">{control}</span>) : <span className="dim">no control mapping</span>}
+                </div>
+                <div className="k">Authority result</div>
+                <div className="v"><span className={`tag ${previewBirthCertificate.authorityResult === "within_owner_authority" ? "" : "yellow"}`}>{previewBirthCertificate.authorityResult.replaceAll("_", " ")}</span></div>
+                <div className="k">Delegation Grant</div>
+                <div className="v"><span className="mono">{previewDelegationGrant.id}</span></div>
               </div>
             </div>
           </div>
@@ -491,14 +621,14 @@ export function ManifestScreen({ agent, row, companyContext, mcpLibrary, registr
                   disabled={!canApprove || approveBlockedByProvenance}
                   title={
                     !canApprove
-                      ? (role !== "reviewer" ? "Approval requires the Reviewer role" : "An editor cannot approve their own manifest")
+                      ? (!approvalRoleOk ? "Approval requires the Reviewer or Governance Reviewer role" : "Use Governance Reviewer for a one-person local demo approval")
                       : approveBlockedByProvenance
                         ? "The anchored task is still AI-inferred — confirm its provenance in the Review inbox first"
-                        : "Approve this manifest version"
+                        : "Approve this manifest version and Agent Birth Certificate"
                   }
                   onClick={approveManifest}
                 >
-                  <Icon name="checkmark" size={11} /> Approve manifest
+                  <Icon name="checkmark" size={11} /> Approve manifest + Birth Certificate
                 </button>
               )}
             </div>

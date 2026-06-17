@@ -2,6 +2,16 @@
    v2 — Department-aware nodes, readability, legends, sessions
    ============================================================ */
 
+.screen-loading {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
 /* Node readability (detailed) */
 .org-node-head .name { font-size: 13px; font-weight: 700; line-height: 1.2; }
 .org-node-head .title { font-size: 11px; line-height: 1.25; color: var(--text-3); margin-top: 1px; }
@@ -2372,6 +2382,269 @@ details[open] > .brief-section-head .brief-section-chevron { transform: rotate(9
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+
+/* WESCO governance MVP surfaces */
+.governance-screen,
+.inventory-screen,
+.evidence-screen {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+.governance-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.governance-head h2 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.governance-head p {
+  margin: 4px 0 0;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 780px;
+}
+.governance-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.governance-stats > div {
+  min-width: 118px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  background: var(--bg-2);
+}
+.governance-stats b {
+  display: block;
+  color: var(--text-1);
+  font-size: 18px;
+  line-height: 1.1;
+}
+.governance-stats span {
+  display: block;
+  color: var(--text-4);
+  font-size: 11.5px;
+  margin-top: 4px;
+}
+.segmented-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  background: var(--bg-1);
+  margin-bottom: 14px;
+}
+.segmented-tabs button,
+.inventory-controls button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.segmented-tabs button[aria-selected="true"],
+.segmented-tabs button.active,
+.inventory-controls button.active {
+  background: var(--cyan-faint);
+  color: var(--text-1);
+  box-shadow: inset 0 0 0 1px var(--border-cyan);
+}
+.tag.green {
+  color: var(--green);
+  border-color: var(--green);
+}
+.tag.yellow {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+.request-form,
+.control-add,
+.inventory-panel,
+.evidence-panel {
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-3);
+  background: var(--bg-2);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.request-form h3,
+.control-add h3,
+.inventory-panel h3,
+.evidence-panel h3 {
+  margin: 0 0 10px;
+  color: var(--text-1);
+  font-size: 15px;
+}
+.governance-form-grid,
+.inline-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 10px;
+}
+.governance-form-grid .wide,
+.inline-form .wide {
+  grid-column: 1 / -1;
+}
+.check-row {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.request-grid,
+.governance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 12px;
+}
+.request-card,
+.finding-card {
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-3);
+  background: var(--bg-2);
+  padding: 12px;
+  min-width: 0;
+}
+.request-card h3,
+.finding-card h3 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.request-meta,
+.request-work-unit,
+.finding-detail,
+.inventory-sub {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.request-work-unit {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-1);
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.request-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.governance-metric-list,
+.finding-list,
+.inventory-list,
+.inventory-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.governance-metric-list > div,
+.governance-metric-list > span,
+.inventory-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2);
+  background: var(--bg-1);
+}
+.inventory-row {
+  align-items: flex-start;
+}
+.inventory-title {
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.inventory-controls {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.evidence-export-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 152px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-3);
+  background: var(--bg-2);
+  padding: 12px;
+}
+.evidence-export-card h3 {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 14px;
+}
+.evidence-export-card p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.evidence-export-card .btn {
+  margin-top: auto;
+}
+.manifest-kv.compact {
+  grid-template-columns: 98px minmax(0, 1fr);
+  gap: 6px 10px;
+}
+
+@media (max-width: 860px) {
+  .governance-head {
+    flex-direction: column;
+  }
+  .governance-stats {
+    justify-content: flex-start;
+  }
+  .governance-form-grid,
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
+  .governance-screen,
+  .inventory-screen,
+  .evidence-screen {
+    padding: 12px;
+  }
 }
 
 @media (max-width: 1280px) {

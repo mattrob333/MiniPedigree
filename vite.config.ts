@@ -11,6 +11,20 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("react-dom") || id.includes("react/")) return "vendor-react";
+          if (id.includes("@xyflow")) return "vendor-flow";
+          if (id.includes("@supabase")) return "vendor-supabase";
+          if (id.includes("papaparse") || id.includes("zod") || id.includes("jszip")) return "vendor-data";
+          return "vendor";
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

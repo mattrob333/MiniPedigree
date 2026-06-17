@@ -89,7 +89,7 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, quarantinedContext: ws.quarantinedContext, contextWarning: ws.contextWarning, taskSpecs: ws.taskSpecs, workflowTemplates: ws.workflowTemplates, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, quarantinedContext: ws.quarantinedContext, contextWarning: ws.contextWarning, taskSpecs: ws.taskSpecs, workflowTemplates: ws.workflowTemplates, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, requests: ws.requests, controls: ws.controls, systems: ws.systems, delegationGrants: ws.delegationGrants, birthCertificates: ws.birthCertificates, riskFindings: ws.riskFindings, governanceExceptions: ws.governanceExceptions, evidenceArtifacts: ws.evidenceArtifacts, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt },
         updated_at: stamped.updatedAt,
       });
       if (ws.mcpLibrary?.length) {
@@ -187,6 +187,10 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
             id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree,
             companyContext: snap.companyContext, mcpLibrary: snap.mcpLibrary, registry: snap.registry,
             auditLog: snap.auditLog, events: snap.events,
+            requests: snap.requests, controls: snap.controls, systems: snap.systems,
+            delegationGrants: snap.delegationGrants, birthCertificates: snap.birthCertificates,
+            riskFindings: snap.riskFindings, governanceExceptions: snap.governanceExceptions,
+            evidenceArtifacts: snap.evidenceArtifacts,
             discoveryPlan: snap.discoveryPlan, sessionBriefs: snap.sessionBriefs, questionBacklog: snap.questionBacklog,
             meetings: snap.meetings, signalLedger: snap.signalLedger, freshnessConfig: snap.freshnessConfig,
             rosterValidatedAt: snap.rosterValidatedAt,

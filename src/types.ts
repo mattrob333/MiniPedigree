@@ -400,6 +400,14 @@ export interface Workspace {
   registry?: AgentRegistryEntry[]; // the Agent Stack state (versioned, append-only)
   auditLog?: StackAuditRecord[];   // applied stack changes with approver + evidence
   events?: WorkspaceAuditEvent[];  // append-only workspace audit trail
+  requests?: AiUseCaseRequest[];   // AI Council intake queue
+  controls?: ControlManifest[];    // first-class SOX/control records
+  systems?: SystemManifest[];      // governed systems/application inventory
+  delegationGrants?: DelegationGrant[];
+  birthCertificates?: AgentBirthCertificate[];
+  riskFindings?: RiskFinding[];
+  governanceExceptions?: GovernanceException[];
+  evidenceArtifacts?: EvidenceArtifact[];
   discoveryPlan?: DiscoveryPlan;   // the discovery campaign (guided discovery)
   sessionBriefs?: SessionBrief[];  // generated/edited session briefs
   questionBacklog?: QuestionBacklogItem[]; // open questions per person
@@ -517,6 +525,186 @@ export interface StackAuditRecord {
   evidence_quote: string;
   transcript_id: string;
   summary: string;
+}
+
+// WESCO governance MVP: AI Council intake, controls, and birth records.
+export type AiRequestStatus =
+  | "draft"
+  | "submitted"
+  | "needs_info"
+  | "in_review"
+  | "approved_for_design"
+  | "rejected"
+  | "converted_to_agent";
+
+export type DataSensitivity = "public" | "internal" | "confidential" | "regulated";
+
+export interface AiRequestDecision {
+  status: AiRequestStatus;
+  by: string;
+  at: string;
+  note?: string;
+}
+
+export interface AiUseCaseRequest {
+  id: string;
+  title: string;
+  requesterEmail: string;
+  requesterName?: string;
+  businessOwnerPersonId?: string;
+  department: string;
+  purpose: string;
+  workUnit: string;
+  systems: string[];
+  dataSensitivity: DataSensitivity;
+  soxRelevant: boolean;
+  riskTier: RiskLevel;
+  status: AiRequestStatus;
+  councilNotes?: string;
+  decisionHistory: AiRequestDecision[];
+  linkedTaskId?: string;
+  linkedAgentId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ControlManifest {
+  id: string;
+  controlId: string;
+  name: string;
+  process: string;
+  riskAddressed: string;
+  ownerPersonId?: string;
+  performerPersonId?: string;
+  reviewerPersonId?: string;
+  frequency: string;
+  system: string;
+  evidenceRequired: string[];
+  soxRelevant: boolean;
+  relatedPolicies?: string[];
+  linkedTaskIds: string[];
+  linkedAgentIds: string[];
+  updatedAt: string;
+}
+
+export interface SystemManifest {
+  id: string;
+  name: string;
+  category: "erp" | "crm" | "hris" | "identity" | "collaboration" | "data" | "runtime" | "other";
+  soxInScope: boolean;
+  dataSensitivity: DataSensitivity;
+  ownerPersonId?: string;
+  linkedControlIds: string[];
+  linkedAgentIds: string[];
+  notes?: string;
+  updatedAt: string;
+}
+
+export interface DelegationGrant {
+  id: string;
+  ownerPersonId: string;
+  requestId?: string;
+  taskId: string;
+  responsibilityId: string;
+  workUnit: string;
+  systems: string[];
+  allowedActions: string[];
+  blockedActions: string[];
+  approvalRequirements: string[];
+  expiresAt?: string;
+  reviewBy?: string;
+  evidenceObligations: string[];
+  createdAt: string;
+}
+
+export type BirthCertificateStatus = "draft" | "approved" | "superseded" | "revoked";
+
+export interface AgentBirthCertificate {
+  id: string;
+  agentId: string;
+  agentName: string;
+  requestId?: string;
+  ownerPersonId: string;
+  ownerName: string;
+  responsibilityId: string;
+  responsibilityTitle: string;
+  taskId: string;
+  taskLabel: string;
+  purpose: string;
+  systems: string[];
+  controlIds: string[];
+  soxRelevant: boolean;
+  allowedActions: string[];
+  blockedActions: string[];
+  approvalRequirements: string[];
+  authorityCeiling: string;
+  authorityResult: "within_owner_authority" | "needs_review" | "exceeds_without_exception";
+  delegationGrantId?: string;
+  approval: { status: BirthCertificateStatus; approvedBy?: string; approvedAt?: string; notes?: string };
+  runtimeTarget: string;
+  version: number;
+  evidenceObligations: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RiskFindingType =
+  | "owner_missing"
+  | "owner_inactive"
+  | "authority_exceeds_owner"
+  | "sox_review_needed"
+  | "control_mapping_missing"
+  | "toxic_combination"
+  | "service_account_exception_needed"
+  | "agent_drift";
+
+export interface RiskFinding {
+  id: string;
+  type: RiskFindingType;
+  severity: RiskLevel;
+  status: "open" | "accepted" | "resolved";
+  title: string;
+  whatHappened: string;
+  whyItMatters: string;
+  recommendedAction: string;
+  affected: { personIds: string[]; agentIds: string[]; systemIds: string[]; controlIds: string[]; requestIds: string[] };
+  evidence?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GovernanceException {
+  id: string;
+  kind: "service_account" | "authority_exceedance";
+  agentId?: string;
+  requestId?: string;
+  justification: string;
+  approvedBy?: string;
+  expiresAt?: string;
+  compensatingControls: string[];
+  monitoringRequirement: string;
+  evidence?: string;
+  status: "draft" | "approved" | "expired" | "rejected";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EvidenceArtifact {
+  id: string;
+  type:
+    | "agent_inventory"
+    | "sox_population"
+    | "system_population"
+    | "control_population"
+    | "birth_certificate"
+    | "risk_findings"
+    | "lifecycle_review";
+  title: string;
+  format: "csv" | "markdown" | "json";
+  generatedBy: string;
+  generatedAt: string;
+  subjectId?: string;
+  content: string;
 }
 
 // ── Guided Discovery: readiness → plan → brief → capture → backlog ─────

@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Topbar } from "./components/Topbar";
 import { Spreadsheet } from "./components/Spreadsheet";
-import { OrgMap } from "./components/OrgMap";
 import { Drawer, type CreateAgentCtx } from "./components/Drawer";
-import { SessionWorkspace } from "./components/SessionWorkspace";
 import type { GenerateCtx } from "./components/modals/CreateAgentModal";
-import { ManifestScreen } from "./components/ManifestScreen";
-import { ProfileScreen } from "./components/ProfileScreen";
 import { OrgSyncModal } from "./components/OrgSyncModal";
-import { CompanyProfileScreen } from "./components/CompanyProfileScreen";
 import { applyOrgSync, type Changeset } from "./lib/orgSync";
-import type { CompanyContext, CompanyContextDocument, CompanyContextDocumentBucket, CompanyResearchSource, TaskSpec, WorkflowTemplate } from "./types";
+import type { AgentBirthCertificate, AiUseCaseRequest, CompanyContext, CompanyContextDocument, CompanyContextDocumentBucket, CompanyResearchSource, ControlManifest, DelegationGrant, EvidenceArtifact, GovernanceException, RiskFinding, SystemManifest, TaskItem, TaskSpec, WorkflowTemplate } from "./types";
 import { Toasts, type Toast } from "./components/Toasts";
 import { LoginScreen } from "./components/LoginScreen";
 import { WorkspacesHome, type DemoCompany } from "./components/WorkspacesHome";
@@ -18,13 +13,9 @@ import { Icon } from "./components/Icon";
 import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
 import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
-import { McpLibraryScreen } from "./components/McpLibraryScreen";
-import { ReviewInbox } from "./components/ReviewInbox";
-import { AuditTrail } from "./components/AuditTrail";
 import { RiskBadge } from "./components/ProvenanceBadge";
-import { DiscoveryPlanPanel } from "./components/DiscoveryPlanPanel";
-import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
-import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
+import type { DigestStatePatch } from "./components/DigestScreen";
+import type { MemberStatePatch } from "./components/MemberWorkspace";
 import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewEditPatch, type ReviewQueueItem } from "./lib/provenance";
 import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
@@ -53,8 +44,6 @@ import {
   setupComplete, stageMetrics, type CompanyStage, type MaturityInput, type WorkspaceSurface,
 } from "./lib/maturity";
 import { SetupChecklist } from "./components/SetupChecklist";
-import { ResponsibilityMatrix } from "./components/ResponsibilityMatrix";
-import { AgentPlan } from "./components/AgentPlan";
 import {
   completeOnboarding,
   getInitialWorkspaceOnboardingStep,
@@ -69,9 +58,29 @@ import { deriveOperationalState } from "./lib/taskState";
 import { suggestedAgentName } from "./lib/parse";
 import { draftTaskSpec } from "./lib/workflowMatch";
 import { GLOBAL_WORKFLOW_TEMPLATES } from "./lib/workflowSeeds";
+import { keystoneCompanyContext, keystoneGovernanceSeed } from "./lib/wescoDemo";
+import { deriveRiskFindings, transitionAiRequest } from "./lib/wescoGovernance";
+
+const AgentPlan = lazy(() => import("./components/AgentPlan").then((m) => ({ default: m.AgentPlan })));
+const AuditTrail = lazy(() => import("./components/AuditTrail").then((m) => ({ default: m.AuditTrail })));
+const CompanyProfileScreen = lazy(() => import("./components/CompanyProfileScreen").then((m) => ({ default: m.CompanyProfileScreen })));
+const DigestScreen = lazy(() => import("./components/DigestScreen").then((m) => ({ default: m.DigestScreen })));
+const DiscoveryPlanPanel = lazy(() => import("./components/DiscoveryPlanPanel").then((m) => ({ default: m.DiscoveryPlanPanel })));
+const EvidenceScreen = lazy(() => import("./components/EvidenceScreen").then((m) => ({ default: m.EvidenceScreen })));
+const GovernanceConsole = lazy(() => import("./components/GovernanceConsole").then((m) => ({ default: m.GovernanceConsole })));
+const ManifestScreen = lazy(() => import("./components/ManifestScreen").then((m) => ({ default: m.ManifestScreen })));
+const McpLibraryScreen = lazy(() => import("./components/McpLibraryScreen").then((m) => ({ default: m.McpLibraryScreen })));
+const MemberWorkspace = lazy(() => import("./components/MemberWorkspace").then((m) => ({ default: m.MemberWorkspace })));
+const InventoryScreen = lazy(() => import("./components/InventoryScreen").then((m) => ({ default: m.InventoryScreen })));
+const OrgMap = lazy(() => import("./components/OrgMap").then((m) => ({ default: m.OrgMap })));
+const ProfileScreen = lazy(() => import("./components/ProfileScreen").then((m) => ({ default: m.ProfileScreen })));
+const ResponsibilityMatrix = lazy(() => import("./components/ResponsibilityMatrix").then((m) => ({ default: m.ResponsibilityMatrix })));
+const RequestsScreen = lazy(() => import("./components/RequestsScreen").then((m) => ({ default: m.RequestsScreen })));
+const ReviewInbox = lazy(() => import("./components/ReviewInbox").then((m) => ({ default: m.ReviewInbox })));
+const SessionWorkspace = lazy(() => import("./components/SessionWorkspace").then((m) => ({ default: m.SessionWorkspace })));
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member" | "session";
-type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
+type Tab = "requests" | "spreadsheet" | "orgmap" | "plan" | "agents" | "governance" | "review" | "digest" | "audit";
 
 // Maturity surfaces → workspace tabs (internal tab ids stay stable).
 const SURFACE_TAB: Record<WorkspaceSurface, Tab> = {
@@ -125,6 +134,14 @@ function sessionReviewConfirmationEvents(args: ApplyMappingArgs, actor: string, 
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
 const CONNECTED_CONTEXT_PREFIX = "connected-context:";
+
+function ScreenLoading() {
+  return (
+    <div className="screen-loading" role="status" aria-live="polite">
+      Loading...
+    </div>
+  );
+}
 
 type ContextConnector = {
   name: string;
@@ -314,6 +331,14 @@ export default function App() {
   const [questionBacklog, setQuestionBacklog] = useState<QuestionBacklogItem[]>([]);
   const [meetings, setMeetings] = useState<RegisteredMeeting[]>([]);
   const [signalLedger, setSignalLedger] = useState<StackSignal[]>([]);
+  const [requests, setRequests] = useState<AiUseCaseRequest[]>([]);
+  const [controls, setControls] = useState<ControlManifest[]>([]);
+  const [systems, setSystems] = useState<SystemManifest[]>([]);
+  const [delegationGrants, setDelegationGrants] = useState<DelegationGrant[]>([]);
+  const [birthCertificates, setBirthCertificates] = useState<AgentBirthCertificate[]>([]);
+  const [riskFindings, setRiskFindings] = useState<RiskFinding[]>([]);
+  const [governanceExceptions, setGovernanceExceptions] = useState<GovernanceException[]>([]);
+  const [evidenceArtifacts, setEvidenceArtifacts] = useState<EvidenceArtifact[]>([]);
   const [rosterValidatedAt, setRosterValidatedAt] = useState<string | undefined>(undefined);
   const [respView, setRespView] = useState<"matrix" | "map" | null>(null); // null = auto by maturity
   const [memberPersonId, setMemberPersonId] = useState<string | null>(null);
@@ -349,7 +374,7 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; contextWarning?: string; taskSpecs?: Record<string, TaskSpec>; workflowTemplates?: WorkflowTemplate[]; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; contextWarning?: string; taskSpecs?: Record<string, TaskSpec>; workflowTemplates?: WorkflowTemplate[]; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; requests?: AiUseCaseRequest[]; controls?: ControlManifest[]; systems?: SystemManifest[]; delegationGrants?: DelegationGrant[]; birthCertificates?: AgentBirthCertificate[]; riskFindings?: RiskFinding[]; governanceExceptions?: GovernanceException[]; evidenceArtifacts?: EvidenceArtifact[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
@@ -362,6 +387,14 @@ export default function App() {
     setRegistry(ws.registry ?? []);
     setAuditLog(ws.auditLog ?? []);
     setEvents(ws.events ?? []);
+    setRequests(ws.requests ?? []);
+    setControls(ws.controls ?? []);
+    setSystems(ws.systems ?? []);
+    setDelegationGrants(ws.delegationGrants ?? []);
+    setBirthCertificates(ws.birthCertificates ?? []);
+    setRiskFindings(ws.riskFindings ?? []);
+    setGovernanceExceptions(ws.governanceExceptions ?? []);
+    setEvidenceArtifacts(ws.evidenceArtifacts ?? []);
     // The discovery plan is a first-class object: generate it the moment
     // people are loaded; regenerate non-destructively when one exists.
     const plan = generatePlan(ws.people, ws.pedigree, ws.companyContext, ws.discoveryPlan);
@@ -430,12 +463,12 @@ export default function App() {
     if (!(currentWorkspaceId && people.length && profile)) return;
     const handle = setTimeout(() => {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, requests, controls, systems, delegationGrants, birthCertificates, riskFindings, governanceExceptions, evidenceArtifacts, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() },
         profile.email,
       );
     }, 800);
     return () => clearTimeout(handle);
-  }, [people, pedigree, workspaceName, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, requests, controls, systems, delegationGrants, birthCertificates, riskFindings, governanceExceptions, evidenceArtifacts, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -456,6 +489,14 @@ export default function App() {
     setContextWarning(undefined);
     setTaskSpecs({});
     setWorkflowTemplates([]);
+    setRequests([]);
+    setControls([]);
+    setSystems([]);
+    setDelegationGrants([]);
+    setBirthCertificates([]);
+    setRiskFindings([]);
+    setGovernanceExceptions([]);
+    setEvidenceArtifacts([]);
     setWorkspaces([]);
     setScreen("login");
   };
@@ -491,7 +532,7 @@ export default function App() {
     setCompanyContext(bound);
     setContextWarning(undefined);
     if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: bound, contextWarning: undefined, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() }, profile?.email);
+      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: bound, contextWarning: undefined, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, requests, controls, systems, delegationGrants, birthCertificates, riskFindings, governanceExceptions, evidenceArtifacts, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() }, profile?.email);
     }
   };
 
@@ -550,7 +591,7 @@ export default function App() {
   // setup checklist guides setup instead. The tour stays available from the
   // Settings menu (onRestartTour).
 
-  const createWorkspaceFromCsv = (text: string, fileName: string, nameOverride?: string) => {
+  const createWorkspaceFromCsv = (text: string, fileName: string, nameOverride?: string, scenario?: DemoCompany["scenario"]) => {
     setUploadError(null);
     if (!text.trim()) {
       setUploadError("Could not read the file. Please try again.");
@@ -564,14 +605,15 @@ export default function App() {
     const name = nameOverride || result.workspaceName;
     const id = newWorkspaceId(name);
     const ped = initialPedigreeState(result.people);
-    const ctx: CompanyContext = emptyCompanyContext(id, name);
+    const ctx: CompanyContext = scenario === "wesco" ? keystoneCompanyContext(id) : emptyCompanyContext(id, name);
+    const governance = scenario === "wesco" ? keystoneGovernanceSeed(result.people) : { requests: [], controls: [], systems: [] };
     const plan = generatePlan(result.people, ped, ctx);
-    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, taskSpecs: {}, workflowTemplates: [], discoveryPlan: plan, createdAt: new Date().toISOString() }, profile?.email);
+    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, taskSpecs: {}, workflowTemplates: [], requests: governance.requests, controls: governance.controls, systems: governance.systems, delegationGrants: [], birthCertificates: [], riskFindings: [], governanceExceptions: [], evidenceArtifacts: [], discoveryPlan: plan, createdAt: new Date().toISOString(), rosterValidatedAt: scenario === "wesco" ? new Date().toISOString() : undefined }, profile?.email);
     setLastWorkspaceId(profile?.email, id);
-    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, discoveryPlan: plan });
+    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, requests: governance.requests, controls: governance.controls, systems: governance.systems, delegationGrants: [], birthCertificates: [], riskFindings: [], governanceExceptions: [], evidenceArtifacts: [], discoveryPlan: plan, rosterValidatedAt: scenario === "wesco" ? new Date().toISOString() : undefined });
     refreshWorkspaces();
     const warn = result.warnings.length ? ` · ${result.warnings.length} warning(s)` : "";
-    pushToast("Company created", `${result.people.length} people loaded${warn}`);
+    pushToast("Company created", `${result.people.length} people loaded${scenario === "wesco" ? " · WESCO governance seed loaded" : ""}${warn}`);
   };
 
   const onUploadText = (text: string, fileName: string) => createWorkspaceFromCsv(text, fileName);
@@ -580,7 +622,7 @@ export default function App() {
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}samples/${demo.file}`);
       const text = await res.text();
-      createWorkspaceFromCsv(text, demo.file, demo.label);
+      createWorkspaceFromCsv(text, demo.file, demo.label, demo.scenario);
     } catch {
       setUploadError(`Could not load demo company "${demo.label}".`);
     }
@@ -692,6 +734,65 @@ export default function App() {
     } else {
       pushToast(`${person.name} active`, "Lifecycle restored");
     }
+  };
+
+  const onTransferAgent = (agent: AgentRecord, newOwner: Person, findings: RiskFinding[]) => {
+    const stamped = new Date().toISOString();
+    const id = String((agent.manifest as Record<string, unknown> | undefined)?.agent_id ?? agent.id);
+    const oldOwner = agent.person;
+    const matches = (candidate: AgentRecord) => String((candidate.manifest as Record<string, unknown> | undefined)?.agent_id ?? candidate.id) === id;
+    setPedigree((prev) => {
+      let moved: AgentRecord | undefined;
+      const next: PedigreeState = {};
+      for (const [personId, row] of Object.entries(prev)) {
+        const keptAgents = row.agents.filter((candidate) => {
+          if (!matches(candidate)) return true;
+          moved = { ...candidate, person: newOwner };
+          return false;
+        });
+        next[personId] = { ...row, agents: keptAgents };
+      }
+      const targetRow = next[newOwner.id] ?? {
+        status: "ready" as const,
+        responsibilities: [],
+        tasks: { delegatable: [], approval: [], not_delegatable: [] },
+        agents: [],
+      };
+      const agentToStore = moved ?? { ...agent, person: newOwner };
+      next[newOwner.id] = {
+        ...targetRow,
+        status: "generated",
+        agents: [...targetRow.agents.filter((candidate) => !matches(candidate)), agentToStore],
+      };
+      return next;
+    });
+    setRegistry((prev) => prev.map((entry) => entry.agent_id === id ? { ...entry, owner_person_id: newOwner.id, stale: true, stale_reason: "ownership_transferred" } : entry));
+    setBirthCertificates((prev) => prev.map((cert) => cert.agentId === id
+      ? {
+          ...cert,
+          ownerPersonId: newOwner.id,
+          ownerName: newOwner.name,
+          approval: { status: "draft", notes: "Ownership transferred; Birth Certificate requires re-approval." },
+          updatedAt: stamped,
+        }
+      : cert));
+    if (findings.length) {
+      setRiskFindings((prev) => {
+        const byId = new Map(prev.map((finding) => [finding.id, finding]));
+        for (const finding of findings) byId.set(finding.id, finding);
+        return [...byId.values()];
+      });
+    }
+    setEvents((prev) => [...prev, {
+      id: `EVT-${Date.now().toString(36)}-transfer`,
+      type: "agent_reassigned",
+      actor: profile?.email ?? "unknown",
+      timestamp: stamped,
+      summary: `${agent.name} transferred from ${oldOwner.name} to ${newOwner.name}; Birth Certificate reset to draft for re-approval.`,
+      subject_id: id,
+      details: { fromPersonId: oldOwner.id, toPersonId: newOwner.id, findings: findings.map((finding) => finding.id) },
+    }]);
+    pushToast("Agent transfer recorded", `${agent.name} now maps to ${newOwner.name}`, findings.length === 0);
   };
 
   const onPersonChange = (person: Person) => {
@@ -810,6 +911,11 @@ export default function App() {
       nextRow.status = "generated";
       return { ...prev, [ctx.person.id]: nextRow };
     });
+    setRequests((prev) => prev.map((request) =>
+      request.linkedTaskId === ctx.task.id
+        ? { ...request, linkedAgentId: String((agent.manifest as Record<string, unknown>)?.agent_id ?? agent.id), updatedAt: new Date().toISOString() }
+        : request,
+    ));
     setActiveAgent(agent);
     setScreen("manifest");
     pushToast("Agent generated", `${agent.name} - ${authored ? "constructed by GPT-5.5" : "standard template"} - owner ${ctx.person.name}`, true);
@@ -866,6 +972,75 @@ export default function App() {
     const csv = exportEnrichedCsv(people, pedigree);
     downloadFile(`${workspaceName.toLowerCase().replace(/\s+/g, "-")}-pedigree.csv`, csv, "text/csv");
     pushToast("CSV exported", "Enriched spreadsheet downloaded", true);
+  };
+
+  const onCreateWorkUnitFromRequest = (request: AiUseCaseRequest) => {
+    const owner = people.find((person) => person.id === request.businessOwnerPersonId) ?? people[0];
+    if (!owner) {
+      pushToast("No owner available", "Assign a business owner before creating a work unit.");
+      return;
+    }
+    const respId = `req-${request.id}-resp`;
+    const taskId = `req-${request.id}-task`;
+    const stamped = new Date().toISOString();
+    setPedigree((prev) => {
+      const existing = prev[owner.id] ?? {
+        status: "needs-discovery" as const,
+        responsibilities: [],
+        tasks: { delegatable: [], approval: [], not_delegatable: [] },
+        agents: [],
+      };
+      const responsibilities = existing.responsibilities.some((resp) => resp.id === respId)
+        ? existing.responsibilities
+        : [...existing.responsibilities, {
+            id: respId,
+            title: `AI Council Request: ${request.title}`,
+            description: request.purpose,
+            source: "AI Council Intake",
+            provenance: { state: "human_confirmed" as const, confirmed_by: profile?.email ?? "unknown", confirmed_at: stamped },
+            last_confirmed_at: stamped,
+          }];
+      const taskExists = existing.tasks.delegatable.some((task) => task.id === taskId);
+      const workUnitTask = {
+        id: taskId,
+        label: request.workUnit,
+        description: request.purpose,
+        respId,
+        respTitle: `AI Council Request: ${request.title}`,
+        riskLevel: request.riskTier,
+        evidence: request.councilNotes ?? `AI Council request ${request.id}`,
+        completion: {
+          trigger: "AI Council approval",
+          cadence: null,
+          inputs: request.systems,
+          outputs: ["draft agent work product", "review packet"],
+          tools_mentioned: request.systems,
+          definition_of_done: "Output is ready for the accountable owner and AI Council reviewer.",
+          readiness: "ready",
+          open_questions: request.soxRelevant ? ["Which SOX control owner signs the Birth Certificate?"] : [],
+          candidate_pattern: "AI Council intake",
+        },
+        provenance: { state: "human_confirmed" as const, evidence_quote: request.purpose, source: "AI Council Intake", confirmed_by: profile?.email ?? "unknown", confirmed_at: stamped },
+        last_confirmed_at: stamped,
+      } satisfies TaskItem;
+      const delegatable = taskExists ? existing.tasks.delegatable : [...existing.tasks.delegatable, workUnitTask];
+      return {
+        ...prev,
+        [owner.id]: {
+          ...existing,
+          status: existing.agents.length ? "generated" : "ready",
+          responsibilities,
+          tasks: { ...existing.tasks, delegatable },
+        },
+      };
+    });
+    setRequests((prev) => prev.map((item) => {
+      if (item.id !== request.id) return item;
+      const converted = transitionAiRequest(item.status === "approved_for_design" ? item : { ...item, status: "approved_for_design" }, "converted_to_agent", profile?.email ?? "unknown", "Converted to a Pedigree work unit.");
+      return { ...converted, linkedTaskId: taskId };
+    }));
+    setTab("agents");
+    pushToast("Work unit created", `${request.title} is ready in Inventory / Agent Plan`, true);
   };
 
   const onAdvanceTourFromHome = (nextStepId: string) => {
@@ -1055,6 +1230,22 @@ export default function App() {
     () => buildRecommendations({ ledger: signalLedger, registry, people, pedigree, mcpLibrary }),
     [signalLedger, registry, people, pedigree, mcpLibrary],
   );
+  const derivedRiskFindings = useMemo(() => deriveRiskFindings({
+    people,
+    pedigree,
+    controls,
+    systems,
+    birthCertificates,
+    requests,
+    exceptions: governanceExceptions,
+    registryStale: registry.filter((entry) => entry.stale).map((entry) => ({ agentId: entry.agent_id, reason: entry.stale_reason })),
+  }), [people, pedigree, controls, systems, birthCertificates, requests, governanceExceptions, registry]);
+  const allRiskFindings = useMemo(() => {
+    const byId = new Map<string, RiskFinding>();
+    for (const finding of riskFindings) byId.set(finding.id, finding);
+    for (const finding of derivedRiskFindings) byId.set(finding.id, finding);
+    return [...byId.values()];
+  }, [riskFindings, derivedRiskFindings]);
 
   // ── Maturity ladder: the app always knows which state the company is in ──
   const maturityInput: MaturityInput = useMemo(() => ({
@@ -1207,6 +1398,9 @@ export default function App() {
             )}
 
             <div className="tabs" role="tablist">
+              <button className="tab" role="tab" aria-selected={tab === "requests"} onClick={() => setTab("requests")} title="AI Council intake: requests, review status, and conversion into governed work units">
+                <Icon name="target" size={12} /> Requests <span className="count">{requests.length}</span>
+              </button>
               <button className="tab" role="tab" aria-selected={tab === "spreadsheet"} onClick={() => setTab("spreadsheet")} title="People & Roles — validate the roster, then track everyone's discovery status">
                 <Icon name="spreadsheet" size={12} /> People <span className="count">{people.length}</span>
               </button>
@@ -1219,8 +1413,11 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "review"} onClick={() => setTab("review")} title="Follow-ups: flagged or unconfirmed findings and open questions that need a decision">
                 <Icon name="shield" size={12} /> Follow-ups <span className="count">{reviewQueueCount + openBacklogCount}</span>
               </button>
-              <button className={"tab" + (metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => (metrics.delegTasks > 0 || metrics.agentsBuilt > 0) && setTab("agents")} title={metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? "Agent planning unlocks once tasks are extracted and classified" : "Plan agents under their human-owned responsibilities"}>
-                <Icon name="robot" size={12} /> Agent Plan <span className="count">{metrics.agentsBuilt}</span>
+              <button className={"tab" + (metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => (metrics.delegTasks > 0 || metrics.agentsBuilt > 0) && setTab("agents")} title={metrics.delegTasks === 0 && metrics.agentsBuilt === 0 ? "Inventory unlocks once tasks are extracted and classified" : "Inventory and candidate planning under human-owned responsibilities"}>
+                <Icon name="robot" size={12} /> Inventory <span className="count">{metrics.agentsBuilt}</span>
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "governance"} onClick={() => setTab("governance")} title="Controls, SOX systems, and explainable risk findings">
+                <Icon name="shield" size={12} /> Governance <span className="count">{allRiskFindings.filter((finding) => finding.status === "open").length}</span>
               </button>
               {/* Data-driven gate: the maintenance loop appears once there is a mapped stack to maintain. */}
               {(signalLedger.length > 0 || metrics.mappedPeople > 0) && (
@@ -1228,8 +1425,8 @@ export default function App() {
                   <Icon name="transcript" size={12} /> Digest <span className="count">{digestPendingCount}</span>
                 </button>
               )}
-              <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Evidence: who generated, confirmed, approved, exported — append-only">
-                <Icon name="history" size={12} /> Evidence <span className="count">{events.length + auditLog.length}</span>
+              <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Evidence exports, audit ledger, and generated governance artifacts">
+                <Icon name="history" size={12} /> Evidence <span className="count">{events.length + auditLog.length + evidenceArtifacts.length}</span>
               </button>
               <span style={{ flex: 1 }} />
               <span className="kbd-hint">Tab <span className="k">1</span> People · <span className="k">2</span> Map</span>
@@ -1237,6 +1434,18 @@ export default function App() {
           </div>
 
           <div className="workspace-body">
+            <Suspense fallback={<ScreenLoading />}>
+            {tab === "requests" && (
+              <RequestsScreen
+                requests={requests}
+                people={people}
+                systems={systems}
+                currentUserEmail={profile?.email ?? "unknown"}
+                onChange={setRequests}
+                onCreateWorkUnit={onCreateWorkUnitFromRequest}
+                onToast={pushToast}
+              />
+            )}
             {tab === "spreadsheet" && (
               <Spreadsheet people={people} pedigree={pedigree} department={topDepartment} rosterValidated={Boolean(rosterValidatedAt)} onValidateRoster={onValidateRoster} plan={discoveryPlan} onOpenDiscovery={() => setTab("plan")} onSwitchTab={(t) => setTab(t as Tab)} onExport={onExport} selectedId={selectedId} onSelectRow={onSelect} />
             )}
@@ -1280,7 +1489,24 @@ export default function App() {
                 onSelectPerson={onSelect}
               />
             )}
-            {tab === "agents" && <AgentPlan people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} onCreateAgent={designAgent} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "agents" && <InventoryScreen people={people} pedigree={pedigree} registry={registry} recommendations={recommendations} systems={systems} controls={controls} birthCertificates={birthCertificates} findings={allRiskFindings} onCreateAgent={designAgent} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "governance" && (
+              <GovernanceConsole
+                people={people}
+                pedigree={pedigree}
+                systems={systems}
+                controls={controls}
+                findings={allRiskFindings}
+                registry={registry}
+                exceptions={governanceExceptions}
+                currentUserEmail={profile?.email ?? "unknown"}
+                onControlsChange={setControls}
+                onLifecycleChange={onLifecycleChange}
+                onTransferAgent={onTransferAgent}
+                onExceptionsChange={setGovernanceExceptions}
+                onToast={pushToast}
+              />
+            )}
             {tab === "review" && <ReviewInbox people={people} pedigree={pedigree} taskSpecs={taskSpecs} backlog={questionBacklog} events={events} role={userRole} canRefineWithAi={aiTaskRefinementAvailable} onConfirm={onConfirmReview} onEdit={onEditReview} onPlanAgents={() => setTab("agents")} onSwitchToReviewerDemo={switchToReviewerDemo} onAddFollowUpQuestion={onAddReviewQuestion} onResolveBacklogItem={(itemId) => setQuestionBacklog((prev) => resolveBacklogItem(prev, itemId, "manual"))} onSelectPerson={onSelect} onRefineTasks={onRefineReviewTasks} onUpdateTaskSpec={onUpdateReviewTaskSpec} onToast={pushToast} />}
             {tab === "digest" && (
               <DigestScreen
@@ -1299,7 +1525,8 @@ export default function App() {
                 onOpenOrgSync={() => setOrgSyncOpen(true)}
               />
             )}
-            {tab === "audit" && <AuditTrail events={events} stackAuditLog={auditLog} workspaceName={workspaceName} />}
+            {tab === "audit" && <EvidenceScreen people={people} pedigree={pedigree} controls={controls} systems={systems} birthCertificates={birthCertificates} findings={allRiskFindings} events={events} stackAuditLog={auditLog} workspaceName={workspaceName} currentUserEmail={profile?.email ?? "unknown"} onArtifact={(artifact) => setEvidenceArtifacts((prev) => [artifact, ...prev])} />}
+            </Suspense>
 
             <Drawer
               open={drawerOpen}
@@ -1321,6 +1548,7 @@ export default function App() {
       )}
 
       {screen === "manifest" && (
+        <Suspense fallback={<ScreenLoading />}>
         <ManifestScreen
           agent={activeAgent}
           row={activeAgent ? pedigree[activeAgent.person.id] ?? null : null}
@@ -1328,21 +1556,35 @@ export default function App() {
           mcpLibrary={mcpLibrary}
           registry={registry}
           events={events}
+          requests={requests}
+          controls={controls}
+          systems={systems}
+          delegationGrants={delegationGrants}
+          birthCertificates={birthCertificates}
           role={userRole}
           currentUserEmail={profile?.email}
           onRegistryChange={setRegistry}
           onAuditEvents={(evts) => setEvents((prev) => [...prev, ...evts])}
+          onGovernanceRecords={(patch) => {
+            if (patch.requests) setRequests(patch.requests);
+            if (patch.delegationGrants) setDelegationGrants(patch.delegationGrants);
+            if (patch.birthCertificates) setBirthCertificates(patch.birthCertificates);
+          }}
           onBack={() => setScreen("workspace")}
           onSwitchToOrgMap={() => { setScreen("workspace"); setTab("agents"); }}
           onToast={pushToast}
         />
+        </Suspense>
       )}
 
       {screen === "company" && profile && (
+        <Suspense fallback={<ScreenLoading />}>
         <CompanyProfileScreen context={companyContext ?? emptyCompanyContext(currentWorkspaceId ?? "", workspaceName)} people={people} onSave={onSaveCompanyProfile} onBack={() => setScreen("workspace")} />
+        </Suspense>
       )}
 
       {screen === "session" && wizardPerson && (
+        <Suspense fallback={<ScreenLoading />}>
         <SessionWorkspace
           person={wizardPerson}
           people={people}
@@ -1358,9 +1600,11 @@ export default function App() {
           onScheduleSession={onScheduleSession}
           onToast={pushToast}
         />
+        </Suspense>
       )}
 
       {screen === "member" && memberPersonId && people.find((p) => p.id === memberPersonId) && (
+        <Suspense fallback={<ScreenLoading />}>
         <>
           {/* Preview-as picker: local roles, so the member view is honest about identity */}
           {people.find((p) => p.email.toLowerCase() === (profile?.email ?? "").toLowerCase())?.id !== memberPersonId && (
@@ -1384,9 +1628,11 @@ export default function App() {
             onToast={pushToast}
           />
         </>
+        </Suspense>
       )}
 
       {screen === "mcplibrary" && profile && (
+        <Suspense fallback={<ScreenLoading />}>
         <McpLibraryScreen
           library={mcpLibrary}
           companyContext={companyContext}
@@ -1396,9 +1642,11 @@ export default function App() {
           onBack={() => setScreen("workspace")}
           onToast={pushToast}
         />
+        </Suspense>
       )}
 
       {screen === "profile" && profileId && people.find((p) => p.id === profileId) && (
+        <Suspense fallback={<ScreenLoading />}>
         <ProfileScreen
           person={people.find((p) => p.id === profileId)!}
           people={people}
@@ -1409,6 +1657,7 @@ export default function App() {
           onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }}
           onStartSession={onStartSession}
         />
+        </Suspense>
       )}
 
 
