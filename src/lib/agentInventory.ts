@@ -20,6 +20,7 @@ export interface FlattenedAgentEntry extends AgentRecord {
   systemNames?: string[];
   controlIds?: string[];
   birthCertificate?: AgentBirthCertificate;
+  registryEntry?: AgentRegistryEntry;
   registryStatus?: string;
   riskFindings?: RiskFinding[];
   orphaned?: boolean;
@@ -140,6 +141,7 @@ export function flattenAgents(params: FlattenParams): FlattenedAgentEntry[] {
         systemNames: systemNamesForAgent(agent.id, systems),
         controlIds: controlIdsForAgent(agent.id, controls, riskFindings),
         birthCertificate: bcMap.get(agent.id),
+        registryEntry: regEntry ?? undefined,
         registryStatus: regEntry?.status,
         riskFindings: riskFindingsForAgent(agent.id, riskFindings),
         orphaned:

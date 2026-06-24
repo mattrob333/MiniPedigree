@@ -3,6 +3,7 @@ import { Topbar } from "./components/Topbar";
 import { Spreadsheet } from "./components/Spreadsheet";
 import { OrgMap } from "./components/OrgMap";
 import { Drawer, type CreateAgentCtx } from "./components/Drawer";
+import { AgentTransferDrawer } from "./components/AgentTransferDrawer";
 import { SessionWorkspace } from "./components/SessionWorkspace";
 import type { GenerateCtx } from "./components/modals/CreateAgentModal";
 import { ManifestScreen } from "./components/ManifestScreen";
@@ -363,6 +364,12 @@ export default function App() {
   const [evidenceRecords, setEvidenceRecords] = useState<EvidenceRecord[]>([]);
   const [riskFindings, setRiskFindings] = useState<RiskFinding[]>([]);
   const [externalAgents, setExternalAgents] = useState<ExternalAgentRecord[]>([]);
+
+  // ── Agent transfer drawer state ──
+  const [transferAgent, setTransferAgent] = useState<{
+    entry: AgentRegistryEntry;
+    owner: Person;
+  } | null>(null);
 
   const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; contextWarning?: string; taskSpecs?: Record<string, TaskSpec>; workflowTemplates?: WorkflowTemplate[]; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string; controls?: ControlManifest[]; systems?: SystemManifest[]; aiCouncilRequests?: AiCouncilRequest[]; birthCertificates?: AgentBirthCertificate[]; evidenceRecords?: EvidenceRecord[]; riskFindings?: RiskFinding[]; externalAgents?: ExternalAgentRecord[] }) => {
     setPeople(ws.people);
@@ -1358,6 +1365,14 @@ export default function App() {
                 riskFindings={riskFindings}
                 externalAgents={externalAgents}
                 onOpenAgent={(agent) => { setActiveAgent(agent as any); setScreen("manifest"); }}
+                onTransferAgent={(agent) => {
+                  if (agent.registryEntry) {
+                    const owner = people.find((p) => p.id === agent.registryEntry!.owner_person_id);
+                    if (owner) {
+                      setTransferAgent({ entry: agent.registryEntry, owner });
+                    }
+                  }
+                }}
               />
             )}
             {tab === "systems" && <SystemsScreen systems={systems} />}
@@ -1426,6 +1441,30 @@ export default function App() {
               onPersonChange={onPersonChange}
               onLifecycleChange={onLifecycleChange}
             />
+
+            {/* Agent Transfer Drawer */}
+            {transferAgent && (
+              <AgentTransferDrawer
+                agent={transferAgent.entry}
+                people={people}
+                currentOwner={transferAgent.owner}
+                evidenceRecords={evidenceRecords}
+                onClose={() => setTransferAgent(null)}
+                onTransfer={(updatedEntry, evidence) => {
+                  setRegistry((prev) =>
+                    prev.map((e) =>
+                      e.agent_id === updatedEntry.agent_id ? updatedEntry : e,
+                    ),
+                  );
+                  setEvidenceRecords((prev) => [...prev, evidence]);
+                  setTransferAgent(null);
+                  pushToast(
+                    "Transfer recorded",
+                    `Agent ${updatedEntry.agent_id} transferred. Evidence: ${evidence.id}.`,
+                  );
+                }}
+              />
+            )}
           </div>
         </div>
       )}

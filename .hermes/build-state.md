@@ -2,8 +2,8 @@
 
 **Spec source:** `docs/wesco-enterprise-governance-prd.md`
 **Repo:** `https://github.com/mattrob333/MiniPedigree` (branch: `wesco-enterprise-governance`)
-**Workspace:** `C:\Users\mrobe\Documents\Projects\minipedigree\MiniPedigree-latest`
-**Status:** Phase 3 complete ✅ — 513 tests pass, typecheck clean
+**Workspace:** `C:\\Users\\mrobe\\Documents\\Projects\\minipedigree\\MiniPedigree-latest`
+**Status:** Phase 4 complete, Phase 5 wired ✅ — 524 tests pass, typecheck clean
 
 ## Architecture: Two-Tier Build Loop
 - Inner Loop (builder) — every 10m: Check -> Test -> Advance -> Repeat.
@@ -59,17 +59,18 @@
 - [ ] Documentation updates
 
 ## Completed Tasks
-- Phase 0: Foundation (types, persistence, lib, 513 tests)
+- Phase 0: Foundation (types, persistence, lib, 524 tests)
 - Phase 1: Agent Inventory + System Inventory (AgentInventoryScreen, SystemsScreen, SystemDetailDrawer, governance tab bar)
 - Phase 2: Controls + SOX Mapping (ControlsScreen, ControlDetailDrawer, SOX toggle, create/edit)
 - Phase 3: Birth Certificate + Approval Gates (ApprovalChecklist, AgentBirthCertificateView with export)
+- Phase 4: AI Council Intake (AiCouncilScreen, request form, queue, status workflows, approve/reject, convertApprovedToManifest, 11 tests)
+- Phase 5: Risk Dashboard + Evidence Library (RiskDashboard, EvidenceLibraryScreen wired into App.tsx, riskFindings/evidence libs, demo data, export)
 
 ## Open Issues / Blockers
 _(none yet)_
 
 ## Next Action
-**Phase 4 conversion pending** — see course-corrections.md Correction #2.
-After that: **Begin Phase 5 fully**: Wire RiskDashboard + EvidenceLibraryScreen into App.tsx, complete any remaining Phase 5 items.
+Begin Phase 6: Orphan + Transfer Workflows — Build AgentTransferDrawer with authority comparison, approval for mismatches, transfer evidence generation.
 
 ## Pitfalls / Notes for Future Ticks
 - Commit each green slice before starting the next file.

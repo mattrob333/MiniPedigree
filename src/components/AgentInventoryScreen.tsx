@@ -24,6 +24,7 @@ interface Props {
   riskFindings?: RiskFinding[];
   externalAgents?: ExternalAgentRecord[];
   onOpenAgent?: (agent: FlattenedAgentEntry) => void;
+  onTransferAgent?: (agent: FlattenedAgentEntry) => void;
 }
 
 export function AgentInventoryScreen({
@@ -36,6 +37,7 @@ export function AgentInventoryScreen({
   riskFindings = [],
   externalAgents = [],
   onOpenAgent,
+  onTransferAgent,
 }: Props) {
   const [filters, setFilters] = useState<AgentFilters>({});
   const [sortBy, setSortBy] = useState("name");
@@ -301,7 +303,21 @@ export function AgentInventoryScreen({
                     )}
                   </td>
                   <td className="cell-action">
-                    <Icon name="chevron-right" size={14} stroke="var(--muted, #a0aec0)" />
+                    <div className="cell-action-btns">
+                      {onTransferAgent && agent.registryEntry && (
+                        <button
+                          className="btn btn-xs btn-ghost"
+                          title="Transfer ownership"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTransferAgent(agent);
+                          }}
+                        >
+                          <Icon name="transfer" size={11} />
+                        </button>
+                      )}
+                      <Icon name="chevron-right" size={14} stroke="var(--muted, #a0aec0)" />
+                    </div>
                   </td>
                 </tr>
               ))}
