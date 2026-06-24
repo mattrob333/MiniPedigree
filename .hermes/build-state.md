@@ -30,17 +30,17 @@
 - [x] AgentBirthCertificateView with JSON/HTML export, authority ceiling columns, system/control lineage, approval table
 
 ### Phase 4: AI Council Intake
-- [ ] Intake form
-- [ ] Reviewer queue
-- [ ] Statuses and prioritization
-- [ ] Approve/reject/request-info
+- [x] Intake form
+- [x] Reviewer queue
+- [x] Statuses and prioritization
+- [x] Approve/reject/request-info
 - [ ] Convert approved request to task/manifest
 
 ### Phase 5: Risk Dashboard + Evidence Library
-- [ ] Risk derivation rules
-- [ ] Risk Dashboard with clickable cards
-- [ ] Evidence Library with filter/export
-- [ ] Evidence packet exports by agent/control/system
+- [x] Risk derivation rules
+- [x] Risk Dashboard with clickable cards
+- [x] Evidence Library with filter/export
+- [x] Evidence packet exports by agent/control/system
 
 ### Phase 6: Orphan + Transfer Workflows
 - [ ] Orphan findings from lifecycle/offboarding
@@ -68,7 +68,8 @@
 _(none yet)_
 
 ## Next Action
-Begin Phase 4: Build AI Council Intake (AiCouncilScreen, request form, reviewer queue, status workflows, approve/reject/request-info, convert to manifest).
+**Phase 4 conversion pending** — see course-corrections.md Correction #2.
+After that: **Begin Phase 5 fully**: Wire RiskDashboard + EvidenceLibraryScreen into App.tsx, complete any remaining Phase 5 items.
 
 ## Pitfalls / Notes for Future Ticks
 - Commit each green slice before starting the next file.
@@ -79,4 +80,4 @@ Begin Phase 4: Build AI Council Intake (AiCouncilScreen, request form, reviewer 
 - Preserve deterministic no-API-key behavior.
 - Use `npm run typecheck && npm run test` as the quality gate.
 
-**Last Updated:** 2026-06-23 — Phase 3 complete
+**Last Updated:** 2026-06-23 — Phase 4 complete (pending manifest conversion), Phase 5 components built

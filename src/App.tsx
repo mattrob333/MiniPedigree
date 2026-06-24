@@ -19,6 +19,8 @@ import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
 import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
 import { McpLibraryScreen } from "./components/McpLibraryScreen";
+import { RiskDashboard } from "./components/RiskDashboard";
+import { EvidenceLibraryScreen } from "./components/EvidenceLibraryScreen";
 import { ReviewInbox } from "./components/ReviewInbox";
 import { AuditTrail } from "./components/AuditTrail";
 import { RiskBadge } from "./components/ProvenanceBadge";
@@ -1383,26 +1385,19 @@ export default function App() {
               />
             )}
             {tab === "risk" && (
-              <div className="screen-panel placeholder-panel">
-                <div className="empty-state">
-                  <Icon name="warning" size={32} stroke="var(--muted, #a0aec0)" />
-                  <h3>Risk Dashboard — Coming in Phase 5</h3>
-                  <p>Risk derivation rules, clickable risk cards, orphaned agent detection, and risk severity dashboards will appear here.</p>
-                  <p className="empty-hint">Why this matters: Risk findings surface governance gaps like orphaned agents, unreviewed SOX access, and scope drift.</p>
-                  <p className="empty-hint">What to do: Review the evidence library and birth certificates to prepare for risk assessments.</p>
-                </div>
-              </div>
+              <RiskDashboard
+                riskFindings={riskFindings}
+                onUpdateFinding={(id, patch) =>
+                  setRiskFindings((prev) =>
+                    prev.map((f) =>
+                      f.id === id ? { ...f, ...patch } : f,
+                    ),
+                  )
+                }
+              />
             )}
             {tab === "evidence" && (
-              <div className="screen-panel placeholder-panel">
-                <div className="empty-state">
-                  <Icon name="doc" size={32} stroke="var(--muted, #a0aec0)" />
-                  <h3>Evidence Library — Coming in Phase 5</h3>
-                  <p>Evidence records, filter/export capabilities, and evidence packet exports by agent, control, or system will appear here.</p>
-                  <p className="empty-hint">Why this matters: Evidence is the backbone of audit readiness. Every governance action creates an evidence trail.</p>
-                  <p className="empty-hint">What to do: Complete agent creation and approval workflows so evidence records start accumulating.</p>
-                </div>
-              </div>
+              <EvidenceLibraryScreen evidenceRecords={evidenceRecords} />
             )}
             {tab === "customs" && (
               <div className="screen-panel placeholder-panel">

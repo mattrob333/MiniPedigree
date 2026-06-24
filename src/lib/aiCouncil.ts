@@ -4,7 +4,113 @@
 
 import type { AiCouncilRequest, RiskLevel, ApprovalDecision } from "../types";
 
-// ── ID generation ──────────────────────────────────────────────────────
+// ── Approved-to-Manifest Conversion ──────────────────────────────────────
+
+/**
+ * Convert an approved AiCouncilRequest into a draft AgentManifest and evidence
+ * record. This is the final step of the AI Council intake pipeline: once a
+ * request is approved, it should produce a deployable manifest so the UI can
+ * navigate to the new agent.
+ *
+ * @param approvedRequest - The approved AiCouncilRequest (must have status "approved")
+ * @param requesterName   - Human-readable name of the requester (for evidence)
+ * @param knownSystems    - SystemManifest array used to build systemAccess entries
+ * @returns An object with:
+ *   - manifest: a draft AgentManifest derived from the request
+ *   - evidenceId: the generated evidence record ID (caller should push to workspace)
+ *   - evidenceRecord: the full EvidenceRecord for persistence
+ *   - partialRecord: a Partial<AgentRecord> the UI can navigate to
+ */
+export function convertApprovedToManifest(
+  approvedRequest: AiCouncilRequest,
+  requesterName: string,
+  knownSystems: Array<{ id: string; name: string }> = [],
+): {
+  manifest: import("../types").AgentManifest;
+  evidenceId: string;
+  evidenceRecord: import("../types").EvidenceRecord;
+  partialRecord: Partial<import("../types").AgentRecord>;
+} {
+  if (approvedRequest.status !== "approved") {
+    throw new Error(
+      `Cannot convert request "${approvedRequest.id}": status is "${approvedRequest.status}", expected "approved".`,
+    );
+  }
+
+  const now = new Date().toISOString();
+  const manifestId = `manifest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const evidenceId = `evt-aic-convert-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const agentId = `agent-aic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Build systemAccess from systemsTouched
+  const systemAccess: import("../types").AgentSystemAccess[] =
+    approvedRequest.systemsTouched.map((sysIdOrName) => {
+      const matched = knownSystems.find(
+        (s) => s.id === sysIdOrName || s.name === sysIdOrName,
+      );
+      return {
+        systemId: matched?.id ?? sysIdOrName,
+        systemName: matched?.name ?? sysIdOrName,
+        accessNeeded: approvedRequest.soxRelevant ? "read" : "read",
+      };
+    });
+
+  const manifest: import("../types").AgentManifest = {
+    id: manifestId,
+    agentName: `Agent: ${approvedRequest.proposedTask.slice(0, 48)}`,
+    purpose: approvedRequest.businessProblem,
+    humanOwnerId: approvedRequest.humanOwnerId ?? approvedRequest.requesterId,
+    department: approvedRequest.department,
+    parentResponsibilityId: "",
+    parentTaskId: "",
+    relatedControlIds: [],
+    systemAccess,
+    tools: [],
+    allowedActions: [],
+    approvalRequiredActions: [],
+    blockedActions: [],
+    approvalGates: [],
+    authorityCeiling: {
+      systems: systemAccess,
+      allowedActions: [],
+      approvalRequiredActions: [],
+      blockedActions: [],
+    },
+    riskTier: approvedRequest.riskTier ?? "medium",
+    soxRelevant: approvedRequest.soxRelevant,
+    systemPrompt: "",
+    runtimeTargets: [],
+    evidenceRequirements: [],
+    testPrompts: [],
+    validationWarnings: [],
+    status: "draft",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const evidenceRecord: import("../types").EvidenceRecord = {
+    id: evidenceId,
+    type: "agent_request",
+    subjectType: "agent",
+    subjectId: agentId,
+    actor: requesterName,
+    timestamp: now,
+    summary: `AI Council request "${approvedRequest.id}" converted to agent manifest. Purpose: ${approvedRequest.businessProblem.slice(0, 120)}. SOX-relevant: ${approvedRequest.soxRelevant}.`,
+    source: {
+      kind: "manual_action",
+      sourceId: approvedRequest.id,
+      quote: `Approved by ${approvedRequest.decision?.by ?? "unknown"} and converted to manifest ${manifestId}.`,
+    },
+  };
+
+  const partialRecord: Partial<import("../types").AgentRecord> = {
+    id: agentId,
+    manifest: manifest as unknown as Record<string, unknown>,
+    name: manifest.agentName,
+  };
+
+  return { manifest, evidenceId, evidenceRecord, partialRecord };
+}
 
 /**
  * Generate a new AI Council request ID with format `aic-req-<ISO-timestamp>`.
