@@ -15,13 +15,13 @@ The OUTER loop appends prioritized directives here on detecting drift, guardrail
 
 ## Resolved Corrections
 
-### [MEDIUM] TASKS.md and build-state.md are stale — RESOLVED (commit <pending>)
+### [MEDIUM] TASKS.md and build-state.md are stale — RESOLVED (commit b67c865)
 **Fix applied:**
 - TASKS.md: All Phase 0-4 items marked [x], Phase 5 items remain correctly unmarked.
 - build-state.md: Phase 4 marked [x] (pending manifest conversion kept as [ ]), Phase 5 marked [x], Next Action set to "Phase 4 conversion pending ... Begin Phase 5".
 - Verified: `git diff` shows real [x] marks on completed items.
 
-### [MEDIUM] Phase 4 missing approved-to-manifest conversion — RESOLVED (commit <pending>)
+### [MEDIUM] Phase 4 missing approved-to-manifest conversion — RESOLVED (commit b67c865)
 **Fix applied:**
 - Added `convertApprovedToManifest()` to `src/lib/aiCouncil.ts`:
   - Throws if request.status !== "approved"
@@ -34,7 +34,7 @@ The OUTER loop appends prioritized directives here on detecting drift, guardrail
   - Non-approved rejection, field mapping, system resolution, SOX/risk tiers
   - Owner fallback, evidence creation, empty systems, draft status
 
-### [LOW] Phase 5 components exist but are uncommitted and unwired — RESOLVED (commit <pending>)
+### [LOW] Phase 5 components exist but are uncommitted and unwired — RESOLVED (commit b67c865)
 **Fix applied:**
 - Added imports for RiskDashboard and EvidenceLibraryScreen to App.tsx
 - Replaced placeholder `<div>` panels with `<RiskDashboard riskFindings={riskFindings} onUpdateFinding={...} />` and `<EvidenceLibraryScreen evidenceRecords={evidenceRecords} />`
