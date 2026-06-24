@@ -28,6 +28,7 @@ import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorks
 import { AgentInventoryScreen } from "./components/AgentInventoryScreen";
 import { SystemsScreen } from "./components/SystemsScreen";
 import { ControlsScreen } from "./components/ControlsScreen";
+import { AiCouncilScreen } from "./components/AiCouncilScreen";
 import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewEditPatch, type ReviewQueueItem } from "./lib/provenance";
 import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, ControlManifest, SystemManifest, AiCouncilRequest, AgentBirthCertificate, EvidenceRecord, RiskFinding, ExternalAgentRecord, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
@@ -1371,15 +1372,15 @@ export default function App() {
               />
             )}
             {tab === "council" && (
-              <div className="screen-panel placeholder-panel">
-                <div className="empty-state">
-                  <Icon name="users" size={32} stroke="var(--muted, #a0aec0)" />
-                  <h3>AI Council — Coming in Phase 4</h3>
-                  <p>The AI Council intake queue, request forms, reviewer workflows, and approve/reject/request-info actions will appear here.</p>
-                  <p className="empty-hint">Why this matters: The AI Council governs which agents get approved, what systems they can access, and who owns them.</p>
-                  <p className="empty-hint">What to do: Define your council reviewer roster and approval gates in company governance documents.</p>
-                </div>
-              </div>
+              <AiCouncilScreen
+                requests={aiCouncilRequests}
+                onAddRequest={(req) => setAiCouncilRequests((prev) => [...prev, req])}
+                onUpdateRequest={(id, patch) =>
+                  setAiCouncilRequests((prev) =>
+                    prev.map((r) => (r.id === id ? { ...r, ...patch, updatedAt: new Date().toISOString() } : r)),
+                  )
+                }
+              />
             )}
             {tab === "risk" && (
               <div className="screen-panel placeholder-panel">
