@@ -25,6 +25,8 @@ import { RiskBadge } from "./components/ProvenanceBadge";
 import { DiscoveryPlanPanel } from "./components/DiscoveryPlanPanel";
 import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
 import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
+import { AgentInventoryScreen } from "./components/AgentInventoryScreen";
+import { SystemsScreen } from "./components/SystemsScreen";
 import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewEditPatch, type ReviewQueueItem } from "./lib/provenance";
 import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, ControlManifest, SystemManifest, AiCouncilRequest, AgentBirthCertificate, EvidenceRecord, RiskFinding, ExternalAgentRecord, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
@@ -71,7 +73,8 @@ import { draftTaskSpec } from "./lib/workflowMatch";
 import { GLOBAL_WORKFLOW_TEMPLATES } from "./lib/workflowSeeds";
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company" | "mcplibrary" | "member" | "session";
-type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit";
+type Tab = "spreadsheet" | "orgmap" | "plan" | "agents" | "review" | "digest" | "audit"
+  | "inventory" | "systems" | "controls" | "council" | "risk" | "evidence" | "customs";
 
 // Maturity surfaces → workspace tabs (internal tab ids stay stable).
 const SURFACE_TAB: Record<WorkspaceSurface, Tab> = {
@@ -1246,6 +1249,29 @@ export default function App() {
               <button className="tab" role="tab" aria-selected={tab === "audit"} onClick={() => setTab("audit")} title="Evidence: who generated, confirmed, approved, exported — append-only">
                 <Icon name="history" size={12} /> Evidence <span className="count">{events.length + auditLog.length}</span>
               </button>
+              <span className="tab-sep" />
+              <span className="tab-section-label">Governance</span>
+              <button className="tab" role="tab" aria-selected={tab === "inventory"} onClick={() => setTab("inventory")} title="Agent Inventory — all agents across the organization with filtering">
+                <Icon name="robot" size={12} /> Agents
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "systems"} onClick={() => setTab("systems")} title="Systems — registered IT systems and their governance status">
+                <Icon name="monitor" size={12} /> Systems
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "controls"} onClick={() => setTab("controls")} title="Controls — SOX-aware control manifests linked to agents and systems">
+                <Icon name="shield" size={12} /> Controls
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "council"} onClick={() => setTab("council")} title="AI Council — intake queue for new agent requests">
+                <Icon name="users" size={12} /> AI Council
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "risk"} onClick={() => setTab("risk")} title="Risk Dashboard — findings, orphaned agents, drift detection">
+                <Icon name="warning" size={12} /> Risk
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "evidence"} onClick={() => setTab("evidence")} title="Evidence Library — governance evidence and export packets">
+                <Icon name="doc" size={12} /> Evidence
+              </button>
+              <button className="tab" role="tab" aria-selected={tab === "customs"} onClick={() => setTab("customs")} title="Agent Customs — import and classify external agents">
+                <Icon name="external" size={12} /> Customs
+              </button>
               <span style={{ flex: 1 }} />
               <span className="kbd-hint">Tab <span className="k">1</span> People · <span className="k">2</span> Map</span>
             </div>
@@ -1315,6 +1341,77 @@ export default function App() {
               />
             )}
             {tab === "audit" && <AuditTrail events={events} stackAuditLog={auditLog} workspaceName={workspaceName} />}
+
+            {/* ── WESCO Governance tabs ── */}
+            {tab === "inventory" && (
+              <AgentInventoryScreen
+                people={people}
+                pedigree={pedigree}
+                registry={registry}
+                birthCertificates={birthCertificates}
+                systems={systems}
+                controls={controls}
+                riskFindings={riskFindings}
+                externalAgents={externalAgents}
+                onOpenAgent={(agent) => { setActiveAgent(agent as any); setScreen("manifest"); }}
+              />
+            )}
+            {tab === "systems" && <SystemsScreen systems={systems} />}
+            {tab === "controls" && (
+              <div className="screen-panel placeholder-panel">
+                <div className="empty-state">
+                  <Icon name="shield" size={32} stroke="var(--muted, #a0aec0)" />
+                  <h3>Controls — Coming in Phase 2</h3>
+                  <p>SOX-aware control manifests, control-to-agent lineage, and SOX relevance toggles will appear here.</p>
+                  <p className="empty-hint">Why this matters: Controls define the policies and checks that govern agent behavior, especially in SOX-relevant systems.</p>
+                  <p className="empty-hint">What to do: Continue mapping systems and agents — controls become actionable once your system inventory is complete.</p>
+                </div>
+              </div>
+            )}
+            {tab === "council" && (
+              <div className="screen-panel placeholder-panel">
+                <div className="empty-state">
+                  <Icon name="users" size={32} stroke="var(--muted, #a0aec0)" />
+                  <h3>AI Council — Coming in Phase 4</h3>
+                  <p>The AI Council intake queue, request forms, reviewer workflows, and approve/reject/request-info actions will appear here.</p>
+                  <p className="empty-hint">Why this matters: The AI Council governs which agents get approved, what systems they can access, and who owns them.</p>
+                  <p className="empty-hint">What to do: Define your council reviewer roster and approval gates in company governance documents.</p>
+                </div>
+              </div>
+            )}
+            {tab === "risk" && (
+              <div className="screen-panel placeholder-panel">
+                <div className="empty-state">
+                  <Icon name="warning" size={32} stroke="var(--muted, #a0aec0)" />
+                  <h3>Risk Dashboard — Coming in Phase 5</h3>
+                  <p>Risk derivation rules, clickable risk cards, orphaned agent detection, and risk severity dashboards will appear here.</p>
+                  <p className="empty-hint">Why this matters: Risk findings surface governance gaps like orphaned agents, unreviewed SOX access, and scope drift.</p>
+                  <p className="empty-hint">What to do: Review the evidence library and birth certificates to prepare for risk assessments.</p>
+                </div>
+              </div>
+            )}
+            {tab === "evidence" && (
+              <div className="screen-panel placeholder-panel">
+                <div className="empty-state">
+                  <Icon name="doc" size={32} stroke="var(--muted, #a0aec0)" />
+                  <h3>Evidence Library — Coming in Phase 5</h3>
+                  <p>Evidence records, filter/export capabilities, and evidence packet exports by agent, control, or system will appear here.</p>
+                  <p className="empty-hint">Why this matters: Evidence is the backbone of audit readiness. Every governance action creates an evidence trail.</p>
+                  <p className="empty-hint">What to do: Complete agent creation and approval workflows so evidence records start accumulating.</p>
+                </div>
+              </div>
+            )}
+            {tab === "customs" && (
+              <div className="screen-panel placeholder-panel">
+                <div className="empty-state">
+                  <Icon name="external" size={32} stroke="var(--muted, #a0aec0)" />
+                  <h3>Agent Customs — Coming in Phase 7</h3>
+                  <p>External agent import (form, paste, upload), classification into owner/purpose/scope, and approve/restrict/sandbox/reject actions will appear here.</p>
+                  <p className="empty-hint">Why this matters: External agents from Copilot, Claude, GPTs, and vendor bots must be governed to prevent unmonitored system access.</p>
+                  <p className="empty-hint">What to do: Identify external agent sources and prepare import templates for when Customs goes live.</p>
+                </div>
+              </div>
+            )}
 
             <Drawer
               open={drawerOpen}
