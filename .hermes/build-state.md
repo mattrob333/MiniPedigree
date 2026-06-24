@@ -34,7 +34,7 @@
 - [x] Reviewer queue
 - [x] Statuses and prioritization
 - [x] Approve/reject/request-info
-- [ ] Convert approved request to task/manifest
+- [x] Convert approved request to task/manifest
 
 ### Phase 5: Risk Dashboard + Evidence Library
 - [x] Risk derivation rules
