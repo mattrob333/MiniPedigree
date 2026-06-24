@@ -62,18 +62,18 @@
 - [x] Build AiCouncilQueue.tsx (statuses, filters)
 - [x] Build AiCouncilScreen.tsx (tabs: submit + queue)
 - [x] Implement approval/reject/request-info actions
-- [ ] Implement approved-to-manifest conversion
+- [x] Implement approved-to-manifest conversion (convertApprovedToManifest + 11 tests)
 - [x] Re-export and integrate in App.tsx navigation
 - [x] Tests: request lifecycle, evidence writing, manifest linking
 
 ### Phase 5: Risk Dashboard + Evidence Library
-- [ ] Build risk derivation rules
-- [ ] Build RiskDashboard.tsx (clickable cards)
-- [ ] Build EvidenceLibraryScreen.tsx (list, filter, export)
-- [ ] Implement evidence packet generation (by agent/control/system)
-- [ ] Export JSON/CSV evidence packets
-- [ ] Re-export and integrate in App.tsx navigation
-- [ ] Tests: risk derivation, evidence export, packet generation
+- [x] Build risk derivation rules (deriveOrphanRiskFindings, deriveDriftRiskFindings)
+- [x] Build RiskDashboard.tsx (clickable cards, summary stats)
+- [x] Build EvidenceLibraryScreen.tsx (list, filter, JSON/CSV export)
+- [x] Implement evidence packet generation (by agent/control/system)
+- [x] Export JSON/CSV evidence packets (getEvidencePacketsCSV, getEvidencePacketsJSON)
+- [x] Re-export and integrate in App.tsx navigation
+- [x] Tests: risk derivation (22 tests), evidence export (33 tests), packet generation
 
 ### Phase 6: Orphan + Transfer Workflows
 - [x] Orphan findings from lifecycle/offboarding

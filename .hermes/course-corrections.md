@@ -11,7 +11,11 @@ The OUTER loop appends prioritized directives here on detecting drift, guardrail
 
 ## Open Corrections
 
-*(No open corrections.)*
+### [LOW] build-state.md Phase 4 line shows pending conversion as undone — OPEN (audit 2026-06-23T00:50Z)
+Problem: Line 37 shows `[ ] Convert approved request to task/manifest` but `convertApprovedToManifest()` exists in `src/lib/aiCouncil.ts` with 11 passing tests in `src/lib/aiCouncil.test.ts`. Code merged at commit 4085cf4.
+Required fix: Change line 37 from `[ ] Convert approved request to task/manifest` to `[x] Convert approved request to task/manifest` to match actual code state.
+Note: This file is guarded from supervisor edits to avoid racing the builder. Builder should perform this trivial state sync on next tick.
+Acceptance: build-state.md line 37 shows `[x]` instead of `[ ]`.
 
 ## Resolved Corrections
 

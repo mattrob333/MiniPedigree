@@ -1,7 +1,7 @@
 # Pedigree WESCO Enterprise Governance — Build Plan
 
 **Source:** `docs/wesco-enterprise-governance-prd.md`
-**Repo:** `https://github.com/mattrob333/MiniPedigree` (branch `claude/sleepy-ramanujan-c79dxw`)
+**Repo:** `https://github.com/mattrob333/MiniPedigree` (branch `wesco-enterprise-governance`)
 
 ## Sequencing Rationale
 
