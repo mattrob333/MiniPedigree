@@ -22,6 +22,7 @@ import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 import { McpLibraryScreen } from "./components/McpLibraryScreen";
 import { RiskDashboard } from "./components/RiskDashboard";
 import { EvidenceLibraryScreen } from "./components/EvidenceLibraryScreen";
+import { AgentCustomsScreen } from "./components/AgentCustomsScreen";
 import { ReviewInbox } from "./components/ReviewInbox";
 import { AuditTrail } from "./components/AuditTrail";
 import { RiskBadge } from "./components/ProvenanceBadge";
@@ -1415,15 +1416,18 @@ export default function App() {
               <EvidenceLibraryScreen evidenceRecords={evidenceRecords} />
             )}
             {tab === "customs" && (
-              <div className="screen-panel placeholder-panel">
-                <div className="empty-state">
-                  <Icon name="external" size={32} stroke="var(--muted, #a0aec0)" />
-                  <h3>Agent Customs — Coming in Phase 7</h3>
-                  <p>External agent import (form, paste, upload), classification into owner/purpose/scope, and approve/restrict/sandbox/reject actions will appear here.</p>
-                  <p className="empty-hint">Why this matters: External agents from Copilot, Claude, GPTs, and vendor bots must be governed to prevent unmonitored system access.</p>
-                  <p className="empty-hint">What to do: Identify external agent sources and prepare import templates for when Customs goes live.</p>
-                </div>
-              </div>
+              <AgentCustomsScreen
+                externalAgents={externalAgents}
+                people={people}
+                onAddAgent={(agent) => setExternalAgents((prev) => [...prev, agent])}
+                onUpdateAgent={(id, patch) =>
+                  setExternalAgents((prev) =>
+                    prev.map((a) =>
+                      a.id === id ? { ...a, ...patch, updatedAt: new Date().toISOString() } : a,
+                    ),
+                  )
+                }
+              />
             )}
 
             <Drawer
