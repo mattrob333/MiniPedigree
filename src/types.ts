@@ -255,10 +255,23 @@ export interface ResponsibilityRow {
   confidence?: number;
   provenance?: ItemProvenance;
   ownershipRole?: OwnershipRole;
+  relatedControlIds?: string[];
+  relatedSystemIds?: string[];
+  relatedAgentIds?: string[];
   last_confirmed_at?: string;
 }
 
 export type OwnershipRole = "accountable_owner" | "contributor" | "approver" | "informed";
+
+export interface TaskControlLink {
+  controlId: string;
+  relevance: "direct" | "supporting" | "evidence_only";
+}
+
+export interface TaskSystemLink {
+  systemId: string;
+  accessNeeded: "none" | "read" | "draft" | "write_with_approval" | "write" | "admin";
+}
 
 export interface TaskItem {
   id: string;
@@ -276,6 +289,9 @@ export interface TaskItem {
   evidence?: string;
   completion?: TaskCompletionContext;
   provenance?: ItemProvenance;
+  relatedControls?: TaskControlLink[];
+  relatedSystems?: TaskSystemLink[];
+  soxRelevant?: boolean;
   /** Freshness: set by confirmations (meetings or the owner), applied changes. */
   last_confirmed_at?: string;
 }
@@ -385,6 +401,314 @@ export interface CsvImportResult {
   workspaceName: string;
 }
 
+// ── WESCO Enterprise Governance Types ─────────────────────────────────
+
+export interface ApprovalRequirement {
+  gate: string;
+  met: boolean;
+  approver?: string;
+  metAt?: string;
+}
+
+export interface HumanSystemAccess {
+  systemId: string;
+  systemName: string;
+  accessLevel: AuthorityGrantScope;
+}
+
+export interface AgentSystemAccess {
+  systemId: string;
+  systemName: string;
+  accessNeeded: "none" | "read" | "draft" | "write_with_approval" | "write" | "admin";
+}
+
+export interface ToolAccess {
+  tool: string;
+  permission: "read" | "draft" | "write_with_approval" | "write";
+  required: boolean;
+}
+
+export interface AuthorityCeiling {
+  systems: AgentSystemAccess[];
+  allowedActions: string[];
+  approvalRequiredActions: string[];
+  blockedActions: string[];
+}
+
+export interface ApprovalGate {
+  gate: string;
+  required: boolean;
+  met: boolean;
+  approver?: string;
+  metAt?: string;
+}
+
+export interface RuntimeTarget {
+  runtime: string;
+  enabled: boolean;
+}
+
+export interface TestPrompt {
+  name: string;
+  input: string;
+  expectedOutput: string;
+}
+
+export interface ApprovalRecord {
+  approver: string;
+  approvedAt: string;
+  gate: string;
+}
+
+export interface ControlOwnershipRef {
+  controlId: string;
+  controlName: string;
+}
+
+export interface AgentOwnershipRef {
+  agentId: string;
+  agentName: string;
+}
+
+export interface EvidenceRef {
+  evidenceId: string;
+  type: string;
+  summary: string;
+}
+
+export interface ApprovalDecision {
+  by: string;
+  at: string;
+  outcome: "approved" | "rejected";
+  reason?: string;
+}
+
+export interface HumanManifest {
+  personId: string;
+  name: string;
+  email: string;
+  title: string;
+  department: string;
+  managerId: string | null;
+  employmentStatus: "active" | "transitioning" | "offboarded";
+  responsibilities: ResponsibilityRow[];
+  tasks: TaskItem[];
+  systems: HumanSystemAccess[];
+  authorityProfile: AuthorityProfile;
+  approvalAuthority: ApprovalAuthority[];
+  controlOwnership: ControlOwnershipRef[];
+  agentOwnership: AgentOwnershipRef[];
+  evidenceRefs: EvidenceRef[];
+  lastReviewedAt?: string;
+}
+
+export interface ControlManifest {
+  id: string;
+  controlId: string;
+  name: string;
+  description?: string;
+  ownerPersonId: string;
+  process: string;
+  relatedRisk: string;
+  frequency: "ad_hoc" | "daily" | "weekly" | "monthly" | "quarterly" | "annual";
+  systemIds: string[];
+  evidenceRequired: string[];
+  soxRelevant: boolean;
+  socRelevant?: boolean;
+  relatedTaskIds: string[];
+  relatedAgentIds: string[];
+  approvalRequirements: ApprovalRequirement[];
+  status: "draft" | "active" | "retired";
+  source: "manual" | "policy_document" | "sod_document" | "import";
+  provenance?: ItemProvenance;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SystemManifest {
+  id: string;
+  name: string;
+  category: "erp" | "hris" | "crm" | "finance" | "identity" | "collaboration" | "data" | "custom" | "other";
+  ownerPersonId?: string;
+  soxInScope: boolean;
+  dataSensitivity: "public" | "internal" | "confidential" | "regulated";
+  integrationStatus: "manual" | "planned" | "connected" | "disabled";
+  connectedHumanIds: string[];
+  connectedAgentIds: string[];
+  connectedControlIds: string[];
+  riskFindings: RiskFinding[];
+  approvalRequirements: ApprovalRequirement[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentManifest {
+  id: string;
+  agentName: string;
+  purpose: string;
+  humanOwnerId: string;
+  department: string;
+  parentResponsibilityId: string;
+  parentTaskId: string;
+  relatedControlIds: string[];
+  systemAccess: AgentSystemAccess[];
+  tools: ToolAccess[];
+  allowedActions: string[];
+  approvalRequiredActions: string[];
+  blockedActions: string[];
+  approvalGates: ApprovalGate[];
+  authorityCeiling: AuthorityCeiling;
+  riskTier: RiskLevel;
+  soxRelevant: boolean;
+  systemPrompt: string;
+  runtimeTargets: RuntimeTarget[];
+  evidenceRequirements: string[];
+  testPrompts: TestPrompt[];
+  validationWarnings: string[];
+  status: "draft" | "submitted" | "under_review" | "approved" | "rejected";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentBirthCertificate {
+  id: string;
+  agentId: string;
+  agentName: string;
+  birthDate: string;
+  createdBy: string;
+  approvedBy: ApprovalRecord[];
+  humanOwnerId: string;
+  parentRole: string;
+  parentResponsibilityId: string;
+  parentTaskId: string;
+  authorityCeiling: AuthorityCeiling;
+  systemsAllowed: AgentSystemAccess[];
+  systemsDenied: string[];
+  relatedControlIds: string[];
+  soxRelevant: boolean;
+  approvalEvidenceIds: string[];
+  initialPromptVersion: string;
+  runtimeDestination?: string;
+  runtimeResourceId?: string;
+  initialRiskScore: number;
+  manifestVersion: number;
+  evidencePacketId: string;
+  createdAt: string;
+}
+
+export interface AiCouncilRequest {
+  id: string;
+  requesterId: string;
+  department: string;
+  businessProblem: string;
+  proposedTask: string;
+  expectedBenefit?: string;
+  systemsTouched: string[];
+  dataSensitivity: DataTier;
+  soxRelevant: boolean;
+  humanOwnerId?: string;
+  riskTier?: RiskLevel;
+  approvalRequirements: ApprovalRequirement[];
+  status:
+    | "draft"
+    | "submitted"
+    | "under_review"
+    | "needs_more_info"
+    | "approved"
+    | "rejected"
+    | "built"
+    | "deployed"
+    | "monitored"
+    | "archived";
+  priority: "low" | "medium" | "high" | "urgent";
+  reviewerIds: string[];
+  decision?: ApprovalDecision;
+  linkedManifestId?: string;
+  evidenceIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RiskFinding {
+  id: string;
+  severity: "info" | "low" | "medium" | "high" | "critical";
+  category:
+    | "sod_conflict"
+    | "authority_exceeded"
+    | "orphaned_agent"
+    | "drift"
+    | "missing_approval"
+    | "sox_system_access"
+    | "service_account_exception"
+    | "missing_evidence"
+    | "unknown_owner";
+  title: string;
+  plainEnglishDescription: string;
+  whyItMatters: string;
+  recommendedAction: string;
+  relatedAgentIds: string[];
+  relatedPersonIds: string[];
+  relatedSystemIds: string[];
+  relatedControlIds: string[];
+  status: "open" | "accepted" | "resolved" | "dismissed";
+  evidenceIds: string[];
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface EvidenceRecord {
+  id: string;
+  type:
+    | "agent_request"
+    | "approval"
+    | "birth_certificate"
+    | "permission_scope"
+    | "control_mapping"
+    | "sox_classification"
+    | "risk_acceptance"
+    | "transfer"
+    | "suspension"
+    | "archive"
+    | "drift_review"
+    | "orphan_remediation"
+    | "runtime_export"
+    | "policy_quote"
+    | "transcript_quote";
+  subjectType: "agent" | "control" | "system" | "person" | "request" | "workspace";
+  subjectId: string;
+  actor: string;
+  timestamp: string;
+  summary: string;
+  source?: {
+    kind: "transcript" | "policy_document" | "manual_action" | "system_event" | "export";
+    sourceId?: string;
+    quote?: string;
+  };
+  details?: Record<string, unknown>;
+}
+
+export interface ExternalAgentRecord {
+  id: string;
+  name: string;
+  source: "manual" | "copilot" | "claude_project" | "gpt" | "vendor_bot" | "legacy_automation" | "service_account";
+  sourceReference?: string;
+  ownerPersonId?: string;
+  businessOwnerId?: string;
+  technicalOwnerId?: string;
+  purpose?: string;
+  systems: string[];
+  tools: string[];
+  promptSnippet?: string;
+  riskTier: RiskLevel;
+  soxRelevant: boolean;
+  status: "imported_pending_review" | "approved" | "restricted" | "sandboxed" | "rejected" | "archived";
+  classificationFlags: string[];
+  matchedPolicyIds: string[];
+  evidenceIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -409,6 +733,14 @@ export interface Workspace {
   rosterValidatedAt?: string;      // human confirmed the imported roster (maturity stage 2)
   ownerEmail?: string;
   updatedAt?: string;
+  // ── WESCO Enterprise Governance extensions ──
+  controls?: ControlManifest[];
+  systems?: SystemManifest[];
+  aiCouncilRequests?: AiCouncilRequest[];
+  birthCertificates?: AgentBirthCertificate[];
+  evidenceRecords?: EvidenceRecord[];
+  riskFindings?: RiskFinding[];
+  externalAgents?: ExternalAgentRecord[];
 }
 
 // ── Company MCP Library — the approved tool surface for this company ──
