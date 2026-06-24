@@ -89,7 +89,7 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
         id: ws.id,
         name: ws.name,
         owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, quarantinedContext: ws.quarantinedContext, contextWarning: ws.contextWarning, taskSpecs: ws.taskSpecs, workflowTemplates: ws.workflowTemplates, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt },
+        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, quarantinedContext: ws.quarantinedContext, contextWarning: ws.contextWarning, taskSpecs: ws.taskSpecs, workflowTemplates: ws.workflowTemplates, mcpLibrary: ws.mcpLibrary, registry: ws.registry, auditLog: ws.auditLog, events: ws.events, discoveryPlan: ws.discoveryPlan, sessionBriefs: ws.sessionBriefs, questionBacklog: ws.questionBacklog, meetings: ws.meetings, signalLedger: ws.signalLedger, freshnessConfig: ws.freshnessConfig, rosterValidatedAt: ws.rosterValidatedAt, controls: ws.controls, systems: ws.systems, aiCouncilRequests: ws.aiCouncilRequests, birthCertificates: ws.birthCertificates, evidenceRecords: ws.evidenceRecords, riskFindings: ws.riskFindings, externalAgents: ws.externalAgents },
         updated_at: stamped.updatedAt,
       });
       if (ws.mcpLibrary?.length) {
@@ -192,6 +192,9 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
             rosterValidatedAt: snap.rosterValidatedAt,
             quarantinedContext: snap.quarantinedContext, contextWarning: snap.contextWarning,
             taskSpecs: snap.taskSpecs, workflowTemplates: snap.workflowTemplates,
+            controls: snap.controls, systems: snap.systems, aiCouncilRequests: snap.aiCouncilRequests,
+            birthCertificates: snap.birthCertificates, evidenceRecords: snap.evidenceRecords,
+            riskFindings: snap.riskFindings, externalAgents: snap.externalAgents,
             ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString(),
           });
         }

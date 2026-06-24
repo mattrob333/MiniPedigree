@@ -3,7 +3,7 @@
 **Spec source:** `docs/wesco-enterprise-governance-prd.md`
 **Repo:** `https://github.com/mattrob333/MiniPedigree` (branch: `claude/sleepy-ramanujan-c79dxw`)
 **Workspace:** `C:\Users\mrobe\Documents\Projects\minipedigree\MiniPedigree-latest`
-**Status:** Ready — awaiting user's go-ahead to begin Phase 0
+**Status:** Phase 0 in progress — types extended, persist/App.tsx updated, WESCO demo data created, lib modules building in parallel sub-agents
 
 ## Architecture: Two-Tier Build Loop
 - Inner Loop (builder) — every 10m: Check -> Test -> Advance -> Repeat. Self-pauses both crons at a genuine stopping point.
@@ -13,12 +13,16 @@
 
 ### Phase 0: Foundations and Type Expansion
 Goal: Add types, persistence fields, utility derivations, and tests without large UI changes.
-- [ ] Extend `src/types.ts` with target object interfaces (ControlManifest, SystemManifest, AgentBirthCertificate, AiCouncilRequest, EvidenceRecord, RiskFinding)
-- [ ] Extend `Workspace` with optional arrays for all new types
-- [ ] Update `src/lib/persist.ts` serialization/deserialization
-- [ ] Add empty utility modules with `new-` prefix and tests
-- [ ] Add demo seed helpers for WESCO-style data (Oracle, controls, WESCO people)
+- [x] Extend `src/types.ts` with target object interfaces (ControlManifest, SystemManifest, AgentBirthCertificate, AiCouncilRequest, EvidenceRecord, RiskFinding, ExternalAgentRecord, AgentManifest, HumanManifest)
+- [x] Extend `Workspace` with optional arrays for all new types
+- [x] Extend `ResponsibilityRow` with relatedControlIds/relatedSystemIds/relatedAgentIds
+- [x] Extend `TaskItem` with relatedControls/relatedSystems/soxRelevant
+- [x] Update `src/lib/persist.ts` serialization/deserialization
+- [x] Update `src/App.tsx` state management for all new workspace fields
+- [x] Create `src/lib/wescoDemoData.ts` with WESCO seed data (Oracle, Workday, Salesforce, SOX controls, risk findings, AI Council requests)
+- [~] Create 10 utility lib modules with tests (controls, systems, agentInventory, birthCertificate, aiCouncil, approvalGates, riskFindings, evidence, agentTransfer, externalAgents)
 - [ ] npm run typecheck && npm run test green
+- [ ] Commit and push Phase 0
 
 ### Phase 1: Agent Inventory + System Inventory
 Goal: Answer WESCO's "show me all agents touching Oracle" question.

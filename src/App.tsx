@@ -26,7 +26,7 @@ import { DiscoveryPlanPanel } from "./components/DiscoveryPlanPanel";
 import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
 import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
 import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewEditPatch, type ReviewQueueItem } from "./lib/provenance";
-import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
+import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, ControlManifest, SystemManifest, AiCouncilRequest, AgentBirthCertificate, EvidenceRecord, RiskFinding, ExternalAgentRecord, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
@@ -349,7 +349,15 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; contextWarning?: string; taskSpecs?: Record<string, TaskSpec>; workflowTemplates?: WorkflowTemplate[]; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string }) => {
+  const [controls, setControls] = useState<ControlManifest[]>([]);
+  const [systems, setSystems] = useState<SystemManifest[]>([]);
+  const [aiCouncilRequests, setAiCouncilRequests] = useState<AiCouncilRequest[]>([]);
+  const [birthCertificates, setBirthCertificates] = useState<AgentBirthCertificate[]>([]);
+  const [evidenceRecords, setEvidenceRecords] = useState<EvidenceRecord[]>([]);
+  const [riskFindings, setRiskFindings] = useState<RiskFinding[]>([]);
+  const [externalAgents, setExternalAgents] = useState<ExternalAgentRecord[]>([]);
+
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; contextWarning?: string; taskSpecs?: Record<string, TaskSpec>; workflowTemplates?: WorkflowTemplate[]; mcpLibrary?: CompanyMcpServer[]; registry?: AgentRegistryEntry[]; auditLog?: StackAuditRecord[]; events?: WorkspaceAuditEvent[]; discoveryPlan?: DiscoveryPlan; sessionBriefs?: SessionBrief[]; questionBacklog?: QuestionBacklogItem[]; meetings?: RegisteredMeeting[]; signalLedger?: StackSignal[]; rosterValidatedAt?: string; controls?: ControlManifest[]; systems?: SystemManifest[]; aiCouncilRequests?: AiCouncilRequest[]; birthCertificates?: AgentBirthCertificate[]; evidenceRecords?: EvidenceRecord[]; riskFindings?: RiskFinding[]; externalAgents?: ExternalAgentRecord[] }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
@@ -371,6 +379,13 @@ export default function App() {
     setMeetings(ws.meetings ?? []);
     setSignalLedger(ws.signalLedger ?? []);
     setRosterValidatedAt(ws.rosterValidatedAt);
+    setControls(ws.controls ?? []);
+    setSystems(ws.systems ?? []);
+    setAiCouncilRequests(ws.aiCouncilRequests ?? []);
+    setBirthCertificates(ws.birthCertificates ?? []);
+    setEvidenceRecords(ws.evidenceRecords ?? []);
+    setRiskFindings(ws.riskFindings ?? []);
+    setExternalAgents(ws.externalAgents ?? []);
     setCompanyProfileOpen(false);
     setSelectedId(null);
     setDrawerOpen(false);
@@ -430,12 +445,12 @@ export default function App() {
     if (!(currentWorkspaceId && people.length && profile)) return;
     const handle = setTimeout(() => {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan: discoveryPlan ?? undefined, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, controls, systems, aiCouncilRequests, birthCertificates, evidenceRecords, riskFindings, externalAgents, createdAt: new Date().toISOString() },
         profile.email,
       );
     }, 800);
     return () => clearTimeout(handle);
-  }, [people, pedigree, workspaceName, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, contextWarning, taskSpecs, workflowTemplates, mcpLibrary, registry, auditLog, events, discoveryPlan, sessionBriefs, questionBacklog, meetings, signalLedger, rosterValidatedAt, controls, systems, aiCouncilRequests, birthCertificates, evidenceRecords, riskFindings, externalAgents, currentWorkspaceId, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
