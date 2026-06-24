@@ -3,7 +3,7 @@
 **Spec source:** `docs/wesco-enterprise-governance-prd.md`
 **Repo:** `https://github.com/mattrob333/MiniPedigree` (branch: `wesco-enterprise-governance`)
 **Workspace:** `C:\\Users\\mrobe\\Documents\\Projects\\minipedigree\\MiniPedigree-latest`
-**Status:** Phase 4 complete, Phase 5 wired ✅ — 524 tests pass, typecheck clean
+**Status:** Phases 1-7 complete ✅ — 524 tests pass, typecheck clean
 
 ## Architecture: Two-Tier Build Loop
 - Inner Loop (builder) — every 10m: Check -> Test -> Advance -> Repeat.
@@ -54,9 +54,10 @@
 - [ ] Approve/restrict/sandbox/reject
 
 ### Phase 8: WESCO Demo Kit
-- [ ] Demo seed data with Oracle/SOX/realistic names
-- [ ] Smoke tests for demo beats
-- [ ] Documentation updates
+- [x] Demo seed data with Oracle/SOX/realistic names
+- [x] Demo script for end-to-end beats (docs/wesco-demo-script.md)
+- [ ] Smoke tests for demo flow
+- [ ] Documentation updates (QA checklist in demo script)
 
 ## Completed Tasks
 - Phase 0: Foundation (types, persistence, lib, 524 tests)
@@ -65,12 +66,14 @@
 - Phase 3: Birth Certificate + Approval Gates (ApprovalChecklist, AgentBirthCertificateView with export)
 - Phase 4: AI Council Intake (AiCouncilScreen, request form, queue, status workflows, approve/reject, convertApprovedToManifest, 11 tests)
 - Phase 5: Risk Dashboard + Evidence Library (RiskDashboard, EvidenceLibraryScreen wired into App.tsx, riskFindings/evidence libs, demo data, export)
+- Phase 6: Orphan + Transfer Workflows (AgentTransferDrawer with authority comparison, candidate selection, transfer evidence, wired into AgentInventoryScreen)
+- Phase 7: Agent Customs (AgentCustomsScreen with inline import form, classification flags, approve/restrict/sandbox/reject, wired into App.tsx, 43 externalAgents tests)
 
 ## Open Issues / Blockers
 _(none yet)_
 
 ## Next Action
-Begin Phase 6: Orphan + Transfer Workflows — Build AgentTransferDrawer with authority comparison, approval for mismatches, transfer evidence generation.
+Phase 8: WESCO Demo Kit — wire demo seed data to tour/onboarding, add end-to-end smoke tests, final QA. Minor remaining items (doc updates, smoke tests).
 
 ## Pitfalls / Notes for Future Ticks
 - Commit each green slice before starting the next file.
@@ -81,4 +84,4 @@ Begin Phase 6: Orphan + Transfer Workflows — Build AgentTransferDrawer with au
 - Preserve deterministic no-API-key behavior.
 - Use `npm run typecheck && npm run test` as the quality gate.
 
-**Last Updated:** 2026-06-23 — Phase 4 complete (pending manifest conversion), Phase 5 components built
+**Last Updated:** 2026-06-23 — Phases 1-7 complete, Phase 8 remaining (demo docs)

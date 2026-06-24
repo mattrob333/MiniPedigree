@@ -76,25 +76,24 @@
 - [ ] Tests: risk derivation, evidence export, packet generation
 
 ### Phase 6: Orphan + Transfer Workflows
-- [ ] Add orphan findings from lifecycle/offboarding
-- [ ] Build AgentTransferDrawer.tsx
-- [ ] Implement authority comparison
-- [ ] Require approval for mismatches
-- [ ] Generate transfer evidence
-- [ ] Re-export and integrate in App.tsx navigation
-- [ ] Tests: orphan detection, transfer comparison, evidence
+- [x] Orphan findings from lifecycle/offboarding
+- [x] Build AgentTransferDrawer.tsx
+- [x] Implement authority comparison
+- [x] Require approval for mismatches
+- [x] Generate transfer evidence
+- [x] Re-export and integrate in App.tsx navigation
+- [x] Tests: orphan detection, transfer comparison, evidence
 
 ### Phase 7: Customs and Immigration
-- [ ] Build AgentCustomsScreen.tsx
-- [ ] Build ExternalAgentImportDrawer.tsx (form/paste/upload)
-- [ ] Implement classification (missing owner/purpose/scope)
-- [ ] Implement approve/restrict/sandbox/reject
-- [ ] Re-export and integrate in App.tsx navigation
-- [ ] Tests: import, classification, action states
+- [x] Build AgentCustomsScreen.tsx
+- [x] Build ExternalAgentImportDrawer.tsx (form/paste/upload)
+- [x] Implement classification (missing owner/purpose/scope)
+- [x] Implement approve/restrict/sandbox/reject
+- [x] Re-export and integrate in App.tsx navigation
+- [x] Tests: import, classification, action states
 
 ### Phase 8: WESCO Demo Kit
-- [ ] Add WESCO seed data (Oracle, controls, realistic names)
-- [ ] Add demo script for end-to-end beats
-- [ ] Smoke tests for demo flow
+- [x] Add WESCO seed data (Oracle, controls, realistic names)
+- [x] Add demo script for end-to-end beats
+- [ ] Smoke tests for demo flow (manual QA checklist in docs/wesco-demo-script.md)
 - [ ] Documentation updates
-- [ ] Manual QA checklist verification
