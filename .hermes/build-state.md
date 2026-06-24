@@ -3,11 +3,11 @@
 **Spec source:** `docs/wesco-enterprise-governance-prd.md`
 **Repo:** `https://github.com/mattrob333/MiniPedigree` (branch: `claude/sleepy-ramanujan-c79dxw`)
 **Workspace:** `C:\Users\mrobe\Documents\Projects\minipedigree\MiniPedigree-latest`
-**Status:** Phase 0 in progress — types extended, persist/App.tsx updated, WESCO demo data created, lib modules building in parallel sub-agents
+**Status:** Phase 0 complete ✓ — building Phases 1-8 via two-tier cron loops
 
 ## Architecture: Two-Tier Build Loop
-- Inner Loop (builder) — every 10m: Check -> Test -> Advance -> Repeat. Self-pauses both crons at a genuine stopping point.
-- Outer Loop (supervisor) — every 30m: active supervisor (audits + writes corrections + trivial fixes + escalation).
+- Inner Loop (builder) — every 10m: Check -> Test -> Advance -> Repeat.
+- Outer Loop (supervisor) — every 30m: active supervisor (audits + writes corrections + escalation).
 
 ## Implementation Phases (from PRD §10)
 
@@ -20,9 +20,9 @@ Goal: Add types, persistence fields, utility derivations, and tests without larg
 - [x] Update `src/lib/persist.ts` serialization/deserialization
 - [x] Update `src/App.tsx` state management for all new workspace fields
 - [x] Create `src/lib/wescoDemoData.ts` with WESCO seed data (Oracle, Workday, Salesforce, SOX controls, risk findings, AI Council requests)
-- [~] Create 10 utility lib modules with tests (controls, systems, agentInventory, birthCertificate, aiCouncil, approvalGates, riskFindings, evidence, agentTransfer, externalAgents)
-- [ ] npm run typecheck && npm run test green
-- [ ] Commit and push Phase 0
+- [x] Create 10 utility lib modules with tests (controls, systems, agentInventory, birthCertificate, aiCouncil, approvalGates, riskFindings, evidence, agentTransfer, externalAgents)
+- [x] npm run typecheck && npm run test green — 513 tests, 40 files, ALL PASSING
+- [x] Commit and push Phase 0
 
 ### Phase 1: Agent Inventory + System Inventory
 Goal: Answer WESCO's "show me all agents touching Oracle" question.
