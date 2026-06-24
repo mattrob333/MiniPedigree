@@ -13,7 +13,7 @@ The OUTER loop appends prioritized directives here on detecting drift, guardrail
 
 ## Resolved Corrections
 
-### [LOW] build-state.md Phase 4 line shows pending conversion as undone — RESOLVED (commit <pending>)
+### [LOW] build-state.md Phase 4 line shows pending conversion as undone — RESOLVED (commit 09c0750)
 **Fix applied:** Changed line 37 from `[ ]` to `[x]` to match `convertApprovedToManifest()` in aiCouncil.ts (commit 4085cf4).
 
 ### [MEDIUM] TASKS.md and build-state.md are stale — RESOLVED (commit b67c865)

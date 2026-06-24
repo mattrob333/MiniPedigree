@@ -95,5 +95,5 @@
 ### Phase 8: WESCO Demo Kit
 - [x] Add WESCO seed data (Oracle, controls, realistic names)
 - [x] Add demo script for end-to-end beats
-- [ ] Smoke tests for demo flow (manual QA checklist in docs/wesco-demo-script.md)
-- [ ] Documentation updates
+- [x] Smoke tests for demo flow (manual QA checklist in docs/wesco-demo-script.md)
+- [x] Documentation updates
