@@ -27,6 +27,7 @@ import { DigestScreen, type DigestStatePatch } from "./components/DigestScreen";
 import { MemberWorkspace, type MemberStatePatch } from "./components/MemberWorkspace";
 import { AgentInventoryScreen } from "./components/AgentInventoryScreen";
 import { SystemsScreen } from "./components/SystemsScreen";
+import { ControlsScreen } from "./components/ControlsScreen";
 import { buildReviewQueue, confirmReviewItems, editReviewItem, type ReviewEditPatch, type ReviewQueueItem } from "./lib/provenance";
 import type { AgentRecord, AgentRegistryEntry, CompanyMcpServer, ControlManifest, SystemManifest, AiCouncilRequest, AgentBirthCertificate, EvidenceRecord, RiskFinding, ExternalAgentRecord, DiscoveryPlan, ParsedMap, PedigreeState, Person, PersonLifecycleStatus, QuestionBacklogItem, RegisteredMeeting, SessionBrief, SessionSchedule, StackAuditRecord, StackChangeProposal, StackSignal, UserProfile, UserRole, WorkspaceAuditEvent, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
@@ -1358,15 +1359,16 @@ export default function App() {
             )}
             {tab === "systems" && <SystemsScreen systems={systems} />}
             {tab === "controls" && (
-              <div className="screen-panel placeholder-panel">
-                <div className="empty-state">
-                  <Icon name="shield" size={32} stroke="var(--muted, #a0aec0)" />
-                  <h3>Controls — Coming in Phase 2</h3>
-                  <p>SOX-aware control manifests, control-to-agent lineage, and SOX relevance toggles will appear here.</p>
-                  <p className="empty-hint">Why this matters: Controls define the policies and checks that govern agent behavior, especially in SOX-relevant systems.</p>
-                  <p className="empty-hint">What to do: Continue mapping systems and agents — controls become actionable once your system inventory is complete.</p>
-                </div>
-              </div>
+              <ControlsScreen
+                controls={controls}
+                systems={systems}
+                onAddControl={(ctrl) => setControls((prev) => [...prev, ctrl])}
+                onUpdateControl={(id, patch) =>
+                  setControls((prev) =>
+                    prev.map((c) => (c.id === id ? { ...c, ...patch, updatedAt: new Date().toISOString() } : c)),
+                  )
+                }
+              />
             )}
             {tab === "council" && (
               <div className="screen-panel placeholder-panel">

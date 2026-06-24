@@ -2747,5 +2747,25 @@ details[open] > .brief-section-head .brief-section-chevron { transform: rotate(9
 .approval-list li.gate-pending { color: var(--orange, #ed8936); }
 .approver { font-size: 12px; color: var(--text-4); }
 
+/* ── Controls screen ── */
+.controls-screen .panel-header { flex-shrink: 0; }
+.inline-form {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-1);
+  background: var(--bg-2);
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.toggle-row input[type="checkbox"] { margin: 0; }
+.badge-active { background: rgba(72, 187, 120, 0.12); color: var(--green, #48bb78); }
+.badge-draft { background: var(--border-2, #3a3a4a); color: var(--text-4); }
+.badge-retired { background: var(--border-2, #3a3a4a); color: var(--text-4); }
+
 /* ── Placeholder panels ── */
 .placeholder-panel { flex: 1; }

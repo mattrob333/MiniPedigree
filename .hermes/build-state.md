@@ -1,9 +1,9 @@
 # Build State: Pedigree WESCO Enterprise Governance
 
 **Spec source:** `docs/wesco-enterprise-governance-prd.md`
-**Repo:** `https://github.com/mattrob333/MiniPedigree` (branch: `claude/sleepy-ramanujan-c79dxw`)
+**Repo:** `https://github.com/mattrob333/MiniPedigree` (branch: `wesco-enterprise-governance`)
 **Workspace:** `C:\Users\mrobe\Documents\Projects\minipedigree\MiniPedigree-latest`
-**Status:** Phase 0 complete ✓ — building Phases 1-8 via two-tier cron loops
+**Status:** Phase 1 complete ✅ — 513 tests pass, typecheck clean
 
 ## Architecture: Two-Tier Build Loop
 - Inner Loop (builder) — every 10m: Check -> Test -> Advance -> Repeat.
@@ -12,24 +12,19 @@
 ## Implementation Phases (from PRD §10)
 
 ### Phase 0: Foundations and Type Expansion
-Goal: Add types, persistence fields, utility derivations, and tests without large UI changes.
-- [x] Extend `src/types.ts` with target object interfaces (ControlManifest, SystemManifest, AgentBirthCertificate, AiCouncilRequest, EvidenceRecord, RiskFinding, ExternalAgentRecord, AgentManifest, HumanManifest)
-- [x] Extend `Workspace` with optional arrays for all new types
-- [x] Extend `ResponsibilityRow` with relatedControlIds/relatedSystemIds/relatedAgentIds
-- [x] Extend `TaskItem` with relatedControls/relatedSystems/soxRelevant
-- [x] Update `src/lib/persist.ts` serialization/deserialization
-- [x] Update `src/App.tsx` state management for all new workspace fields
-- [x] Create `src/lib/wescoDemoData.ts` with WESCO seed data (Oracle, Workday, Salesforce, SOX controls, risk findings, AI Council requests)
-- [x] Create 10 utility lib modules with tests (controls, systems, agentInventory, birthCertificate, aiCouncil, approvalGates, riskFindings, evidence, agentTransfer, externalAgents)
-- [x] npm run typecheck && npm run test green — 513 tests, 40 files, ALL PASSING
+- [x] All types, persistence, lib modules, demo data, 513 tests — ALL PASSING
 - [x] Commit and push Phase 0
 
 ### Phase 1: Agent Inventory + System Inventory
 Goal: Answer WESCO's "show me all agents touching Oracle" question.
-- [ ] Build SystemManifest model and system derivation
-- [ ] Build AgentInventoryScreen with filters
-- [ ] Build SystemsScreen with detail drawer
-- [ ] Link from agent rows to Manifest/Birth Certificate placeholder
+- [x] Build SystemManifest model and system derivation (Phase 0)
+- [x] Build AgentInventoryScreen with filters (search, system, department, risk, SOX, orphaned, stale)
+- [x] Build SystemsScreen with detail drawer (clickable system cards, detail overlay)
+- [x] Add WESCO governance tab bar (7 tabs: Agents, Systems, Controls, AI Council, Risk, Evidence, Customs)
+- [x] Wire filters using existing flattenAgents/filterAgents/sortAgents from agentInventory.ts
+- [x] Placeholder screens for Phases 2-7 with empty-state guidance
+- [x] Link from agent rows to Manifest screen placeholder
+- [x] Commit and push Phase 1 (commit `4e72409`)
 
 ### Phase 2: Control Manifest + SOX Mapping
 Goal: Make controls first-class and link them into agent lineage.
@@ -39,14 +34,12 @@ Goal: Make controls first-class and link them into agent lineage.
 - [ ] Agent Manifest shows related controls
 
 ### Phase 3: Birth Certificate + Approval Gates
-Goal: Turn approved manifests into immutable proof records.
 - [ ] Approval gate derivation
 - [ ] Approval checklist on Manifest
 - [ ] Birth Certificate creation on approval
 - [ ] Birth Certificate view and export
 
 ### Phase 4: AI Council Intake
-Goal: Represent WESCO's manual request queue.
 - [ ] Intake form
 - [ ] Reviewer queue
 - [ ] Statuses and prioritization
@@ -54,39 +47,36 @@ Goal: Represent WESCO's manual request queue.
 - [ ] Convert approved request to task/manifest
 
 ### Phase 5: Risk Dashboard + Evidence Library
-Goal: Make governance status actionable and exportable.
 - [ ] Risk derivation rules
 - [ ] Risk Dashboard with clickable cards
 - [ ] Evidence Library with filter/export
 - [ ] Evidence packet exports by agent/control/system
 
 ### Phase 6: Orphan + Transfer Workflows
-Goal: Handle joiner/mover/leaver operations.
 - [ ] Orphan findings from lifecycle/offboarding
 - [ ] Transfer drawer with authority comparison
 - [ ] Approval for mismatches
 - [ ] Transfer evidence generation
 
 ### Phase 7: Customs and Immigration
-Goal: Import and govern outside agents.
 - [ ] External agent import (form/paste/upload)
 - [ ] Classification (missing owner/purpose/scope)
 - [ ] Approve/restrict/sandbox/reject
 
 ### Phase 8: WESCO Demo Kit
-Goal: Complete WESCO-specific end-to-end demo.
 - [ ] Demo seed data with Oracle/SOX/realistic names
 - [ ] Smoke tests for demo beats
 - [ ] Documentation updates
 
 ## Completed Tasks
-_(none yet)_
+- Phase 0 foundation complete (513 tests, 40 files, ALL PASSING)
+- Phase 1 Agent Inventory + System Inventory complete (AgentInventoryScreen, SystemsScreen, SystemDetailDrawer, 7 WESCO tabs in navigation)
 
 ## Open Issues / Blockers
 _(none yet)_
 
 ## Next Action
-Wait for user to signal go-ahead, then begin Phase 0: create internal types for ControlManifest, SystemManifest, AgentBirthCertificate, AiCouncilRequest, EvidenceRecord, RiskFinding.
+Begin Phase 2: Build ControlsScreen with SOX-aware control manifests, control-to-agent lineage, SOX relevance toggles. Create `src/components/ControlsScreen.tsx`, `src/components/ControlDetailDrawer.tsx`, extend `src/lib/controls.ts` for CRUD.
 
 ## Pitfalls / Notes for Future Ticks
 - Commit each green slice before starting the next file (a tick cut off mid-write leaves a broken, uncommitted facade).
@@ -97,4 +87,4 @@ Wait for user to signal go-ahead, then begin Phase 0: create internal types for 
 - Preserve deterministic no-API-key behavior.
 - Use `npm run typecheck && npm run test` as the quality gate.
 
-**Last Updated:** 2026-06-23 — Initial setup with all 8 phases from PRD
+**Last Updated:** 2026-06-23 — Phase 1 complete, moving to Phase 2
