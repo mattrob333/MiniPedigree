@@ -46,6 +46,12 @@ Skip this to launch faster; the app persists to `localStorage` without it. Add i
 > can read/write). Workspaces are keyed by company, so the same company shares one workspace. This is
 > fine for demos and single-operator use, but **before storing real/regulated client data**, add
 > Supabase Auth (magic link or SSO) and tighten the RLS policies to per-user/per-org access.
+>
+> The same applies to the API routes: `/api/discovery/parse`, `/api/agents/generate`,
+> `/api/company/profile/parse`, and `/api/transcribe` are **unauthenticated** and spend OpenAI /
+> Deepgram credits. For anything beyond a demo, put them behind auth (e.g. verify a Supabase JWT
+> in the handlers) and add rate limiting (e.g. Vercel WAF rules or an upstash-style limiter),
+> or anyone who finds the URL can burn the API budget.
 
 ---
 

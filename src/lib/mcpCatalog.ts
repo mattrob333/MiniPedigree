@@ -21,7 +21,6 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
   { name: "Linear MCP", keywords: ["linear", "issue", "sprint", "backlog", "roadmap"], default_scope: "read_only", risk: "low", reason: "Reading issues and roadmap items" },
   { name: "GitHub MCP", keywords: ["github", "git", "repo", "pull request", "pr", "code review"], default_scope: "read_only", risk: "medium", reason: "Reading repositories and pull requests" },
   { name: "Notion MCP", keywords: ["notion", "wiki", "notes", "knowledge base", "doc"], default_scope: "read_only", risk: "low", reason: "Reading internal notes and wikis" },
-  { name: "Zendesk MCP", keywords: ["zendesk"], default_scope: "read_only", risk: "medium", reason: "Reading support data" },
 ];
 
 /**

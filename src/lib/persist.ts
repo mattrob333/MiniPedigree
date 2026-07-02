@@ -66,6 +66,11 @@ export function setLastWorkspaceId(email: string | undefined, id: string | null)
   }
 }
 
+// Remote saves are serialized per workspace id: App fires saveWorkspace on
+// every state change without awaiting, so concurrent upserts could otherwise
+// land out of order and leave a stale snapshot in Supabase.
+const remoteSaveChain = new Map<string, Promise<void>>();
+
 /** Persist a workspace (per id) and update this owner's index + last-open pointer. */
 export async function saveWorkspace(ws: Workspace, email?: string): Promise<void> {
   const stamped: Workspace = { ...ws, ownerEmail: email, updatedAt: new Date().toISOString() };
@@ -82,50 +87,43 @@ export async function saveWorkspace(ws: Workspace, email?: string): Promise<void
   setLastWorkspaceId(email, ws.id);
 
   if (supabaseEnabled && supabase) {
-    try {
-      await supabase.from("workspaces").upsert({
-        id: ws.id,
-        name: ws.name,
-        owner_email: email ?? null,
-        snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext },
-        updated_at: stamped.updatedAt,
-      });
-      const contextDocuments = ws.companyContext?.contextDocuments ?? [];
-      if (contextDocuments.length) {
-        await supabase.from("company_context_documents").upsert(contextDocuments.map((doc) => ({
-          id: doc.id,
-          workspace_id: ws.id,
-          bucket: doc.bucket,
-          file_name: doc.fileName,
-          title: doc.title ?? doc.fileName,
-          mime_type: doc.mimeType ?? null,
-          size_bytes: doc.sizeBytes ?? null,
-          content_text: doc.text,
-          uploaded_at: doc.uploadedAt,
-          source_id: doc.sourceId ?? null,
-          updated_at: stamped.updatedAt,
-        })));
-      }
-    } catch (e) {
+    const prev = remoteSaveChain.get(ws.id) ?? Promise.resolve();
+    const next = prev.then(() => pushWorkspaceRemote(stamped, email)).catch((e) => {
       console.warn("Supabase save failed, kept local copy", e);
-    }
+    });
+    remoteSaveChain.set(ws.id, next);
+    await next;
   }
 }
 
-export async function loadWorkspace(id: string): Promise<Workspace | null> {
-  if (supabaseEnabled && supabase) {
-    try {
-      const { data } = await supabase.from("workspaces").select("id,name,owner_email,snapshot").eq("id", id).maybeSingle();
-      if (data?.snapshot) {
-        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"] };
-        if (snap.people?.length) {
-          return { id: data.id, name: data.name, people: snap.people, pedigree: snap.pedigree, companyContext: snap.companyContext, ownerEmail: data.owner_email ?? undefined, createdAt: new Date().toISOString() };
-        }
-      }
-    } catch (e) {
-      console.warn("Supabase load failed, trying local", e);
-    }
+async function pushWorkspaceRemote(ws: Workspace, email?: string): Promise<void> {
+  if (!supabase) return;
+  await supabase.from("workspaces").upsert({
+    id: ws.id,
+    name: ws.name,
+    owner_email: email ?? null,
+    snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext },
+    updated_at: ws.updatedAt,
+  });
+  const contextDocuments = ws.companyContext?.contextDocuments ?? [];
+  if (contextDocuments.length) {
+    await supabase.from("company_context_documents").upsert(contextDocuments.map((doc) => ({
+      id: doc.id,
+      workspace_id: ws.id,
+      bucket: doc.bucket,
+      file_name: doc.fileName,
+      title: doc.title ?? doc.fileName,
+      mime_type: doc.mimeType ?? null,
+      size_bytes: doc.sizeBytes ?? null,
+      content_text: doc.text,
+      uploaded_at: doc.uploadedAt,
+      source_id: doc.sourceId ?? null,
+      updated_at: ws.updatedAt,
+    })));
   }
+}
+
+function loadLocalWorkspace(id: string): Workspace | null {
   try {
     const raw = localStorage.getItem(wsKey(id));
     if (raw) return JSON.parse(raw) as Workspace;
@@ -133,6 +131,41 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
     /* ignore */
   }
   return null;
+}
+
+export async function loadWorkspace(id: string): Promise<Workspace | null> {
+  const local = loadLocalWorkspace(id);
+  if (supabaseEnabled && supabase) {
+    try {
+      const { data } = await supabase
+        .from("workspaces")
+        .select("id,name,owner_email,snapshot,created_at,updated_at")
+        .eq("id", id)
+        .maybeSingle();
+      if (data?.snapshot) {
+        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"] };
+        // If a remote save failed (or hasn't landed yet) the local copy can be
+        // newer than the remote snapshot — prefer whichever was updated last.
+        const remoteUpdated = data.updated_at ? Date.parse(data.updated_at) : 0;
+        const localUpdated = local?.updatedAt ? Date.parse(local.updatedAt) : 0;
+        if (snap.people?.length && remoteUpdated >= localUpdated) {
+          return {
+            id: data.id,
+            name: data.name,
+            people: snap.people,
+            pedigree: snap.pedigree,
+            companyContext: snap.companyContext,
+            ownerEmail: data.owner_email ?? undefined,
+            createdAt: data.created_at ?? local?.createdAt ?? new Date().toISOString(),
+            updatedAt: data.updated_at ?? undefined,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Supabase load failed, trying local", e);
+    }
+  }
+  return local;
 }
 
 export async function deleteWorkspace(id: string, email?: string): Promise<void> {
@@ -145,6 +178,8 @@ export async function deleteWorkspace(id: string, email?: string): Promise<void>
   if (getLastWorkspaceId(email) === id) setLastWorkspaceId(email, null);
   if (supabaseEnabled && supabase) {
     try {
+      // Remove dependent document rows first (they hold full document text).
+      await supabase.from("company_context_documents").delete().eq("workspace_id", id);
       await supabase.from("workspaces").delete().eq("id", id);
     } catch {
       /* ignore */

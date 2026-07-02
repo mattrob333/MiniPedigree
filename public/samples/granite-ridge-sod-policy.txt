@@ -1,0 +1,44 @@
+Granite Ridge Distribution — Segregation of Duties Policy (excerpt for agent grounding)
+
+Scope: applies to all humans AND AI agents acting on ERP (SAP S/4HANA), WMS,
+CRM, and identity systems. An agent inherits its owner's SOD constraints and
+may never combine duties its owner is prohibited from combining.
+
+PROHIBITED DUTY COMBINATIONS (no single person or agent may hold both sides):
+
+SOD-01  Vendor master data maintenance  ×  Invoice/payment approval
+        (creating or changing vendor records, incl. bank details, must be
+        separate from approving invoices or releasing payment runs)
+
+SOD-02  Purchase order creation/approval  ×  Goods receipt posting
+        (whoever orders may not also confirm receipt)
+
+SOD-03  Goods receipt posting  ×  Invoice processing (3-way match execution)
+
+SOD-04  Customer credit limit changes  ×  Sales order entry or release of
+        blocked orders for the same account
+
+SOD-05  Price file / discount maintenance  ×  Customer credit or rebate
+        approval
+
+SOD-06  ERP role provisioning  ×  Approval of one's own access, or access
+        certification of accounts one provisioned
+
+SOD-07  Journal entry creation  ×  Journal entry approval / period close
+
+SOD-08  RMA / credit memo creation  ×  Credit memo approval above $1,000
+
+APPROVAL THRESHOLDS:
+- Payment runs: AP Manager approval required; > $250,000 requires Controller.
+- Customer discounts beyond list: Branch Manager to 5%; VP Sales above 5%.
+- Vendor bank detail changes: callback verification + Controller approval.
+- New ERP roles: line manager + IT Security & Access Manager approval;
+  quarterly user access reviews are mandatory and evidence must be retained.
+
+AGENT-SPECIFIC RULES:
+- Agents run read-only or draft-only by default. Any write to a system of
+  record requires a named human approver and an audit event.
+- An agent detecting an SOD conflict must stop and escalate to the Chief
+  Compliance Officer (Elena Vasquez); it must not proceed "just this once."
+- All agent actions must carry the manifest trace_id and be retained 90 days
+  minimum (7 years for financial-close artifacts).

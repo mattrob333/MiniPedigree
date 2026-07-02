@@ -220,6 +220,14 @@ export default function App() {
   const [pedigree, setPedigree] = useState<PedigreeState>({});
   const [workspaceName, setWorkspaceName] = useState("Untitled Workspace");
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [workspaceCreatedAt, setWorkspaceCreatedAt] = useState<string | null>(null);
+  // Refs for async handlers that resolve after a possible workspace switch.
+  const currentWorkspaceIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentWorkspaceIdRef.current = currentWorkspaceId;
+  }, [currentWorkspaceId]);
+  // Monotonic token so only the most recent workspace-open request wins.
+  const openRequestRef = useRef(0);
   const [companyContext, setCompanyContext] = useState<CompanyContext | undefined>(undefined);
   const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
@@ -254,11 +262,12 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; createdAt?: string }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
     setCurrentWorkspaceId(ws.id);
+    setWorkspaceCreatedAt(ws.createdAt ?? new Date().toISOString());
     setCompanyContext(ws.companyContext);
     setCompanyProfileOpen(false);
     setSelectedId(null);
@@ -279,8 +288,10 @@ export default function App() {
     setWorkspaces(listWorkspaces(p.email));
     const lastId = getLastWorkspaceId(p.email);
     if (lastId) {
+      const token = ++openRequestRef.current;
       loadWorkspace(lastId)
         .then((ws) => {
+          if (openRequestRef.current !== token) return; // superseded by a user action
           if (ws && ws.people.length) openWorkspaceState(ws);
           else setScreen("home");
         })
@@ -297,11 +308,11 @@ export default function App() {
     if (booting) return;
     if (currentWorkspaceId && people.length && profile) {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, createdAt: new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, createdAt: workspaceCreatedAt ?? new Date().toISOString() },
         profile.email,
       );
     }
-  }, [people, pedigree, workspaceName, companyContext, currentWorkspaceId, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, currentWorkspaceId, workspaceCreatedAt, profile, booting]);
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -331,7 +342,9 @@ export default function App() {
   };
 
   const openWorkspace = (id: string) => {
+    const token = ++openRequestRef.current;
     loadWorkspace(id).then((ws) => {
+      if (openRequestRef.current !== token) return; // a newer open won
       if (ws) {
         openWorkspaceState(ws);
         setLastWorkspaceId(profile?.email, id);
@@ -348,11 +361,11 @@ export default function App() {
     refreshWorkspaces();
   };
 
+  // The auto-persist effect above saves the workspace whenever companyContext
+  // changes, so setting state is enough (and avoids stamping a fresh createdAt
+  // or saving stale closure copies of people/pedigree).
   const persistCompanyContext = (ctx: CompanyContext) => {
     setCompanyContext(ctx);
-    if (currentWorkspaceId) {
-      void saveWorkspace({ id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext: ctx, createdAt: new Date().toISOString() }, profile?.email);
-    }
   };
 
   const onSaveCompanyProfile = (ctx: CompanyContext) => {
@@ -363,19 +376,25 @@ export default function App() {
 
   const onUploadContextFiles = async (files: FileList | null, bucket: CompanyContextDocumentBucket) => {
     if (!files?.length) return;
-    const current = companyContext ?? { company: workspaceName, whatWeDo: "" };
+    const wsAtStart = currentWorkspaceIdRef.current;
     const uploads = await Promise.all(Array.from(files).map((file) => readContextFile(file, bucket)));
-    const newNotes = uploads
-      .map((upload) => upload.rawNote)
-      .filter((note) => note && !(current.rawNotes ?? "").includes(note.split("\n")[0]));
-    const next: CompanyContext = {
-      ...current,
-      rawNotes: [current.rawNotes?.trim(), ...newNotes].filter(Boolean).join("\n\n"),
-      researchSources: mergeResearchSources(current.researchSources, uploads.map((upload) => upload.source)),
-      contextDocuments: mergeContextDocuments(current.contextDocuments, uploads.map((upload) => upload.document)),
-      updatedAt: new Date().toISOString(),
-    };
-    persistCompanyContext(next);
+    // Don't apply this company's uploads to a different company opened mid-read.
+    if (currentWorkspaceIdRef.current !== wsAtStart) return;
+    // Functional update so two quick uploads (e.g. SOD docs then policy docs)
+    // merge instead of the second overwriting the first.
+    setCompanyContext((cur) => {
+      const current = cur ?? { company: workspaceName, whatWeDo: "" };
+      const newNotes = uploads
+        .map((upload) => upload.rawNote)
+        .filter((note) => note && !(current.rawNotes ?? "").includes(note.split("\n")[0]));
+      return {
+        ...current,
+        rawNotes: [current.rawNotes?.trim(), ...newNotes].filter(Boolean).join("\n\n"),
+        researchSources: mergeResearchSources(current.researchSources, uploads.map((upload) => upload.source)),
+        contextDocuments: mergeContextDocuments(current.contextDocuments, uploads.map((upload) => upload.document)),
+        updatedAt: new Date().toISOString(),
+      };
+    });
     pushToast("Context files loaded", `${uploads.length} ${contextBucketLabel(bucket)} file${uploads.length === 1 ? "" : "s"} added to the profile store`, true);
   };
 
@@ -420,9 +439,10 @@ export default function App() {
     const id = newWorkspaceId(name);
     const ped = initialPedigreeState(result.people);
     const ctx: CompanyContext = { company: name, whatWeDo: "" };
-    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt: new Date().toISOString() }, profile?.email);
+    const createdAt = new Date().toISOString();
+    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt }, profile?.email);
     setLastWorkspaceId(profile?.email, id);
-    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx });
+    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt });
     refreshWorkspaces();
     const warn = result.warnings.length ? ` · ${result.warnings.length} warning(s)` : "";
     pushToast("Company created", `${result.people.length} people loaded${warn}`);
@@ -433,6 +453,7 @@ export default function App() {
   const onOpenDemo = async (demo: DemoCompany) => {
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}samples/${demo.file}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       createWorkspaceFromCsv(text, demo.file, demo.label);
     } catch {
@@ -459,6 +480,7 @@ export default function App() {
   const onGenerateAgent = async (ctx: GenerateCtx) => {
     const row = pedigree[ctx.person.id];
     if (!row) return;
+    const wsAtStart = currentWorkspaceIdRef.current;
     const baseCtx = {
       person: ctx.person, row, task: ctx.task, respTitle: ctx.respTitle,
       agentName: ctx.agentName, policy: ctx.policy, riskLevel: ctx.riskLevel,
@@ -487,14 +509,21 @@ export default function App() {
       });
     }
 
+    // The authorAgent call above can take a while; if the user switched
+    // companies meanwhile, person ids are positional (P-001…) and would
+    // silently attach this agent to an unrelated person in the other company.
+    if (currentWorkspaceIdRef.current !== wsAtStart) {
+      pushToast("Agent generation cancelled", "You switched companies while the agent was being constructed");
+      return;
+    }
+
     const buildCtx = { ...baseCtx, authored };
     const artifacts = buildAgentArtifacts(buildCtx);
     const agent = newAgentRecord(buildCtx, artifacts);
     setPedigree((prev) => {
-      const nextRow = { ...prev[ctx.person.id] };
-      nextRow.agents = [...nextRow.agents, agent];
-      nextRow.status = "generated";
-      return { ...prev, [ctx.person.id]: nextRow };
+      const prevRow = prev[ctx.person.id];
+      if (!prevRow) return prev;
+      return { ...prev, [ctx.person.id]: { ...prevRow, agents: [...prevRow.agents, agent], status: "generated" } };
     });
     setActiveAgent(agent);
     setCreateAgentCtx(null);

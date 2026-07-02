@@ -144,8 +144,8 @@ cp .env.example .env      # optional — the app runs fully without keys
 npm run dev               # starts the Vite client (5173) + API server (8787)
 ```
 
-Open http://localhost:5173. Click **Use Demo CSV**, or one of the four bundled mock
-organizations (8 / 20 / 34 / 52 people) in `public/samples/`, or drop in your own CSV.
+Open http://localhost:5173. Click **Use Demo CSV**, or one of the five bundled mock
+organizations (8 / 20 / 28 / 34 / 52 people) in `public/samples/`, or drop in your own CSV.
 
 ### Without API keys (default)
 Everything works: CSV import, org map, spreadsheet, a deterministic role-aware parser, and
@@ -206,7 +206,7 @@ app/
     routes/companyProfileParse.ts
     routes/transcribe.ts      # OpenAI / Deepgram speech-to-text
   supabase/migrations/       # workspace + company context document tables
-  public/samples/           # four mock-organization CSVs
+  public/samples/           # five mock-organization CSVs
   tests/                    # Vitest: csv, parse/classification, agent manifest
 ```
 
@@ -218,6 +218,7 @@ app/
 | `02_northstar_saas_20_people.csv` | B2B SaaS | 20 |
 | `03_summit_clinic_network_34_people.csv` | healthcare network | 34 |
 | `04_atlas_channel_group_52_people.csv` | channel partner group | 52 |
+| `05_granite_ridge_distribution_28_people.csv` | industrial distribution (SOD-heavy demo org) | 28 |
 
 ## Safety notes (MVP)
 

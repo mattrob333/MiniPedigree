@@ -119,6 +119,11 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
     return { mode: "demo", reason: "empty transcript" };
   }
+  // Cap prompt size: these endpoints are unauthenticated in the MVP, so don't
+  // let arbitrary multi-MB payloads become paid model tokens.
+  if (transcript.length > 200_000) {
+    return { mode: "demo", reason: "transcript_too_large" };
+  }
 
   try {
     const ctxBlock = company_context && typeof company_context === "object"
@@ -134,8 +139,9 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
     const discovery = parsedDiscoverySchema.parse(parsed);
     return { mode: "ai", discovery };
   } catch (e) {
-    const msg = (e as Error).message || String(e);
-    console.error("discovery parse failed:", msg);
-    return { mode: "demo", reason: "ai_error: " + msg.slice(0, 200) };
+    // Log the full error server-side only — provider messages can contain key
+    // fragments, org ids, and internal detail that must not reach clients.
+    console.error("discovery parse failed:", e);
+    return { mode: "demo", reason: "ai_error" };
   }
 }

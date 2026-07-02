@@ -1,6 +1,6 @@
 import type { ApiRequest, ApiResponse } from "./_types.js";
 import formidable from "formidable";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { runTranscribe, TranscribeError } from "../server/core/transcribe.js";
 
 // Vercel must not pre-parse the multipart body — let formidable read the stream.
@@ -36,7 +36,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         res.status(e.status).send(e.message);
         return;
       }
-      res.status(502).send(`Transcription failed: ${(e as Error).message}. Try a smaller file or paste the transcript.`);
+      console.error("[pedigree] transcription failed", e);
+      res.status(502).send("Transcription failed. Try a smaller file or paste the transcript.");
+    } finally {
+      // Warm lambdas share /tmp — clean up or repeated uploads fill the 512 MB cap.
+      await rm(f.filepath, { force: true }).catch(() => {});
     }
   });
 }

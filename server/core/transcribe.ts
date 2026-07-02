@@ -28,6 +28,13 @@ export async function runTranscribe(buffer: Buffer, filename: string, mimetype: 
       headers: { Authorization: `Token ${key}`, "Content-Type": mimetype || "audio/webm" },
       body: new Uint8Array(buffer),
     });
+    if (!dgRes.ok) {
+      console.error("[pedigree] Deepgram error", dgRes.status, await dgRes.text().catch(() => ""));
+      if (dgRes.status === 401 || dgRes.status === 403) {
+        throw new TranscribeError(503, "Transcription provider is not configured correctly.");
+      }
+      throw new TranscribeError(502, "Transcription provider rejected the audio.");
+    }
     const json = (await dgRes.json()) as any;
     const transcript = json?.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
     if (!transcript) throw new TranscribeError(502, "Deepgram returned no transcript.");

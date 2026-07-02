@@ -110,6 +110,60 @@ export const companyContextSchema = z.object({
 
 export type CompanyContextSchema = z.infer<typeof companyContextSchema>;
 
+// AI-authored construction spec (returned by /api/agents/generate). Every
+// field is optional — buildConstructionSpec fills gaps deterministically —
+// but present fields must be the right shape so malformed AI output falls
+// back to the template instead of crashing manifest rendering.
+export const agentConstructionSpecSchema = z
+  .object({
+    role: z.string().optional(),
+    authority_ceiling: z.string().optional(),
+    purpose: z.string().optional(),
+    goal: z.string().optional(),
+    operating_mode: z.string().optional(),
+    recommended_schedule: z
+      .object({
+        type: z.string().optional(),
+        cron: z.string().optional(),
+        timezone: z.string().optional(),
+        reason: z.string().optional(),
+      })
+      .optional(),
+    workflow_steps: z.array(z.string()).optional(),
+    input_requirements: z.array(z.string()).optional(),
+    output_artifacts: z.array(z.string()).optional(),
+    allowed_tasks: z.array(z.string()).optional(),
+    approval_required: z.array(z.string()).optional(),
+    blocked_tasks: z.array(z.string()).optional(),
+    escalation_rules: z.array(z.string()).optional(),
+    tool_permissions: z
+      .object({
+        enabled: z.array(z.string()).optional(),
+        blocked: z.array(z.string()).optional(),
+        mcp_servers: z
+          .array(z.object({ name: z.string(), scope: z.string().optional(), reason: z.string().optional() }))
+          .optional(),
+      })
+      .optional(),
+    delivery_recommendations: z
+      .array(
+        z.object({
+          platform: z.string().optional(),
+          recipient: z.string().optional(),
+          channel: z.string().optional(),
+          format: z.string().optional(),
+        }),
+      )
+      .optional(),
+    skills: z.array(z.string()).optional(),
+    memory_policy: z.string().optional(),
+    audit_events: z.array(z.string()).optional(),
+    failure_modes: z.array(z.string()).optional(),
+    test_prompts: z.array(z.string()).optional(),
+    output_style: z.string().optional(),
+  })
+  .passthrough();
+
 export const agentManifestSchema = z.object({
   manifest_version: z.string(),
   agent_id: z.string(),

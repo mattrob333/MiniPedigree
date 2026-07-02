@@ -101,7 +101,24 @@ export function applyOrgSync(
     if (!approvedPersonIds.has(delta.personId)) continue;
     const data = parsed[delta.personId];
     if (!data) continue;
-    const prev = pedigree[delta.personId] ?? {
+
+    // Approved reassignments move the task: remove it from the previous
+    // owner's row (the loop below adds it to the new owner).
+    for (const move of delta.reassignedFrom) {
+      const fromRow = next[move.fromPersonId];
+      if (!fromRow) continue;
+      const label = norm(move.label);
+      const strip = (arr: typeof fromRow.tasks.delegatable) => arr.filter((t) => norm(t.label) !== label);
+      next[move.fromPersonId] = {
+        ...fromRow,
+        tasks: {
+          delegatable: strip(fromRow.tasks.delegatable),
+          approval: strip(fromRow.tasks.approval),
+          not_delegatable: strip(fromRow.tasks.not_delegatable),
+        },
+      };
+    }
+    const prev = next[delta.personId] ?? {
       status: "needs-discovery" as Status,
       responsibilities: [],
       tasks: { delegatable: [], approval: [], not_delegatable: [] },

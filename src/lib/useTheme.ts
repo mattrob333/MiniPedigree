@@ -2,6 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 
 export type ThemePref = "light" | "dark" | "system";
 
+function systemPrefersLight(): boolean {
+  try {
+    return window.matchMedia("(prefers-color-scheme: light)").matches;
+  } catch {
+    return false;
+  }
+}
+
 export function useTheme(): [ThemePref, (p: ThemePref) => void, "light" | "dark"] {
   const [pref, setPref] = useState<ThemePref>(() => {
     try {
@@ -10,17 +18,12 @@ export function useTheme(): [ThemePref, (p: ThemePref) => void, "light" | "dark"
       return "dark";
     }
   });
+  const [systemLight, setSystemLight] = useState<boolean>(systemPrefersLight);
 
   const resolved = useMemo<"light" | "dark">(() => {
-    if (pref === "system") {
-      try {
-        return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-      } catch {
-        return "dark";
-      }
-    }
+    if (pref === "system") return systemLight ? "light" : "dark";
     return pref;
-  }, [pref]);
+  }, [pref, systemLight]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", resolved);
@@ -34,8 +37,8 @@ export function useTheme(): [ThemePref, (p: ThemePref) => void, "light" | "dark"
   useEffect(() => {
     if (pref !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: light)");
-    const onChange = () =>
-      document.documentElement.setAttribute("data-theme", mq.matches ? "light" : "dark");
+    const onChange = () => setSystemLight(mq.matches);
+    onChange(); // sync in case it changed while pref wasn't "system"
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, [pref]);

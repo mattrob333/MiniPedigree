@@ -157,7 +157,7 @@ function extractTasksFromSentence(sentence: string): string[] {
   for (const part of parts) {
     const m = part.match(/\b(reviews?|cleans?|compares?|summari[sz]es?|drafts?|exports?|identif\w+|monitors?|compiles?|tags?|flags?|sends?|notif\w+|approves?|signs? off|pulls?|computes?|tracks?|audits?|hunts?|chasing|running|owns?)\b\s+([^.;]{4,70})/i);
     if (m) {
-      const verb = m[1].replace(/s$|ing$/i, "").trim();
+      const verb = normalizeVerb(m[1]);
       const obj = m[2].trim().replace(/\s+/g, " ");
       const label = `${capitalize(verb)} ${obj}`.replace(/\s+/g, " ").trim();
       if (label.length > 8 && label.length < 90) tasks.push(label);
@@ -170,6 +170,16 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// "reviews" → "review", "notifies" → "notify"; keep gerunds ("chasing") and
+// "ss" endings intact instead of mangling them ("chasing" → "chas").
+function normalizeVerb(v: string): string {
+  const t = v.trim();
+  if (/ing$/i.test(t)) return t;
+  if (/ies$/i.test(t)) return t.replace(/ies$/i, "y");
+  if (/ss$/i.test(t)) return t;
+  return t.replace(/s$/i, "");
+}
+
 function roleResponsibilities(title: string): { title: string; tasks: string[] }[] {
   for (const t of TEMPLATES) {
     if (t.match.test(title)) return t.responsibilities;
@@ -177,10 +187,13 @@ function roleResponsibilities(title: string): { title: string; tasks: string[] }
   return GENERIC_TEMPLATE;
 }
 
+// Responsibility ids must be unique across people AND across parse sessions:
+// applyParsed derives task ids from them while preserving previously created
+// agents, so a reused id would silently re-bind an old agent to a new task.
 let respCounter = 0;
-function nextRespId(): string {
+export function nextRespId(personId: string): string {
   respCounter += 1;
-  return `R-${String(respCounter).padStart(3, "0")}`;
+  return `${personId}-R${respCounter}-${Date.now().toString(36)}`;
 }
 
 function bucketTasks(raw: string[]): ParsedResponsibility["tasks"] {
@@ -201,7 +214,6 @@ function bucketTasks(raw: string[]): ParsedResponsibility["tasks"] {
  * flow works for every uploaded CSV.
  */
 export function generateParsed(people: Person[], transcript: string): ParsedMap {
-  respCounter = 0;
   const sentences = splitSentences(transcript || "");
   const out: ParsedMap = {};
 
@@ -218,7 +230,7 @@ export function generateParsed(people: Person[], transcript: string): ParsedMap 
       const extracted = Array.from(new Set(mentioned.flatMap(extractTasksFromSentence)));
       if (extracted.length) {
         responsibilities.push({
-          id: nextRespId(),
+          id: nextRespId(person.id),
           // A real, user-facing title (never expose "discovery input" plumbing).
           title: deriveRespTitle(extracted, person.department),
           description: mentioned[0],
@@ -232,25 +244,23 @@ export function generateParsed(people: Person[], transcript: string): ParsedMap 
     // 2) Role-template responsibilities (always, to give a complete map).
     for (const r of roleResponsibilities(person.title)) {
       responsibilities.push({
-        id: nextRespId(),
+        id: nextRespId(person.id),
         title: r.title,
         confidence: mentioned.length ? 0.8 : 0.62,
         tasks: bucketTasks(r.tasks),
       });
     }
 
-    const hasDeleg = responsibilities.some((r) => r.tasks.delegatable.length > 0);
     const allText = responsibilities.map((r) => r.title + " " + Object.values(r.tasks).flat().join(" ")).join(" ");
 
     const parsed: ParsedPerson = {
       summary: mentioned.length
         ? trimSummary(mentioned[0])
         : `${person.title} in ${person.department}. Responsibilities inferred from role.`,
-      needsReview: !mentioned.length && responsibilities.length <= 1 ? false : false,
+      needsReview: !mentioned.length && responsibilities.length <= 1,
       responsibilities,
       recommended_mcp_servers: recommendMcp(allText, person.tools),
     };
-    void hasDeleg;
     out[person.id] = parsed;
   }
 

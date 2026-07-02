@@ -350,11 +350,11 @@ Return a single company profile. If research is requested, use web search for fa
     });
     return { mode: "ai", profile };
   } catch (e) {
-    const msg = (e as Error).message || String(e);
-    console.error("company profile parse failed:", msg);
+    // Log the full error server-side only — never echo provider messages.
+    console.error("company profile parse failed:", e);
     return {
       mode: "demo",
-      reason: "ai_error: " + msg.slice(0, 200),
+      reason: "ai_error",
       profile: buildDemoProfile({ company, url: safeUrl, notes, reason: "Research failed; saved user notes for review." }),
     };
   }

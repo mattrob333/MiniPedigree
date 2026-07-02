@@ -26,9 +26,14 @@ export const STATUS_LABEL: Record<Status, string> = {
 };
 
 // The canonical funnel order, used for any ordering/sorting of statuses.
+// Every Status must appear here, or indexOf-based sorts put it at -1.
 export const STATUS_ORDER: Status[] = [
   "needs-discovery",
+  "session-scheduled",
+  "session-captured",
+  "blocked",
   "needs-review",
+  "parsed",
   "mapped",
   "ready",
   "generated",

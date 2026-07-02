@@ -9,6 +9,7 @@ export async function transcribeHandler(req: Request, res: Response) {
     res.json(result);
   } catch (e) {
     if (e instanceof TranscribeError) return res.status(e.status).send(e.message);
-    res.status(502).send(`Transcription failed: ${(e as Error).message}. Try a smaller file or paste the transcript.`);
+    console.error("[pedigree] transcription failed", e);
+    res.status(502).send("Transcription failed. Try a smaller file or paste the transcript.");
   }
 }

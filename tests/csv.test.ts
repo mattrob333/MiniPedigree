@@ -46,6 +46,31 @@ B,b@x.co,Two,a@x.co`;
     expect(roots.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("keeps valid links for people downstream of a cycle", () => {
+    const csv = `name,email,title,manager_email
+A,a@x.co,One,b@x.co
+B,b@x.co,Two,a@x.co
+C,c@x.co,Three,a@x.co`;
+    const r = parsePeopleCsv(csv, "cycle2.csv");
+    const a = r.people.find((p) => p.email === "a@x.co")!;
+    const c = r.people.find((p) => p.email === "c@x.co")!;
+    // C reports to A; A↔B is the cycle. Only a link inside the cycle is cut.
+    expect(c.managerId).toBe(a.id);
+    // exactly one cycle link removed, so the org has exactly one root
+    expect(r.people.filter((p) => p.managerId === null)).toHaveLength(1);
+  });
+
+  it("treats a self-managed person as a root with a clear warning", () => {
+    const csv = `name,email,title,manager_email
+Ann,ann@x.co,CEO,ann@x.co
+Bob,bob@x.co,Mgr,ann@x.co`;
+    const r = parsePeopleCsv(csv, "self.csv");
+    const ann = r.people.find((p) => p.email === "ann@x.co")!;
+    expect(ann.managerId).toBeNull();
+    expect(r.warnings.some((w) => w.includes("own manager"))).toBe(true);
+    expect(r.warnings.some((w) => w.toLowerCase().includes("not found"))).toBe(false);
+  });
+
   it("derives a workspace name from the file name", () => {
     const r = parsePeopleCsv("name,email,title,manager_email\nA,a@x.co,CEO,", "02_northstar_saas_20_people.csv");
     expect(r.workspaceName).toBe("Northstar Saas");

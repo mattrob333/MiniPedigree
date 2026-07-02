@@ -83,21 +83,18 @@ export function parsePeopleCsv(text: string, fileName?: string): CsvImportResult
     return { people: [], warnings, errors, workspaceName: deriveWorkspaceName(fileName, []) };
   }
 
-  const rows = result.data.filter((r) => (r.name ?? "").trim() || (r.email ?? "").trim());
-
   // First pass — build people with temp ids, track emails.
   const byEmail = new Map<string, string>(); // email(lower) -> id
   const seenEmails = new Set<string>();
   const people: Person[] = [];
-  let blankManagerCount = 0;
-  let dupCount = 0;
 
-  rows.forEach((r, i) => {
+  result.data.forEach((r, i) => {
     const name = (r.name ?? "").trim();
     const email = (r.email ?? "").trim();
     const title = (r.title ?? "").trim();
     const managerEmail = (r.manager_email ?? "").trim();
 
+    if (!name && !email) return; // fully blank row
     if (!name) {
       warnings.push(`Row ${i + 2}: missing name — skipped`);
       return;
@@ -107,12 +104,10 @@ export function parsePeopleCsv(text: string, fileName?: string): CsvImportResult
     }
     const emailKey = email.toLowerCase();
     if (email && seenEmails.has(emailKey)) {
-      dupCount++;
       warnings.push(`Duplicate email skipped: ${email}`);
       return;
     }
     if (email) seenEmails.add(emailKey);
-    if (!managerEmail) blankManagerCount++;
 
     const id = slugId(people.length);
     if (email) byEmail.set(emailKey, id);
@@ -133,7 +128,6 @@ export function parsePeopleCsv(text: string, fileName?: string): CsvImportResult
   });
 
   // Second pass — resolve manager references.
-  let unresolved = 0;
   let rootCount = 0;
   for (const p of people) {
     if (!p.managerEmail) {
@@ -142,36 +136,44 @@ export function parsePeopleCsv(text: string, fileName?: string): CsvImportResult
       continue;
     }
     const mid = byEmail.get(p.managerEmail.toLowerCase());
-    if (mid && mid !== p.id) {
+    if (mid === p.id) {
+      p.managerId = null;
+      rootCount++;
+      warnings.push(`${p.name} is listed as their own manager — treated as a root`);
+    } else if (mid) {
       p.managerId = mid;
     } else {
       p.managerId = null;
-      unresolved++;
       rootCount++;
       warnings.push(`Manager "${p.managerEmail}" for ${p.name} not found in CSV — treated as a root`);
     }
   }
 
-  // Cycle guard: if following managers loops, detach to root.
+  // Cycle guard: walk each manager chain once; when a chain loops back on
+  // itself, detach the link that closes the loop (people merely *downstream*
+  // of a cycle keep their valid manager links).
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const visitState = new Map<string, "visiting" | "done">();
   for (const p of people) {
-    const seen = new Set<string>([p.id]);
-    let cur = p.managerId;
-    while (cur) {
-      if (seen.has(cur)) {
-        warnings.push(`Reporting cycle detected near ${p.name} — link removed`);
-        p.managerId = null;
-        break;
-      }
-      seen.add(cur);
-      cur = people.find((x) => x.id === cur)?.managerId ?? null;
+    if (visitState.has(p.id)) continue;
+    const path: Person[] = [];
+    let cur: Person | undefined = p;
+    while (cur && !visitState.has(cur.id)) {
+      visitState.set(cur.id, "visiting");
+      path.push(cur);
+      cur = cur.managerId ? byId.get(cur.managerId) : undefined;
     }
+    if (cur && visitState.get(cur.id) === "visiting") {
+      warnings.push(`Reporting cycle detected near ${cur.name} — link removed`);
+      cur.managerId = null;
+      rootCount++;
+    }
+    for (const node of path) visitState.set(node.id, "done");
   }
 
-  if (blankManagerCount > 1) {
+  if (rootCount > 1) {
     warnings.push(`${rootCount} people have no manager (multiple roots will render side by side)`);
   }
-  void unresolved;
-  void dupCount;
 
   if (people.length === 0) {
     errors.push("No valid people rows found in CSV");

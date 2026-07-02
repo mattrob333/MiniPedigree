@@ -1,7 +1,7 @@
 import type { CompanyContext, ParsedMap, ParsedResponsibility, Person } from "@/types";
-import { generateParsed } from "./parse";
+import { generateParsed, nextRespId } from "./parse";
 import { recommendMcp } from "./mcpCatalog";
-import { companyContextSchema, parsedDiscoverySchema } from "./schemas";
+import { agentConstructionSpecSchema, companyContextSchema, parsedDiscoverySchema } from "./schemas";
 
 export interface ParseOutcome {
   parsed: ParsedMap;
@@ -59,17 +59,20 @@ function discoveryToMap(
   discovery: ReturnType<typeof parsedDiscoverySchema.parse>,
   people: Person[],
 ): ParsedMap {
-  const byEmail = new Map(people.map((p) => [p.email.toLowerCase(), p]));
+  // Blank emails are allowed at CSV import; keying them here would let one
+  // person's update land on another, so only match on real addresses.
+  const byEmail = new Map(
+    people.filter((p) => p.email.trim()).map((p) => [p.email.trim().toLowerCase(), p]),
+  );
   const out: ParsedMap = {};
-  let rc = 0;
 
   for (const upd of discovery.people_updates) {
-    const person = byEmail.get(upd.person_email.toLowerCase());
+    const email = upd.person_email.trim().toLowerCase();
+    const person = email ? byEmail.get(email) : undefined;
     if (!person) continue;
 
     const responsibilities: ParsedResponsibility[] = upd.responsibilities.map((r) => {
-      rc += 1;
-      const id = `R-${String(rc).padStart(3, "0")}`;
+      const id = nextRespId(person.id);
       const tasks = { delegatable: [] as string[], approval: [] as string[], not_delegatable: [] as string[] };
       for (const t of r.tasks) {
         if (t.delegation_class === "delegatable") tasks.delegatable.push(t.name);
@@ -135,7 +138,12 @@ export async function authorAgent(payload: AuthorAgentPayload): Promise<AgentCon
     });
     if (!res.ok) return null;
     const json = await res.json();
-    if (json?.mode === "ai" && json.authored) return json.authored as AgentConstructionSpec;
+    if (json?.mode === "ai" && json.authored) {
+      // Validate before use — a malformed AI response should fall back to the
+      // deterministic template, not flow unchecked into manifest rendering.
+      const checked = agentConstructionSpecSchema.safeParse(json.authored);
+      return checked.success ? (checked.data as AgentConstructionSpec) : null;
+    }
     return null;
   } catch {
     return null;

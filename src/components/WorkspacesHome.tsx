@@ -14,6 +14,7 @@ const DEMOS: DemoCompany[] = [
   { file: "02_northstar_saas_20_people.csv", label: "Northstar SaaS", sub: "B2B SaaS · 20 people" },
   { file: "03_summit_clinic_network_34_people.csv", label: "Summit Clinic", sub: "Healthcare · 34 people" },
   { file: "04_atlas_channel_group_52_people.csv", label: "Atlas Channel Group", sub: "Channel · 52 people" },
+  { file: "05_granite_ridge_distribution_28_people.csv", label: "Granite Ridge Distribution", sub: "Industrial distribution · 28 people" },
 ];
 
 const HRIS_INTEGRATIONS = [

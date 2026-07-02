@@ -185,8 +185,8 @@ Author the governed agent construction spec.`;
     });
     return { mode: "ai", authored };
   } catch (e) {
-    const msg = (e as Error).message || String(e);
-    console.error("agent author failed:", msg);
-    return { mode: "demo", reason: "ai_error: " + msg.slice(0, 200) };
+    // Log the full error server-side only — never echo provider messages.
+    console.error("agent author failed:", e);
+    return { mode: "demo", reason: "ai_error" };
   }
 }

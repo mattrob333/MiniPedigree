@@ -561,7 +561,7 @@ ${constructionSpec.output_style}`;
 
 export function newAgentRecord(ctx: AgentBuildCtx, artifacts: AgentArtifacts): AgentRecord {
   return {
-    id: `A-${Math.floor(100 + Math.random() * 900)}`,
+    id: `A-${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36).padStart(2, "0")}`,
     name: ctx.agentName,
     taskId: ctx.task.id,
     respId: ctx.task.respId,

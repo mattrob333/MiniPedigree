@@ -49,4 +49,21 @@ describe("generateParsed", () => {
     const names = out["P-001"].recommended_mcp_servers?.map((m) => m.name) ?? [];
     expect(names.some((n) => n.includes("Salesforce"))).toBe(true);
   });
+
+  it("generates responsibility ids unique across people and repeated parses", () => {
+    const a = generateParsed(people, "");
+    const b = generateParsed(people, "");
+    const ids = [...Object.values(a), ...Object.values(b)].flatMap((p) => p.responsibilities.map((r) => r.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("does not mangle gerund verbs pulled from the transcript", () => {
+    const out = generateParsed(people, "Jane is chasing reps for missing close dates.");
+    const labels = out["P-001"].responsibilities.flatMap((r) => [
+      ...r.tasks.delegatable,
+      ...r.tasks.approval,
+      ...r.tasks.not_delegatable,
+    ]);
+    expect(labels.some((l) => l.startsWith("Chas "))).toBe(false);
+  });
 });

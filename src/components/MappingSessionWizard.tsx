@@ -55,7 +55,10 @@ export function MappingSessionWizard({ open, person, people, pedigree, companyCo
   useEffect(() => {
     if (open && person) {
       setStep(1);
-      setScope(defaultScopeFor(sessionType));
+      // The scope <select> only offers self / self_and_reports / unmapped_reports;
+      // leadership/department defaults resolve to the same people as self_and_reports.
+      const def = defaultScopeFor(sessionType);
+      setScope(def === "leadership" || def === "department" ? "self_and_reports" : def);
       setText("");
       setParsed(null);
       setErr(null);
