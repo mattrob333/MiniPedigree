@@ -102,7 +102,7 @@ async function pushWorkspaceRemote(ws: Workspace, email?: string): Promise<void>
     id: ws.id,
     name: ws.name,
     owner_email: email ?? null,
-    snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext },
+    snapshot: { people: ws.people, pedigree: ws.pedigree, companyContext: ws.companyContext, auditLog: ws.auditLog },
     updated_at: ws.updatedAt,
   });
   const contextDocuments = ws.companyContext?.contextDocuments ?? [];
@@ -143,7 +143,7 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
         .eq("id", id)
         .maybeSingle();
       if (data?.snapshot) {
-        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"] };
+        const snap = data.snapshot as { people: Workspace["people"]; pedigree: Workspace["pedigree"]; companyContext?: Workspace["companyContext"]; auditLog?: Workspace["auditLog"] };
         // If a remote save failed (or hasn't landed yet) the local copy can be
         // newer than the remote snapshot — prefer whichever was updated last.
         const remoteUpdated = data.updated_at ? Date.parse(data.updated_at) : 0;
@@ -155,6 +155,7 @@ export async function loadWorkspace(id: string): Promise<Workspace | null> {
             people: snap.people,
             pedigree: snap.pedigree,
             companyContext: snap.companyContext,
+            auditLog: snap.auditLog,
             ownerEmail: data.owner_email ?? undefined,
             createdAt: data.created_at ?? local?.createdAt ?? new Date().toISOString(),
             updatedAt: data.updated_at ?? undefined,

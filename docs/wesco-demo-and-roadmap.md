@@ -20,10 +20,11 @@ real and differentiated core. But three gaps matter for Wesco specifically:
    `[SEGREGATION OF DUTIES CONSTRAINTS]` block into every manifest/prompt, and powers an
    org-wide **Compliance** tab. Next: parse customer SOD matrices into rules, and add
    a compliance-approval workflow for blocking findings.)*
-2. **The audit trail is declared, not recorded.** Manifests carry `audit.trace_id`,
-   `audit_events`, and retention fields — but the app itself doesn't yet write an immutable
-   event log of who mapped what, who approved which changeset, and who generated which agent.
-   SOC 2 evidence is exactly that log.
+2. **The audit trail is declared, not recorded.** *(Addressed — audit ledger v0 now ships:
+   every governance action is appended to a hash-chained, per-workspace event log
+   (`src/lib/audit.ts`) shown on the Compliance tab with a chain-integrity badge, and the
+   **evidence pack** export zips the ledger + SOD findings + org snapshot + all manifests.
+   Next: server-side SHA-256 ledger behind auth so the chain is enforced off-client.)*
 3. **The persistence/auth layer is demo-grade.** No-password sign-in, permissive Supabase RLS
    (`anon_all`), unauthenticated API routes. Fine for demos; called out in DEPLOY.md and
    `.env.example` now, but it is the first thing Wesco's security review will ask about.
@@ -142,9 +143,13 @@ deterministic code, not a model opinion — it can't be talked out of it."
 Open the generated manifest and walk the governance fields: human owner, parent
 responsibility, allowed/approval/blocked, MCP scopes (read-only/draft-only, `full` is
 auto-downgraded), `io_contract`, lifecycle with teardown-but-retain-logs, `audit.trace_id`,
-retention. Export the Deployment Package zip and the enriched CSV. **Line:** "When your
-auditor asks 'what can this thing actually do and who said so' — this is the artifact.
-Portable across OpenAI, Claude, or your internal runtime."
+retention. Then switch to the **Compliance** tab: the **audit trail** shows every action of
+the demo so far (workspace created → session applied → agent generated with its SOD
+findings), each hash-chained, with the live "chain intact" badge. Click **Export evidence
+pack** and open the zip: audit log (JSON + CSV), SOD findings, org snapshot, company
+profile, every manifest. **Line:** "When your auditor asks 'what can this thing do, who
+said so, and prove nobody edited the record' — this zip is the answer. Portable across
+OpenAI, Claude, or your internal runtime."
 
 ### Scenario D — "Orgs change; authority follows" (org sync, ~4 min)
 Paste a short org-sync transcript: *"Angela is handing release of blocked orders to Tasha
@@ -172,8 +177,12 @@ Priority-ordered; 1–3 are demo-critical, 4–6 are pilot-critical:
 
 1. ~~**SOD engine v0**~~ ✅ shipped (section 3) — deterministic rules + Create-Agent conflict
    panel + Compliance tab + manifest/prompt embedding.
-2. **Audit event ledger v0** — append-only `audit_events` table (or localStorage ring in
-   demo mode) + "Audit Log" screen + CSV export. Cheap, hugely demo-visible.
+2. ~~**Audit event ledger v0**~~ ✅ shipped — append-only, hash-chained per-workspace ledger
+   (`src/lib/audit.ts`) covering imports, sessions, org syncs, agent generations (with SOD
+   findings), uploads, and exports; audit trail + chain-integrity badge on the Compliance
+   tab; **evidence pack** zip export (`src/lib/evidence.ts`: audit log JSON/CSV, SOD
+   findings, org snapshot, company profile, all manifests). v1: server-side SHA-256 ledger
+   behind auth.
 3. **Demo hardening** — rehearse on Granite Ridge with no API keys (deterministic path),
    then with keys; both must look good. (The fallback engine makes this reliable.)
 4. **Auth + RLS** — Supabase Auth (magic link now, Entra ID SSO for the pilot), per-owner
@@ -182,6 +191,6 @@ Priority-ordered; 1–3 are demo-critical, 4–6 are pilot-critical:
    verbatim today; wrap untrusted content in delimited data blocks and instruct models to
    treat it as data, and clamp model-proposed scopes server-side (client already downgrades
    `full`).
-6. **Evidence pack export** — one click: org snapshot + all manifests + SOD findings +
-   audit log for a date range, zipped. This is the artifact a Wesco internal-audit champion
-   forwards internally; it sells for you.
+6. ~~**Evidence pack export**~~ ✅ shipped with the ledger — one click on the Compliance tab:
+   org snapshot + all manifests + SOD findings + hash-verified audit log, zipped. This is
+   the artifact a Wesco internal-audit champion forwards internally; it sells for you.

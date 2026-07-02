@@ -18,11 +18,13 @@ import { Icon } from "./components/Icon";
 import { BrandChip, BrandLogo, findBrand } from "./components/BrandLogo";
 import { OnboardingTour } from "./components/onboarding/OnboardingTour";
 
-import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile, WorkspaceSummary } from "./types";
+import type { AgentRecord, AuditEvent, AuditEventType, MappingSessionType, ParsedMap, PedigreeState, Person, UserProfile, WorkspaceSummary } from "./types";
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
 import { checkAgentSod, checkOrgSod, proposedAgentTaskLabels, type SodFinding } from "./lib/sod";
+import { appendAuditEvent, verifyAuditChain, AUDIT_TYPE_LABEL } from "./lib/audit";
+import { buildEvidencePack } from "./lib/evidence";
 import { authorAgent } from "./lib/api";
 import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
@@ -222,6 +224,7 @@ export default function App() {
   const [workspaceName, setWorkspaceName] = useState("Untitled Workspace");
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [workspaceCreatedAt, setWorkspaceCreatedAt] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<AuditEvent[]>([]);
   // Refs for async handlers that resolve after a possible workspace switch.
   const currentWorkspaceIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -275,12 +278,13 @@ export default function App() {
   }, [people]);
   const tourUserKey = profile?.email ?? profile?.name ?? "anon";
 
-  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; createdAt?: string }) => {
+  const openWorkspaceState = (ws: { id: string; name: string; people: Person[]; pedigree: PedigreeState; companyContext?: CompanyContext; createdAt?: string; auditLog?: AuditEvent[] }) => {
     setPeople(ws.people);
     setPedigree(ws.pedigree);
     setWorkspaceName(ws.name);
     setCurrentWorkspaceId(ws.id);
     setWorkspaceCreatedAt(ws.createdAt ?? new Date().toISOString());
+    setAuditLog(ws.auditLog ?? []);
     setCompanyContext(ws.companyContext);
     setCompanyProfileOpen(false);
     setSelectedId(null);
@@ -321,11 +325,17 @@ export default function App() {
     if (booting) return;
     if (currentWorkspaceId && people.length && profile) {
       void saveWorkspace(
-        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, createdAt: workspaceCreatedAt ?? new Date().toISOString() },
+        { id: currentWorkspaceId, name: workspaceName, people, pedigree, companyContext, auditLog, createdAt: workspaceCreatedAt ?? new Date().toISOString() },
         profile.email,
       );
     }
-  }, [people, pedigree, workspaceName, companyContext, currentWorkspaceId, workspaceCreatedAt, profile, booting]);
+  }, [people, pedigree, workspaceName, companyContext, auditLog, currentWorkspaceId, workspaceCreatedAt, profile, booting]);
+
+  // Append to the workspace's tamper-evident audit ledger (see src/lib/audit.ts).
+  const logAudit = (type: AuditEventType, summary: string, details?: Record<string, unknown>) => {
+    const actor = profile?.email || profile?.name || "anon";
+    setAuditLog((prev) => appendAuditEvent(prev, { type, summary, details, actor }));
+  };
 
   const refreshWorkspaces = (email?: string) => setWorkspaces(listWorkspaces(email ?? profile?.email));
 
@@ -384,6 +394,12 @@ export default function App() {
   const onSaveCompanyProfile = (ctx: CompanyContext) => {
     persistCompanyContext(ctx);
     setScreen("workspace");
+    logAudit("company_profile_saved", `Company profile for ${ctx.company || workspaceName} saved`, {
+      company: ctx.company,
+      sod_rules: ctx.segregationOfDuties?.length ?? 0,
+      approval_rules: ctx.approvalRules?.length ?? 0,
+      context_documents: ctx.contextDocuments?.length ?? 0,
+    });
     pushToast("Company profile saved", "Grounds discovery and agent generation for this company", true);
   };
 
@@ -407,6 +423,10 @@ export default function App() {
         contextDocuments: mergeContextDocuments(current.contextDocuments, uploads.map((upload) => upload.document)),
         updatedAt: new Date().toISOString(),
       };
+    });
+    logAudit("context_documents_uploaded", `${uploads.length} ${contextBucketLabel(bucket)} file(s) uploaded`, {
+      bucket,
+      files: uploads.map((u) => u.document.fileName),
     });
     pushToast("Context files loaded", `${uploads.length} ${contextBucketLabel(bucket)} file${uploads.length === 1 ? "" : "s"} added to the profile store`, true);
   };
@@ -454,9 +474,15 @@ export default function App() {
     const ped = initialPedigreeState(result.people);
     const ctx: CompanyContext = { company: name, whatWeDo: "" };
     const createdAt = new Date().toISOString();
-    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt }, profile?.email);
+    const initialAudit = appendAuditEvent([], {
+      type: "workspace_created",
+      summary: `Workspace "${name}" created from ${fileName} (${result.people.length} people)`,
+      details: { file_name: fileName, people: result.people.length, warnings: result.warnings.length },
+      actor: profile?.email || profile?.name || "anon",
+    });
+    void saveWorkspace({ id, name, people: result.people, pedigree: ped, companyContext: ctx, auditLog: initialAudit, createdAt }, profile?.email);
     setLastWorkspaceId(profile?.email, id);
-    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt });
+    openWorkspaceState({ id, name, people: result.people, pedigree: ped, companyContext: ctx, createdAt, auditLog: initialAudit });
     refreshWorkspaces();
     const warn = result.warnings.length ? ` · ${result.warnings.length} warning(s)` : "";
     pushToast("Company created", `${result.people.length} people loaded${warn}`);
@@ -488,6 +514,12 @@ export default function App() {
     });
     setPedigree(next);
     setWizardPersonId(null);
+    logAudit("session_applied", `${args.sessionLabel} applied to ${args.scopeIds.length} people`, {
+      session_label: args.sessionLabel,
+      session_type: args.sessionType,
+      people_updated: args.scopeIds.length,
+      person_ids: args.scopeIds,
+    });
     pushToast("Discovery applied", `${args.scopeIds.length} people updated · ${args.sessionLabel}`, true);
   };
 
@@ -539,6 +571,20 @@ export default function App() {
       if (!prevRow) return prev;
       return { ...prev, [ctx.person.id]: { ...prevRow, agents: [...prevRow.agents, agent], status: "generated" } };
     });
+    const blocking = artifacts.sodFindings.filter((f) => f.severity === "block").length;
+    logAudit("agent_generated", `Agent "${agent.name}" generated for ${ctx.person.name} (${ctx.task.label})${artifacts.sodFindings.length ? ` — ${artifacts.sodFindings.length} SOD finding(s), ${blocking} blocking, logged` : ""}`, {
+      agent_id: agent.id,
+      agent_name: agent.name,
+      owner: ctx.person.name,
+      owner_email: ctx.person.email,
+      task: ctx.task.label,
+      responsibility: ctx.respTitle,
+      policy: ctx.policy,
+      risk: ctx.riskLevel,
+      lifecycle: ctx.lifecycleClass,
+      authored_by: authored ? "ai" : "template",
+      sod_findings: artifacts.sodFindings.map((f) => ({ rule_id: f.ruleId, severity: f.severity, scope: f.scope })),
+    });
     setActiveAgent(agent);
     setCreateAgentCtx(null);
     setScreen("manifest");
@@ -565,13 +611,40 @@ export default function App() {
     const next = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
     setPedigree(next);
     setOrgSyncOpen(false);
+    logAudit("org_sync_applied", `Org sync approved for ${approvedIds.length} people (${changeset.summary.newResponsibilities} new responsibilities, ${changeset.summary.newTasks} new tasks, ${changeset.summary.reassignments} reassignments)`, {
+      approved_person_ids: approvedIds,
+      ...changeset.summary,
+    });
     pushToast("Org Sync applied", `${approvedIds.length} people updated · ${changeset.summary.newResponsibilities} new resp, ${changeset.summary.newTasks} new tasks`, true);
   };
 
   const onExport = () => {
     const csv = exportEnrichedCsv(people, pedigree);
     downloadFile(`${workspaceName.toLowerCase().replace(/\s+/g, "-")}-pedigree.csv`, csv, "text/csv");
+    logAudit("export_performed", "Enriched org CSV exported", { kind: "enriched_csv", people: people.length });
     pushToast("CSV exported", "Enriched spreadsheet downloaded", true);
+  };
+
+  const onExportEvidencePack = async () => {
+    // Log first so the export event itself is part of the exported ledger.
+    const actor = profile?.email || profile?.name || "anon";
+    const logWithExport = appendAuditEvent(auditLog, {
+      type: "export_performed",
+      summary: "Evidence pack exported (audit log, SOD findings, org snapshot, manifests)",
+      details: { kind: "evidence_pack" },
+      actor,
+    });
+    setAuditLog(logWithExport);
+    const blob = await buildEvidencePack({ workspaceName, people, pedigree, companyContext, auditLog: logWithExport });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${workspaceName.toLowerCase().replace(/\s+/g, "-")}-evidence-pack.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    pushToast("Evidence pack exported", "Audit log, SOD findings, org snapshot, and manifests zipped", true);
   };
 
   const onAdvanceTourFromHome = (nextStepId: string) => {
@@ -725,7 +798,7 @@ export default function App() {
               <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
             )}
             {tab === "agents" && <AgentsList agents={allAgents} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
-            {tab === "compliance" && <CompliancePanel findings={orgSodFindings} agents={allAgents} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} onSelectPerson={onSelect} />}
+            {tab === "compliance" && <CompliancePanel findings={orgSodFindings} agents={allAgents} auditLog={auditLog} onExportEvidencePack={onExportEvidencePack} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} onSelectPerson={onSelect} />}
 
             <Drawer
               open={drawerOpen}
@@ -1198,12 +1271,15 @@ interface ManifestSodFinding {
   resolution?: string;
 }
 
-function CompliancePanel({ findings, agents, onOpenAgent, onSelectPerson }: {
+function CompliancePanel({ findings, agents, auditLog, onExportEvidencePack, onOpenAgent, onSelectPerson }: {
   findings: SodFinding[];
   agents: AgentRecord[];
+  auditLog: AuditEvent[];
+  onExportEvidencePack: () => void;
   onOpenAgent: (a: AgentRecord) => void;
   onSelectPerson: (id: string) => void;
 }) {
+  const chain = verifyAuditChain(auditLog);
   const agentFindings = agents.flatMap((a) => {
     const sod = ((a.manifest as { sod_findings?: ManifestSodFinding[] } | undefined)?.sod_findings ?? []);
     return sod.map((f) => ({ agent: a, finding: f }));
@@ -1267,6 +1343,36 @@ function CompliancePanel({ findings, agents, onOpenAgent, onSelectPerson }: {
               </div>
             )}
           </>
+        )}
+      </section>
+
+      <section>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}><Icon name="history" size={13} style={{ verticalAlign: -2, marginRight: 5 }} /> Audit trail</h3>
+          <span className="tag">{auditLog.length} event{auditLog.length === 1 ? "" : "s"}</span>
+          <span className={"tag " + (chain.ok ? "green" : "red")}>{chain.ok ? "chain intact" : `chain broken at #${chain.brokenAtSeq}`}</span>
+          <span style={{ flex: 1 }} />
+          <button className="btn btn-sm" onClick={onExportEvidencePack} title="Zip the audit log, SOD findings, org snapshot, company profile, and every agent manifest">
+            <Icon name="download" size={12} /> Export evidence pack
+          </button>
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--text-4)", marginBottom: 12 }}>
+          Append-only, hash-chained ledger of every governance action in this workspace: imports, applied sessions, org syncs, generated agents (with their SOD findings), document uploads, and exports. Editing or deleting any past event breaks the chain.
+        </div>
+        {auditLog.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--text-4)", fontStyle: "italic" }}>No events yet.</div>
+        ) : (
+          <div className="manifest-card" style={{ padding: 0 }}>
+            {[...auditLog].reverse().map((e) => (
+              <div key={e.id} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "8px 14px", borderBottom: "1px solid var(--border-2)", fontSize: 12 }}>
+                <span className="mono" style={{ color: "var(--text-4)", flexShrink: 0, width: 34 }}>#{e.seq}</span>
+                <span className="mono" style={{ color: "var(--text-4)", flexShrink: 0 }}>{e.ts.replace("T", " ").slice(0, 19)}</span>
+                <span className="tag cyan" style={{ flexShrink: 0 }}>{AUDIT_TYPE_LABEL[e.type] ?? e.type}</span>
+                <span style={{ flex: 1 }}>{e.summary}</span>
+                <span className="mono" style={{ color: "var(--text-4)", flexShrink: 0 }} title={`actor: ${e.actor} · hash: ${e.hash}`}>{e.actor.split("@")[0]}</span>
+              </div>
+            ))}
+          </div>
         )}
       </section>
     </div>

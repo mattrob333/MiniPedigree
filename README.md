@@ -91,6 +91,28 @@ The defensible artifact is the **manifest**, not the prompt. Each generated agen
   `SETUP.md`) with the exact documents to load, MCP servers + scopes, data sources, guardrail notes,
   and numbered setup steps for **OpenAI**, **Claude**, and a **generic** runtime.
 
+### Compliance: SOD engine, audit ledger, evidence pack
+
+Built for enterprise / SOX-style review (see `docs/wesco-demo-and-roadmap.md`):
+
+- **Segregation-of-duties engine** (`src/lib/sod.ts`) — eight deterministic duty-pair rules
+  (vendor master × payment approval, PO × goods receipt, receipt × invoice processing,
+  credit × order release, pricing × rebates, provisioning × certification, JE creation ×
+  approval, RMA × approval). Checked when an agent is authored (within the agent AND
+  agent-vs-owner) and org-wide on the **Compliance** tab. Findings quote the matching tasks,
+  land in the manifest as `sod_findings`, and add a refuse-and-escalate
+  `[SEGREGATION OF DUTIES CONSTRAINTS]` section to the system prompt.
+- **Audit ledger** (`src/lib/audit.ts`) — append-only, hash-chained event log per workspace
+  covering imports, sessions, org syncs, agent generations, uploads, and exports, with a
+  live chain-integrity badge. Tamper-evident: any edited/deleted/reordered event breaks
+  the chain.
+- **Evidence pack** (`src/lib/evidence.ts`) — one-click zip from the Compliance tab:
+  `audit-log.json/csv`, `sod-findings.json`, `org-snapshot.csv`, `company-profile.json`,
+  and `manifests/*.json`.
+- **Long transcripts** (`src/lib/transcript.ts`) — 30–60+ minute Teams/Meet/Zoom/VTT
+  exports normalize (2–4× smaller), chunk on speaker boundaries, parse in parallel, and
+  merge. No size caps anywhere in the pipeline.
+
 ### Full-screen profiles
 
 Clicking a person opens a quick-peek drawer; **"Open full profile"** opens a roomy page with the
@@ -123,10 +145,18 @@ tools & permitted MCP scopes, and a delegated-task-feed placeholder.
    order release, provisioning × certification, …), and the Create Agent modal flags SOD
    conflicts in red before a manifest is generated. Findings are embedded in the manifest
    (`sod_findings`) and as hard constraints in the system prompt.
-7. **Create Agent** — from any delegatable task, generate an **Agent Manifest** (JSON) and a
+7. **Audit trail** — every governance action (CSV import, applied session, org sync
+   approval, agent generation with its SOD findings, document upload, export) is appended
+   to a per-workspace, hash-chained **audit ledger** (`src/lib/audit.ts`); editing or
+   deleting any past event breaks the chain. The Compliance tab shows the ledger with a
+   live chain-integrity check and a one-click **Evidence Pack** export — a zip with the
+   audit log (JSON + CSV), all SOD findings, the org snapshot, the company profile, and
+   every agent manifest.
+8. **Create Agent** — from any delegatable task, generate an **Agent Manifest** (JSON) and a
    **Pedigree Standard System Prompt** with `[ROLE]`, `[ALLOWED TASKS]`, `[BLOCKED TASKS]`,
    `[HUMAN APPROVAL REQUIRED]`, `[TOOLS AND MCP SERVERS]`, `[ESCALATION RULES]`, etc.
-8. **Export** — copy the prompt, download the manifest JSON, or export the enriched CSV.
+9. **Export** — copy the prompt, download the manifest JSON, export the enriched CSV, or
+   pull the full **Evidence Pack** from the Compliance tab.
 
 ## Tech stack
 
@@ -201,6 +231,10 @@ app/
       csv.ts                # PapaParse import + manager_email → tree
       layout.ts             # recursive tidy-tree layout for the org chart
       parse.ts              # deterministic transcript → responsibilities/tasks
+      transcript.ts         # meeting-transcript normalizer + chunker + merge
+      sod.ts                # segregation-of-duties rules engine (SOD-01…08)
+      audit.ts              # append-only hash-chained audit ledger
+      evidence.ts           # evidence pack zip (audit log, SOD, snapshot, manifests)
       agent.ts              # manifest JSON + Pedigree Standard System Prompt
       hermesManifest.ts     # Hermes-ready execution manifest adapter
       mcpCatalog.ts         # static MCP recommendation catalog (read/draft only)

@@ -162,6 +162,28 @@ export interface CsvImportResult {
   workspaceName: string;
 }
 
+// ── Audit ledger (append-only, hash-chained) ──────────────────────────
+export type AuditEventType =
+  | "workspace_created"
+  | "session_applied"
+  | "org_sync_applied"
+  | "agent_generated"
+  | "context_documents_uploaded"
+  | "company_profile_saved"
+  | "export_performed";
+
+export interface AuditEvent {
+  seq: number;          // 1-based, strictly increasing
+  id: string;
+  ts: string;           // ISO timestamp
+  actor: string;        // signed-in user (email) who performed the action
+  type: AuditEventType;
+  summary: string;      // human-readable one-liner
+  details?: Record<string, unknown>;
+  prevHash: string;     // hash of the previous event ("0"*16 for genesis)
+  hash: string;         // chain hash over this event + prevHash
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -169,6 +191,7 @@ export interface Workspace {
   pedigree: PedigreeState;
   createdAt: string;
   companyContext?: CompanyContext; // per-workspace company profile (one per client)
+  auditLog?: AuditEvent[];
   ownerEmail?: string;
   updatedAt?: string;
 }
