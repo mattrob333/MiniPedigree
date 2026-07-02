@@ -1,6 +1,9 @@
 # Wesco Readiness — Direction, End State, and Demo Playbook
 
 **Date:** 2026-07-02
+**See also:** `enterprise-adoption-blueprint.md` — the agent-lifecycle-management build plan
+(request → approve → provision → recertify → retire) for turning this into a tool
+enterprises adopt, not just demo.
 **Context:** Prepared alongside the full-code audit on `claude/wesco-audit-tool-review-sdyr3k`.
 Target customer: Wesco (Fortune 500 industrial/electrical distribution, SOX-regulated,
 Anixter integration heritage). Requirement: SOC-compliant, SOD-violation-aware,
