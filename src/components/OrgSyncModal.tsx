@@ -37,7 +37,9 @@ export function OrgSyncModal({ open, people, pedigree, companyContext, onClose, 
       const cs = computeChangeset(people, pedigree, r.parsed);
       setParsed(r.parsed);
       setChangeset(cs);
-      setApproved(new Set(cs.deltas.map((d) => d.personId))); // default: approve all
+      // Default: approve everything clean; deltas that would create an SOD
+      // conflict start unapproved and need an explicit human toggle.
+      setApproved(new Set(cs.deltas.filter((d) => !d.sodFindings.length).map((d) => d.personId)));
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -71,11 +73,11 @@ export function OrgSyncModal({ open, people, pedigree, companyContext, onClose, 
             </div>
           ) : (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border-1)", borderRadius: 8, overflow: "hidden", marginBottom: 16 }}>
-                {([["New responsibilities", changeset.summary.newResponsibilities, "cyan"], ["New tasks", changeset.summary.newTasks, "cyan"], ["Reassignments", changeset.summary.reassignments, "yellow"], ["People affected", changeset.summary.peopleAffected, ""]] as [string, number, string][]).map(([l, v, c], i) => (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, background: "var(--border-1)", borderRadius: 8, overflow: "hidden", marginBottom: 16 }}>
+                {([["New responsibilities", changeset.summary.newResponsibilities, "cyan"], ["New tasks", changeset.summary.newTasks, "cyan"], ["Reassignments", changeset.summary.reassignments, "yellow"], ["SOD conflicts", changeset.summary.sodConflicts, changeset.summary.sodConflicts ? "red" : ""], ["People affected", changeset.summary.peopleAffected, ""]] as [string, number, string][]).map(([l, v, c], i) => (
                   <div key={i} style={{ background: "var(--bg-2)", padding: "10px 12px" }}>
                     <div style={{ fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{l}</div>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: c === "cyan" ? "var(--cyan)" : c === "yellow" ? "var(--yellow)" : "var(--text-1)" }}>{v}</div>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: c === "cyan" ? "var(--cyan)" : c === "yellow" ? "var(--yellow)" : c === "red" ? "var(--red)" : "var(--text-1)" }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -100,9 +102,27 @@ export function OrgSyncModal({ open, people, pedigree, companyContext, onClose, 
                             {d.addedResponsibilities.length > 0 && <span className="tag cyan">+{d.addedResponsibilities.length} resp</span>}
                             {d.addedTasks.length > 0 && <span className="tag">+{d.addedTasks.length} tasks</span>}
                             {d.reassignedFrom.length > 0 && <span className="tag yellow">{d.reassignedFrom.length} reassigned</span>}
+                            {d.sodFindings.length > 0 && <span className="tag red">{d.sodFindings.length} SOD conflict{d.sodFindings.length > 1 ? "s" : ""}</span>}
                           </span>
                         </div>
                         <div className="manifest-card-body">
+                          {d.sodFindings.length > 0 && (
+                            <div className="sod-panel" style={{ marginBottom: 10 }}>
+                              <div className="sod-title">
+                                <Icon name="shield" size={12} stroke="var(--red)" />
+                                This handoff would create a segregation-of-duties conflict
+                              </div>
+                              {d.sodFindings.map((f, i) => (
+                                <div key={`${f.ruleId}-${i}`} className="sod-item">
+                                  <span className={"tag " + (f.severity === "block" ? "red" : "yellow")}>{f.ruleId}</span>
+                                  <span>{f.message}</span>
+                                </div>
+                              ))}
+                              <div className="sod-item" style={{ color: "var(--text-4)" }}>
+                                Approving anyway is recorded in the audit ledger. Consider routing one side of the duty pair to someone else.
+                              </div>
+                            </div>
+                          )}
                           {d.addedResponsibilities.length > 0 && (
                             <div style={{ marginBottom: 8 }}>
                               <div className="rc-label cy" style={{ fontSize: 10, fontFamily: "var(--font-mono)", textTransform: "uppercase", color: "var(--cyan)", marginBottom: 4 }}>New responsibilities</div>

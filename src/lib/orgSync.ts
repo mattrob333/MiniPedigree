@@ -1,5 +1,6 @@
 import type { ParsedMap, PedigreeState, Person, Status } from "@/types";
 import { suggestedAgentName } from "./parse";
+import { checkTaskSetSod, personHeldLabels, type SodFinding } from "./sod";
 
 export interface AddedTask {
   label: string;
@@ -11,11 +12,13 @@ export interface PersonDelta {
   addedResponsibilities: string[];
   addedTasks: AddedTask[];
   reassignedFrom: { label: string; fromPersonId: string }[];
+  /** SOD conflicts this delta would CREATE (pre-existing conflicts excluded). */
+  sodFindings: SodFinding[];
 }
 
 export interface Changeset {
   deltas: PersonDelta[];
-  summary: { newResponsibilities: number; newTasks: number; reassignments: number; peopleAffected: number };
+  summary: { newResponsibilities: number; newTasks: number; reassignments: number; peopleAffected: number; sodConflicts: number };
 }
 
 const norm = (s: string) => s.trim().toLowerCase();
@@ -68,7 +71,21 @@ export function computeChangeset(people: Person[], pedigree: PedigreeState, pars
     }
 
     if (addedResponsibilities.length || addedTasks.length) {
-      deltas.push({ personId: person.id, addedResponsibilities, addedTasks, reassignedFrom });
+      // SOD check: would accepting this delta hand this person both sides of
+      // a duty pair? Only conflicts the delta CREATES are reported — anything
+      // they already held shows on the Compliance tab instead.
+      const existingLabels = row ? personHeldLabels(row) : [];
+      const preExisting = new Set(checkTaskSetSod(existingLabels).map((f) => f.ruleId));
+      const sodFindings: SodFinding[] = checkTaskSetSod([...existingLabels, ...addedTasks.map((t) => t.label)])
+        .filter((f) => !preExisting.has(f.ruleId))
+        .map((f) => ({
+          ...f,
+          scope: "person" as const,
+          personId: person.id,
+          personName: person.name,
+          message: `Accepting this handoff gives ${person.name} both sides of ${f.ruleId} (${f.ruleName}): ${f.dutyAMatches.map((l) => `"${l}"`).join(", ")} vs. ${f.dutyBMatches.map((l) => `"${l}"`).join(", ")}.`,
+        }));
+      deltas.push({ personId: person.id, addedResponsibilities, addedTasks, reassignedFrom, sodFindings });
     }
   }
 
@@ -77,6 +94,7 @@ export function computeChangeset(people: Person[], pedigree: PedigreeState, pars
     newTasks: deltas.reduce((s, d) => s + d.addedTasks.length, 0),
     reassignments: deltas.reduce((s, d) => s + d.reassignedFrom.length, 0),
     peopleAffected: deltas.length,
+    sodConflicts: deltas.reduce((s, d) => s + d.sodFindings.length, 0),
   };
 
   return { deltas, summary };

@@ -155,7 +155,7 @@ function extractTasksFromSentence(sentence: string): string[] {
   // Split on conjunctions / commas to find verb phrases.
   const parts = sentence.split(/,|\band\b|\bbut\b|;/i);
   for (const part of parts) {
-    const m = part.match(/\b(reviews?|cleans?|compares?|summari[sz]es?|drafts?|exports?|identif\w+|monitors?|compiles?|tags?|flags?|sends?|notif\w+|approves?|signs? off|pulls?|computes?|tracks?|audits?|hunts?|chasing|running|owns?|creates?|maintains?|processes?|posts?|releases?|reconciles?|manages?|handles?|grants?)\b\s+([^.;]{4,70})/i);
+    const m = part.match(/\b(reviews?|cleans?|compares?|summari[sz]es?|drafts?|exports?|identif\w+|monitors?|compiles?|tags?|flags?|sends?|notif\w+|approves?|signs? off|pulls?|computes?|tracks?|audits?|hunts?|chasing|running|owns?|creates?|maintains?|processes?|posts?|releases?|reconciles?|manages?|handles?|grants?|enters?|quotes?|sets?)\b\s+([^.;]{4,70})/i);
     if (m) {
       const verb = normalizeVerb(m[1]);
       const obj = m[2].trim().replace(/\s+/g, " ");

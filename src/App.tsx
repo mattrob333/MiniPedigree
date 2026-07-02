@@ -611,9 +611,13 @@ export default function App() {
     const next = applyOrgSync(people, pedigree, parsed, changeset, new Set(approvedIds));
     setPedigree(next);
     setOrgSyncOpen(false);
-    logAudit("org_sync_applied", `Org sync approved for ${approvedIds.length} people (${changeset.summary.newResponsibilities} new responsibilities, ${changeset.summary.newTasks} new tasks, ${changeset.summary.reassignments} reassignments)`, {
+    const approvedSod = changeset.deltas
+      .filter((d) => approvedIds.includes(d.personId))
+      .flatMap((d) => d.sodFindings.map((f) => ({ rule_id: f.ruleId, severity: f.severity, person: f.personName })));
+    logAudit("org_sync_applied", `Org sync approved for ${approvedIds.length} people (${changeset.summary.newResponsibilities} new responsibilities, ${changeset.summary.newTasks} new tasks, ${changeset.summary.reassignments} reassignments)${approvedSod.length ? ` — ${approvedSod.length} SOD conflict(s) approved with override` : ""}`, {
       approved_person_ids: approvedIds,
       ...changeset.summary,
+      approved_sod_conflicts: approvedSod,
     });
     pushToast("Org Sync applied", `${approvedIds.length} people updated · ${changeset.summary.newResponsibilities} new resp, ${changeset.summary.newTasks} new tasks`, true);
   };

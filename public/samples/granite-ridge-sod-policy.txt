@@ -15,8 +15,8 @@ SOD-02  Purchase order creation/approval  ×  Goods receipt posting
 
 SOD-03  Goods receipt posting  ×  Invoice processing (3-way match execution)
 
-SOD-04  Customer credit limit changes  ×  Sales order entry or release of
-        blocked orders for the same account
+SOD-04  Customer credit functions (limit changes, releasing credit-blocked
+        orders)  ×  Sales order entry for the same accounts
 
 SOD-05  Price file / discount maintenance  ×  Customer credit or rebate
         approval

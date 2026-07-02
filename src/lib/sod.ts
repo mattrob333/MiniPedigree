@@ -63,11 +63,14 @@ export const DEFAULT_SOD_RULES: SodRule[] = [
   },
   {
     id: "SOD-04",
-    name: "Credit limit changes vs. order entry/release",
-    dutyA: ["credit limit", "customer credit", "credit hold"],
-    dutyB: ["enter sales order", "sales order entry", "release blocked order", "release order", "order release", "quote order"],
+    name: "Credit functions vs. sales order entry",
+    // Releasing credit-blocked orders is a CREDIT-side duty (same side as
+    // setting limits) — the violation is combining it with order entry, not
+    // a credit manager doing both credit functions.
+    dutyA: ["credit limit", "customer credit", "credit hold", "release blocked order", "releasing blocked orders", "release of blocked orders"],
+    dutyB: ["enter sales order", "enters sales orders", "entering sales orders", "sales order entry", "order entry", "quote order", "create sales order"],
     severity: "block",
-    description: "Whoever sets customer credit may not also enter or release that customer's orders.",
+    description: "Whoever controls customer credit (limits, releasing blocked orders) may not also enter sales orders.",
   },
   {
     id: "SOD-05",
@@ -159,7 +162,7 @@ export function checkAgentSod({ person, row, agentTaskLabels, agentName, rules =
     });
   }
 
-  const ownerLabels = ownerHeldLabels(row).filter((l) => !agentTaskLabels.includes(l));
+  const ownerLabels = personHeldLabels(row).filter((l) => !agentTaskLabels.includes(l));
   for (const rule of rules) {
     const agentA = findMatches(agentTaskLabels, rule.dutyA);
     const agentB = findMatches(agentTaskLabels, rule.dutyB);
@@ -188,7 +191,8 @@ export function checkAgentSod({ person, row, agentTaskLabels, agentName, rules =
   return findings;
 }
 
-function ownerHeldLabels(row: PedigreeRow): string[] {
+/** Every duty a person currently holds: their mapped tasks + their agents' authority. */
+export function personHeldLabels(row: PedigreeRow): string[] {
   const tasks: TaskItem[] = [...row.tasks.delegatable, ...row.tasks.approval, ...row.tasks.not_delegatable];
   const agentTasks = row.agents.flatMap((a) => {
     const m = a.manifest as { allowed_tasks?: string[]; human_approval_required?: string[] } | undefined;
@@ -207,7 +211,7 @@ export function checkOrgSod(people: Person[], pedigree: PedigreeState, rules: So
   for (const person of people) {
     const row = pedigree[person.id];
     if (!row) continue;
-    const labels = ownerHeldLabels(row);
+    const labels = personHeldLabels(row);
     for (const f of checkTaskSetSod(labels, rules)) {
       findings.push({
         ...f,

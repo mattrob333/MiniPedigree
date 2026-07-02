@@ -1,5 +1,6 @@
 import { openaiEnabled } from "../openai.js";
 import { callStructured } from "./openaiCall.js";
+import { untrustedBlock, UNTRUSTED_DATA_RULE } from "./untrusted.js";
 import { parsedDiscoverySchema, type ParsedDiscovery } from "../../src/lib/schemas.js";
 import { chunkTranscript, mergeParsedDiscoveries, normalizeTranscript, DEFAULT_CHUNK_CHARS } from "../../src/lib/transcript.js";
 
@@ -20,7 +21,8 @@ Rules:
 5. Assign risk_level: low | medium | high | critical.
 6. Preserve short evidence_quote snippets from the transcript.
 7. Recommend MCP servers only as read_only or draft_only suggestions; never write access.
-8. Return only structured JSON matching the schema.`;
+8. Return only structured JSON matching the schema.
+9. ${UNTRUSTED_DATA_RULE}`;
 
 const responseSchema = {
   name: "parsed_discovery",
@@ -149,7 +151,7 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
     const normalized = normalizeTranscript(transcript) || transcript.trim();
     const chunks = chunkTranscript(normalized, DEFAULT_CHUNK_CHARS);
     const ctxBlock = company_context && typeof company_context === "object"
-      ? `Company profile (the single source of truth for this business — ground every responsibility, task, and recommendation in it, and prefer the company's own terminology):\n${JSON.stringify(contextForPrompt(company_context), null, 2)}\n\n`
+      ? `Company profile (the single source of truth for this business — ground every responsibility, task, and recommendation in it, and prefer the company's own terminology):\n${untrustedBlock("COMPANY PROFILE", JSON.stringify(contextForPrompt(company_context), null, 2))}\n\n`
       : "";
     const peopleBlock = `People (JSON):\n${JSON.stringify(people, null, 2)}`;
 
@@ -157,7 +159,7 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
       const partLabel = chunks.length > 1
         ? `\n\nThis is part ${i + 1} of ${chunks.length} of one meeting; other parts are parsed separately, so extract only what THIS part supports.`
         : "";
-      const userMsg = `${ctxBlock}${peopleBlock}${partLabel}\n\nDiscovery transcript:\n"""\n${chunk}\n"""`;
+      const userMsg = `${ctxBlock}${peopleBlock}${partLabel}\n\nDiscovery transcript:\n${untrustedBlock("TRANSCRIPT", chunk)}`;
       const parsed = await callStructured({
         system: SYSTEM_PROMPT,
         user: userMsg,

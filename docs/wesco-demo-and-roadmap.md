@@ -90,9 +90,13 @@ What exists now, all deterministic — no AI required, so it can never be prompt
      change the button to "Generate with SOD findings (logged)".
    - **Compliance tab** (keyboard: `4`) — org-wide scan of every person's mapped duties plus
      every generated agent's authority; click-through to the person or manifest.
-3. **Next (v1):** parse the customer's own SOD matrix into rules (human-reviewed, like org
-   sync), run the check on org-sync changesets before approval, and require a named
-   compliance approver to acknowledge blocking findings (logged to the audit ledger).
+3. **Org-sync changesets are SOD-checked too** — `computeChangeset` runs the engine on
+   each person's prospective duty set (existing + incoming); only conflicts the handoff
+   would *create* are flagged (pre-existing ones live on the Compliance tab). Conflicted
+   deltas show a red panel + chip in the review modal and start **unapproved**; approving
+   anyway is recorded in the audit ledger as an override.
+4. **Next (v1):** parse the customer's own SOD matrix into rules (human-reviewed, like org
+   sync), and require a named compliance approver to acknowledge blocking findings.
 
 ## 4. Demo playbook for Wesco
 
@@ -152,13 +156,20 @@ said so, and prove nobody edited the record' — this zip is the answer. Portabl
 OpenAI, Claude, or your internal runtime."
 
 ### Scenario D — "Orgs change; authority follows" (org sync, ~4 min)
-Paste a short org-sync transcript: *"Angela is handing release of blocked orders to Tasha
-while she covers the Anixter systems migration; Rosa now owns cycle-count reconciliation."*
-Show the reviewed changeset — nothing applies without approval, reassignments **move**
-ownership (fixed in this branch), and (with the SOD engine) the Angela→Tasha handoff flags
-SOD-04, since Tasha already enters sales orders. **Line:** "SOD violations are born in
-reorgs and coverage handoffs. We catch them in the change review, and the approval itself
-becomes audit evidence."
+Open **Org Sync** and paste this transcript (verified end-to-end, fires deterministically
+with no API key):
+
+> Marcus: Tasha enters sales orders for the branch every day. Angela is covering the
+> Anixter systems migration, so Tasha now owns releasing blocked orders for the Northeast
+> branch. Rosa owns cycle-count reconciliation going forward.
+
+The reviewed changeset shows Tasha's card with a red **"1 SOD conflict"** chip and the
+panel: *accepting this handoff gives Tasha both sides of SOD-04 (credit functions vs.
+sales order entry)* — and her delta starts **unapproved** while clean deltas default on.
+Approving anyway is recorded in the audit ledger as an explicit override. **Line:** "SOD
+violations are born in reorgs and coverage handoffs — this is exactly where your auditors
+find them a year later. We catch them in the change review, before the authority moves,
+and the approval itself becomes audit evidence."
 
 ### Scenario E — "Access reviews for agents" (the vision beat, ~3 min)
 Open Victor Sokolov (IT Security & Access Manager) and create his "quarterly user access
@@ -187,10 +198,12 @@ Priority-ordered; 1–3 are demo-critical, 4–6 are pilot-critical:
    then with keys; both must look good. (The fallback engine makes this reliable.)
 4. **Auth + RLS** — Supabase Auth (magic link now, Entra ID SSO for the pilot), per-owner
    RLS policies replacing `anon_all`, API routes verifying the session JWT + rate limits.
-5. **Prompt-injection hardening** — uploaded docs/transcripts are interpolated into prompts
-   verbatim today; wrap untrusted content in delimited data blocks and instruct models to
-   treat it as data, and clamp model-proposed scopes server-side (client already downgrades
-   `full`).
+5. ~~**Prompt-injection hardening**~~ ✅ shipped — transcripts, user notes, and company
+   profiles (incl. web-researched content) are wrapped in explicit
+   `[BEGIN/END UNTRUSTED ... DATA]` blocks with a standing ignore-embedded-instructions
+   rule in every system prompt (`server/core/untrusted.ts`), and the server now
+   deterministically clamps model-requested `full` MCP scopes to `draft_only`
+   (`clampAuthoredSpec`) in addition to the client-side downgrade.
 6. ~~**Evidence pack export**~~ ✅ shipped with the ledger — one click on the Compliance tab:
    org snapshot + all manifests + SOD findings + hash-verified audit log, zipped. This is
    the artifact a Wesco internal-audit champion forwards internally; it sells for you.

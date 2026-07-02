@@ -55,6 +55,56 @@ describe("org sync reassignment", () => {
     expect(janeTasks).not.toContain("Compile weekly variance summary");
   });
 
+  it("flags a handoff that would create an SOD conflict, but not pre-existing ones", () => {
+    // Tasha already enters sales orders; the sync hands her credit release.
+    const pedigree: PedigreeState = {
+      "P-002": {
+        status: "mapped",
+        responsibilities: [{ id: "R-9", title: "Branch sales" }],
+        tasks: {
+          delegatable: [{ id: "R-9-d-0", label: "Enter sales orders for the branch", respId: "R-9", respTitle: "Branch sales" }],
+          approval: [],
+          not_delegatable: [],
+        },
+        agents: [],
+      },
+    };
+    const parsed: ParsedMap = {
+      "P-002": {
+        summary: "",
+        responsibilities: [
+          { id: "X-2", title: "Credit coverage", tasks: { delegatable: [], approval: ["Own releasing blocked orders for the Northeast branch"], not_delegatable: [] } },
+        ],
+      },
+    };
+    const changeset = computeChangeset(people, pedigree, parsed);
+    expect(changeset.summary.sodConflicts).toBe(1);
+    const delta = changeset.deltas.find((d) => d.personId === "P-002")!;
+    expect(delta.sodFindings[0].ruleId).toBe("SOD-04");
+    expect(delta.sodFindings[0].message).toContain("Tom Reid");
+
+    // Same handoff again when the conflict ALREADY exists → not re-reported.
+    const conflicted: PedigreeState = {
+      "P-002": {
+        ...pedigree["P-002"],
+        tasks: {
+          ...pedigree["P-002"].tasks,
+          approval: [{ id: "R-9-a-0", label: "Release blocked orders daily", respId: "R-9", respTitle: "Branch sales" }],
+        },
+      },
+    };
+    const parsed2: ParsedMap = {
+      "P-002": {
+        summary: "",
+        responsibilities: [
+          { id: "X-3", title: "Credit coverage", tasks: { delegatable: [], approval: ["Own releasing blocked orders for holidays"], not_delegatable: [] } },
+        ],
+      },
+    };
+    const again = computeChangeset(people, conflicted, parsed2);
+    expect(again.summary.sodConflicts).toBe(0);
+  });
+
   it("leaves the previous owner untouched when the delta is not approved", () => {
     const pedigree = pedigreeWithJaneOwningTask();
     const parsed: ParsedMap = {

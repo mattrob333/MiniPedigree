@@ -39,6 +39,20 @@ describe("checkTaskSetSod", () => {
     expect(checkTaskSetSod(["Summarize weekly metrics", "Draft board narrative"])).toEqual([]);
     expect(checkTaskSetSod(["Create vendor records"])).toEqual([]);
   });
+
+  it("SOD-04: releasing blocked orders is a credit-side duty, not an order-entry duty", () => {
+    // A credit manager doing both credit functions is NOT a conflict…
+    expect(checkTaskSetSod([
+      "Set customer credit limits",
+      "Release blocked orders after review",
+    ]).filter((f) => f.ruleId === "SOD-04")).toEqual([]);
+    // …but combining credit release with sales order entry IS.
+    const findings = checkTaskSetSod([
+      "Own releasing blocked orders for the Northeast branch",
+      "Enter sales orders for the branch",
+    ]);
+    expect(findings.some((f) => f.ruleId === "SOD-04" && f.severity === "block")).toBe(true);
+  });
 });
 
 describe("checkAgentSod", () => {

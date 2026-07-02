@@ -1,5 +1,6 @@
 import { openaiEnabled } from "../openai.js";
 import { callStructured } from "./openaiCall.js";
+import { untrustedBlock, UNTRUSTED_DATA_RULE } from "./untrusted.js";
 
 const SYSTEM_PROMPT = `You are Pedigree's Governed Agent Construction Architect.
 
@@ -37,7 +38,8 @@ Rules:
 - Only recommend full tool access when explicitly justified by task scope and policy. Full access will be downgraded by Pedigree unless a later runtime setup explicitly approves it.
 - If a task is too vague to execute, require clarification in input_requirements or failure_modes instead of inventing workflow.
 - Keep the output executable, specific, and runtime-portable.
-- Return only structured JSON matching the schema.`;
+- Return only structured JSON matching the schema.
+- ${UNTRUSTED_DATA_RULE}`;
 
 const schema = {
   type: "object",
@@ -157,7 +159,7 @@ export async function runAgentAuthor(input: AuthorInput): Promise<AuthorResult> 
 
   try {
     const user = `Company profile:
-${JSON.stringify(input.company_context ?? {}, null, 2)}
+${untrustedBlock("COMPANY PROFILE", JSON.stringify(input.company_context ?? {}, null, 2))}
 
 Human owner:
 ${JSON.stringify(input.person ?? {}, null, 2)}
@@ -183,10 +185,33 @@ Author the governed agent construction spec.`;
       schemaName: "agent_construction_spec",
       schema: schema as unknown as Record<string, unknown>,
     });
-    return { mode: "ai", authored };
+    return { mode: "ai", authored: clampAuthoredSpec(authored) };
   } catch (e) {
     // Log the full error server-side only — never echo provider messages.
     console.error("agent author failed:", e);
     return { mode: "demo", reason: "ai_error" };
   }
+}
+
+/**
+ * Deterministic server-side clamp on model output. The system prompt promises
+ * "full access will be downgraded by Pedigree" — this is the code that keeps
+ * that promise even if a prompt injection talks the model into requesting it.
+ * (The client applies the same downgrade; defense in depth.)
+ */
+export function clampAuthoredSpec(authored: Record<string, unknown>): Record<string, unknown> {
+  const tp = authored.tool_permissions;
+  if (!tp || typeof tp !== "object") return authored;
+  const perms = tp as Record<string, unknown>;
+  const servers = perms.mcp_servers;
+  if (!Array.isArray(servers)) return authored;
+  const clamped = servers.map((s) => {
+    if (!s || typeof s !== "object") return s;
+    const server = s as Record<string, unknown>;
+    if (server.scope === "full") {
+      return { ...server, scope: "draft_only", reason: `${String(server.reason ?? "").trim() || "Requested full access."} [Pedigree: full scope downgraded to draft_only pending explicit runtime approval.]` };
+    }
+    return server;
+  });
+  return { ...authored, tool_permissions: { ...perms, mcp_servers: clamped } };
 }
