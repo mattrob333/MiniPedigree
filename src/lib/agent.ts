@@ -1,5 +1,6 @@
 import type { AgentLifecycleClass, AgentRecord, CompanyContext, McpRecommendation, PedigreeRow, Person, RiskLevel, TaskItem } from "@/types";
 import { recommendMcp } from "./mcpCatalog";
+import { checkAgentSod, type SodFinding } from "./sod";
 
 export function slugify(s: string): string {
   return s
@@ -96,6 +97,7 @@ export interface AgentArtifacts {
   approval: string[];
   blocked: string[];
   mcp: McpRecommendation[];
+  sodFindings: SodFinding[];
 }
 
 const GLOBAL_BLOCKED = [
@@ -164,6 +166,19 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     ioContract,
   });
 
+  // SOD check: the agent's held duties (allowed + approval-gated) within
+  // itself and against everything else the human owner already holds.
+  const sodFindings = checkAgentSod({
+    person,
+    row,
+    agentTaskLabels: [...mergedGovernance.allowed, ...mergedGovernance.approval],
+    agentName,
+  });
+  constructionSpec.validation_warnings = [
+    ...(constructionSpec.validation_warnings ?? []),
+    ...sodFindings.map((f) => `[${f.ruleId}${f.severity === "block" ? " · blocking" : ""}] ${f.message}`),
+  ];
+
   const manifest = {
     manifest_version: "pdq-manifest-v0.1",
     schema_version: "pedigree.standard/1.0",
@@ -198,6 +213,18 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     construction_spec: constructionSpec,
     authored_by: authored ? "ai" : "template",
     validation_warnings: constructionSpec.validation_warnings ?? [],
+    sod_findings: sodFindings.map((f) => ({
+      rule_id: f.ruleId,
+      rule_name: f.ruleName,
+      severity: f.severity,
+      scope: f.scope,
+      duty_a_matches: f.dutyAMatches,
+      duty_b_matches: f.dutyBMatches,
+      message: f.message,
+      resolution: f.severity === "block"
+        ? "Blocked pending compliance approval — remove one side of the duty pair or obtain a documented SOD exception."
+        : "Flagged for compliance review.",
+    })),
     allowed_tasks: mergedGovernance.allowed,
     human_approval_required: mergedGovernance.approval,
     blocked_tasks: mergedGovernance.blocked,
@@ -252,9 +279,9 @@ export function buildAgentArtifacts(ctx: AgentBuildCtx): AgentArtifacts {
     },
   };
 
-  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp, policy, riskLevel, companyContext, constructionSpec });
+  const systemPrompt = buildSystemPrompt({ person, respTitle, agentName, task, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp, policy, riskLevel, companyContext, constructionSpec, sodFindings });
 
-  return { manifest, systemPrompt, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp };
+  return { manifest, systemPrompt, allowed: mergedGovernance.allowed, approval: mergedGovernance.approval, blocked: mergedGovernance.blocked, mcp, sodFindings };
 }
 
 function mergeGovernance(args: {
@@ -466,8 +493,9 @@ function buildSystemPrompt(a: {
   riskLevel: RiskLevel;
   companyContext?: CompanyContext;
   constructionSpec: AgentConstructionSpec;
+  sodFindings?: SodFinding[];
 }): string {
-  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, constructionSpec } = a;
+  const { person, respTitle, agentName, task, allowed, approval, blocked, mcp, policy, riskLevel, companyContext, constructionSpec, sodFindings } = a;
   const mcpLines = constructionSpec.tool_permissions.mcp_servers?.length
     ? constructionSpec.tool_permissions.mcp_servers.map((m) => `- ${m.name}: ${m.scope.replace("_", "-")} scope. ${m.reason}.`).join("\n")
     : mcp.length
@@ -488,8 +516,15 @@ Uploaded company context document stores available in the manifest:
 ${documentStoreLines}`
     : "";
 
+  const sodBlock = sodFindings?.length
+    ? `\n\n[SEGREGATION OF DUTIES CONSTRAINTS]
+The following SOD conflicts were detected when this agent was authored. Treat each as a hard constraint:
+${bullets(sodFindings.map((f) => `${f.ruleId} (${f.severity}): ${f.message}`))}
+If a request would require exercising both sides of any duty pair above, refuse and escalate to the compliance owner. Never proceed "just this once."`
+    : "";
+
   return `[ROLE]
-${constructionSpec.role}
+${constructionSpec.role}${sodBlock}
 
 [HUMAN OWNER AND AUTHORITY CEILING]
 ${constructionSpec.authority_ceiling}${businessContext}

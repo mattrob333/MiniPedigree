@@ -5,7 +5,7 @@ Raj Patel,raj.patel@graniteridge.example,Chief Information Officer,walt.emerson@
 Susan Hale,susan.hale@graniteridge.example,VP Supply Chain,walt.emerson@graniteridge.example,Supply Chain,"SAP S/4HANA, Manhattan WMS, Excel",Owns procurement through warehouse operations.
 Marcus Bell,marcus.bell@graniteridge.example,VP Sales,walt.emerson@graniteridge.example,Sales,"Salesforce, SAP S/4HANA, Slack",Owns branch and national account sales.
 Elena Vasquez,elena.vasquez@graniteridge.example,Chief Compliance Officer,walt.emerson@graniteridge.example,Compliance,"AuditBoard, ServiceNow GRC, Excel",Owns SOD matrix; approves control exceptions; audit liaison.
-Tom Rierdan,tom.rierdan@graniteridge.example,Corporate Controller,diane.okafor@graniteridge.example,Finance,"SAP S/4HANA, BlackLine, Excel",Owns close, reconciliations, and journal entry review.
+Tom Rierdan,tom.rierdan@graniteridge.example,Corporate Controller,diane.okafor@graniteridge.example,Finance,"SAP S/4HANA, BlackLine, Excel","Owns close, reconciliations, and journal entry review."
 Priya Nair,priya.nair@graniteridge.example,Accounts Payable Manager,tom.rierdan@graniteridge.example,Finance,"SAP S/4HANA, Concur, Excel",Approves invoices and payment runs; must not create vendors.
 Kevin Doyle,kevin.doyle@graniteridge.example,AP Specialist,priya.nair@graniteridge.example,Finance,"SAP S/4HANA, Excel",Runs 3-way match (PO / goods receipt / invoice); processes invoices.
 Angela Wu,angela.wu@graniteridge.example,Credit Manager,tom.rierdan@graniteridge.example,Finance,"SAP S/4HANA, D&B, Excel",Sets customer credit limits and releases blocked orders.
@@ -13,17 +13,17 @@ Sam Ortiz,sam.ortiz@graniteridge.example,Vendor Master Data Analyst,tom.rierdan@
 Grace Kim,grace.kim@graniteridge.example,FP&A Analyst,diane.okafor@graniteridge.example,Finance,"Power BI, SAP S/4HANA, Excel",Builds branch P&L forecasts and variance reporting.
 Dale Hutchins,dale.hutchins@graniteridge.example,Director of Procurement,susan.hale@graniteridge.example,Supply Chain,"SAP S/4HANA, Coupa, Excel",Approves purchase orders and supplier awards; must not receive goods.
 Nina Petrov,nina.petrov@graniteridge.example,Procurement Buyer,dale.hutchins@graniteridge.example,Supply Chain,"SAP S/4HANA, Coupa",Creates purchase orders and expedites suppliers.
-Carl Jensen,carl.jensen@graniteridge.example,Warehouse Operations Manager,susan.hale@graniteridge.example,Supply Chain,"Manhattan WMS, SAP S/4HANA, Zebra",Owns receiving, putaway, and cycle counts; posts goods receipts.
+Carl Jensen,carl.jensen@graniteridge.example,Warehouse Operations Manager,susan.hale@graniteridge.example,Supply Chain,"Manhattan WMS, SAP S/4HANA, Zebra","Owns receiving, putaway, and cycle counts; posts goods receipts."
 Rosa Delgado,rosa.delgado@graniteridge.example,Inventory Control Analyst,carl.jensen@graniteridge.example,Supply Chain,"Manhattan WMS, SAP S/4HANA, Excel",Reconciles inventory and investigates shrink; proposes adjustments.
 Jeff Barnes,jeff.barnes@graniteridge.example,Logistics Coordinator,susan.hale@graniteridge.example,Supply Chain,"SAP S/4HANA, project44, Excel",Tracks inbound/outbound freight and carrier exceptions.
 Monica Reyes,monica.reyes@graniteridge.example,Branch Manager - Northeast,marcus.bell@graniteridge.example,Sales,"Salesforce, SAP S/4HANA, Slack",Runs branch P&L; requests customer discounts above list.
 Derek Stone,derek.stone@graniteridge.example,National Accounts Director,marcus.bell@graniteridge.example,Sales,"Salesforce, SAP S/4HANA, DocuSign",Negotiates national contracts and rebate programs.
 Tasha Green,tasha.green@graniteridge.example,Inside Sales Representative,monica.reyes@graniteridge.example,Sales,"Salesforce, SAP S/4HANA, Slack",Quotes orders and enters sales orders for the branch.
 Omar Haddad,omar.haddad@graniteridge.example,Pricing Analyst,marcus.bell@graniteridge.example,Sales,"SAP S/4HANA, Vendavo, Excel",Maintains price files and margin analytics; flags off-list quotes.
-Lisa Tran,lisa.tran@graniteridge.example,Customer Service Lead,monica.reyes@graniteridge.example,Sales,"Salesforce, SAP S/4HANA, Zendesk",Handles order changes, returns (RMAs), and credits requests.
+Lisa Tran,lisa.tran@graniteridge.example,Customer Service Lead,monica.reyes@graniteridge.example,Sales,"Salesforce, SAP S/4HANA, Zendesk","Handles order changes, returns (RMAs), and credits requests."
 Victor Sokolov,victor.sokolov@graniteridge.example,IT Security & Access Manager,raj.patel@graniteridge.example,IT,"Okta, Azure AD, ServiceNow, SailPoint",Provisions ERP roles; runs quarterly user access reviews; must not approve own access.
 Amy Fowler,amy.fowler@graniteridge.example,ERP Systems Analyst,raj.patel@graniteridge.example,IT,"SAP S/4HANA, ServiceNow, Jira",Configures ERP workflows and approval chains; no production data entry.
 Ben Carter,ben.carter@graniteridge.example,Data & Analytics Engineer,raj.patel@graniteridge.example,IT,"Power BI, Snowflake, dbt, Python",Builds reporting pipelines from ERP/WMS/CRM.
-Hannah Liu,hannah.liu@graniteridge.example,Internal Auditor,elena.vasquez@graniteridge.example,Compliance,"AuditBoard, SAP S/4HANA, Excel",Tests controls, samples transactions, and tracks remediation.
+Hannah Liu,hannah.liu@graniteridge.example,Internal Auditor,elena.vasquez@graniteridge.example,Compliance,"AuditBoard, SAP S/4HANA, Excel","Tests controls, samples transactions, and tracks remediation."
 Paul Ngata,paul.ngata@graniteridge.example,EHS & Quality Coordinator,elena.vasquez@graniteridge.example,Compliance,"ServiceNow, Excel, Smartsheet",Tracks safety incidents and supplier quality claims.
-Renee Brooks,renee.brooks@graniteridge.example,HR Business Partner,walt.emerson@graniteridge.example,HR,"Workday, Slack, Excel",Owns hiring, terminations, and the joiner-mover-leaver access feed.
+Renee Brooks,renee.brooks@graniteridge.example,HR Business Partner,walt.emerson@graniteridge.example,HR,"Workday, Slack, Excel","Owns hiring, terminations, and the joiner-mover-leaver access feed."

@@ -108,12 +108,21 @@ tools & permitted MCP scopes, and a delegated-task-feed placeholder.
    built from the CSV's reporting lines. Handles any org size (tested 8 → 52+ people),
    compact/detailed density, search, minimap, and status colouring.
 4. **Responsibility Input** — paste a transcript, record audio in-browser, or upload an
-   audio file. Audio is transcribed server-side (OpenAI / Deepgram).
+   audio file. Audio is transcribed server-side (OpenAI / Deepgram). Raw meeting exports of
+   any length are supported: Teams/Meet/Zoom/VTT transcripts are normalized (timestamps,
+   cues, and voice tags stripped) and long meetings are chunked on speaker boundaries,
+   parsed in parallel, and merged — never rejected for size.
 5. **Parse** — the transcript is turned into structured responsibilities + tasks, with each
    task classified **delegatable / human-approval-required / not-delegatable** (governance-first:
    uncertain tasks default to approval-required). Uses OpenAI Structured Outputs when a key is
    configured, otherwise a deterministic local engine so it always works.
 6. **Review** — inspect the proposed mapping before applying it.
+   A deterministic **segregation-of-duties engine** (`src/lib/sod.ts`) then watches the
+   result: the **Compliance** tab scans every person's duties and every agent's authority
+   against duty-pair rules (vendor master × payment approval, PO × goods receipt, credit ×
+   order release, provisioning × certification, …), and the Create Agent modal flags SOD
+   conflicts in red before a manifest is generated. Findings are embedded in the manifest
+   (`sod_findings`) and as hard constraints in the system prompt.
 7. **Create Agent** — from any delegatable task, generate an **Agent Manifest** (JSON) and a
    **Pedigree Standard System Prompt** with `[ROLE]`, `[ALLOWED TASKS]`, `[BLOCKED TASKS]`,
    `[HUMAN APPROVAL REQUIRED]`, `[TOOLS AND MCP SERVERS]`, `[ESCALATION RULES]`, etc.

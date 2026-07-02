@@ -155,7 +155,7 @@ function extractTasksFromSentence(sentence: string): string[] {
   // Split on conjunctions / commas to find verb phrases.
   const parts = sentence.split(/,|\band\b|\bbut\b|;/i);
   for (const part of parts) {
-    const m = part.match(/\b(reviews?|cleans?|compares?|summari[sz]es?|drafts?|exports?|identif\w+|monitors?|compiles?|tags?|flags?|sends?|notif\w+|approves?|signs? off|pulls?|computes?|tracks?|audits?|hunts?|chasing|running|owns?)\b\s+([^.;]{4,70})/i);
+    const m = part.match(/\b(reviews?|cleans?|compares?|summari[sz]es?|drafts?|exports?|identif\w+|monitors?|compiles?|tags?|flags?|sends?|notif\w+|approves?|signs? off|pulls?|computes?|tracks?|audits?|hunts?|chasing|running|owns?|creates?|maintains?|processes?|posts?|releases?|reconciles?|manages?|handles?|grants?)\b\s+([^.;]{4,70})/i);
     if (m) {
       const verb = normalizeVerb(m[1]);
       const obj = m[2].trim().replace(/\s+/g, " ");
@@ -170,12 +170,13 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// "reviews" → "review", "notifies" → "notify"; keep gerunds ("chasing") and
-// "ss" endings intact instead of mangling them ("chasing" → "chas").
+// "reviews" → "review", "notifies" → "notify", "processes" → "process"; keep
+// gerunds ("chasing") and "ss" endings intact instead of mangling them.
 function normalizeVerb(v: string): string {
   const t = v.trim();
   if (/ing$/i.test(t)) return t;
   if (/ies$/i.test(t)) return t.replace(/ies$/i, "y");
+  if (/(ss|ch|sh|x|z)es$/i.test(t)) return t.replace(/es$/i, "");
   if (/ss$/i.test(t)) return t;
   return t.replace(/s$/i, "");
 }

@@ -22,6 +22,7 @@ import type { AgentRecord, MappingSessionType, ParsedMap, PedigreeState, Person,
 import { parsePeopleCsv } from "./lib/csv";
 import { applyParsed, computeMetrics, exportEnrichedCsv, initialPedigreeState, downloadFile } from "./lib/state";
 import { buildAgentArtifacts, newAgentRecord, type AgentConstructionSpec } from "./lib/agent";
+import { checkAgentSod, checkOrgSod, proposedAgentTaskLabels, type SodFinding } from "./lib/sod";
 import { authorAgent } from "./lib/api";
 import { computeNextRecommendedSessions } from "./lib/sessions";
 import { useTheme } from "./lib/useTheme";
@@ -40,7 +41,7 @@ import {
 } from "./lib/onboarding";
 
 type Screen = "login" | "home" | "workspace" | "manifest" | "profile" | "company";
-type Tab = "spreadsheet" | "orgmap" | "agents";
+type Tab = "spreadsheet" | "orgmap" | "agents" | "compliance";
 
 const CONTEXT_UPLOAD_PREFIX = "uploaded-context:";
 const CONNECTED_CONTEXT_PREFIX = "connected-context:";
@@ -252,6 +253,18 @@ export default function App() {
   };
 
   const metrics = useMemo(() => computeMetrics(people, pedigree), [people, pedigree]);
+  const orgSodFindings = useMemo(() => checkOrgSod(people, pedigree), [people, pedigree]);
+  const createAgentSod = useMemo<SodFinding[]>(() => {
+    if (!createAgentCtx) return [];
+    const row = pedigree[createAgentCtx.person.id];
+    if (!row) return [];
+    return checkAgentSod({
+      person: createAgentCtx.person,
+      row,
+      agentTaskLabels: proposedAgentTaskLabels(row, createAgentCtx.task),
+      agentName: "This agent",
+    });
+  }, [createAgentCtx, pedigree]);
   const selectedPerson = useMemo(() => people.find((p) => p.id === selectedId), [people, selectedId]);
   const recommended = useMemo(() => computeNextRecommendedSessions(people, pedigree), [people, pedigree]);
   const rootId = useMemo(() => people.find((p) => !p.managerId)?.id ?? people[0]?.id, [people]);
@@ -406,6 +419,7 @@ export default function App() {
       if (e.key === "1") setTab("spreadsheet");
       if (e.key === "2") setTab("orgmap");
       if (e.key === "3" && metrics.agentsBuilt > 0) setTab("agents");
+      if (e.key === "4") setTab("compliance");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -694,6 +708,10 @@ export default function App() {
               <button className={"tab" + (metrics.agentsBuilt === 0 ? " disabled" : "")} role="tab" aria-selected={tab === "agents"} onClick={() => metrics.agentsBuilt > 0 && setTab("agents")} title={metrics.agentsBuilt === 0 ? "Available after first agent is generated" : "Generated agents"}>
                 <Icon name="robot" size={12} /> Agents <span className="count">{metrics.agentsBuilt}</span>
               </button>
+              <button className="tab" role="tab" aria-selected={tab === "compliance"} onClick={() => setTab("compliance")} title="Segregation-of-duties findings across the org and its agents">
+                <Icon name="shield" size={12} stroke={orgSodFindings.length ? "var(--red)" : undefined} /> Compliance
+                {orgSodFindings.length > 0 && <span className="count" style={{ color: "var(--red)" }}>{orgSodFindings.length}</span>}
+              </button>
               <span style={{ flex: 1 }} />
               <span className="kbd-hint">Tab <span className="k">1</span> Spreadsheet · <span className="k">2</span> Org Map</span>
             </div>
@@ -707,6 +725,7 @@ export default function App() {
               <OrgMap people={people} pedigree={pedigree} selectedId={selectedId} onSelectNode={onSelect} recommended={recommended} onStartSession={onStartSession} />
             )}
             {tab === "agents" && <AgentsList agents={allAgents} onOpen={(a) => { setActiveAgent(a); setScreen("manifest"); }} />}
+            {tab === "compliance" && <CompliancePanel findings={orgSodFindings} agents={allAgents} onOpenAgent={(a) => { setActiveAgent(a); setScreen("manifest"); }} onSelectPerson={onSelect} />}
 
             <Drawer
               open={drawerOpen}
@@ -754,7 +773,7 @@ export default function App() {
         onClose={() => setWizardPersonId(null)}
         onApply={onApplyMapping}
       />
-      <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} />
+      <CreateAgentModal open={!!createAgentCtx} onClose={() => setCreateAgentCtx(null)} ctx={createAgentCtx} onGenerate={onGenerateAgent} sodFindings={createAgentSod} />
       <OrgSyncModal open={orgSyncOpen} people={people} pedigree={pedigree} companyContext={companyContext} onClose={() => setOrgSyncOpen(false)} onApply={onApplyOrgSync} />
 
       <OnboardingTour
@@ -1167,6 +1186,89 @@ function PanelSources({ sources }: { sources?: CompanyResearchSource[] }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+interface ManifestSodFinding {
+  rule_id: string;
+  rule_name: string;
+  severity: "block" | "flag";
+  message: string;
+  resolution?: string;
+}
+
+function CompliancePanel({ findings, agents, onOpenAgent, onSelectPerson }: {
+  findings: SodFinding[];
+  agents: AgentRecord[];
+  onOpenAgent: (a: AgentRecord) => void;
+  onSelectPerson: (id: string) => void;
+}) {
+  const agentFindings = agents.flatMap((a) => {
+    const sod = ((a.manifest as { sod_findings?: ManifestSodFinding[] } | undefined)?.sod_findings ?? []);
+    return sod.map((f) => ({ agent: a, finding: f }));
+  });
+  const blocking = findings.filter((f) => f.severity === "block").length;
+  const agentBlocking = agentFindings.filter((x) => x.finding.severity === "block").length;
+
+  const SevTag = ({ severity }: { severity: "block" | "flag" }) => (
+    <span className={"tag " + (severity === "block" ? "red" : "yellow")}>{severity === "block" ? "blocking" : "flagged"}</span>
+  );
+
+  return (
+    <div className="sheet-wrap" style={{ padding: 20, overflowY: "auto" }}>
+      <section style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}><Icon name="shield" size={13} style={{ verticalAlign: -2, marginRight: 5 }} /> Segregation of duties</h3>
+          <span className="tag">{findings.length + agentFindings.length} finding{findings.length + agentFindings.length === 1 ? "" : "s"}</span>
+          {(blocking + agentBlocking) > 0 && <span className="tag red">{blocking + agentBlocking} blocking</span>}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--text-4)", marginBottom: 16 }}>
+          Deterministic SOD scan over every person's mapped tasks and every generated agent's authority. Rules follow the uploaded SOD policy (vendor master × payments, PO × goods receipt, credit × order release, provisioning × certification, …).
+        </div>
+
+        {findings.length === 0 && agentFindings.length === 0 ? (
+          <div className="manifest-card" style={{ padding: 16 }}>
+            <div style={{ fontSize: 13, color: "var(--green)", fontWeight: 600 }}>
+              <Icon name="check-circle" size={13} style={{ verticalAlign: -2, marginRight: 6 }} /> No SOD conflicts detected
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-4)", marginTop: 6 }}>
+              No person or agent currently holds both sides of a prohibited duty pair. Findings appear here as responsibilities are mapped and agents are generated.
+            </div>
+          </div>
+        ) : (
+          <>
+            {findings.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: "var(--text-2)" }}>People holding conflicting duties</div>
+                {findings.map((f, i) => (
+                  <div key={`p-${f.ruleId}-${f.personId}-${i}`} className="sod-panel" style={{ marginBottom: 8, cursor: f.personId ? "pointer" : undefined }} onClick={() => f.personId && onSelectPerson(f.personId)}>
+                    <div className="sod-item" style={{ marginTop: 0 }}>
+                      <SevTag severity={f.severity} />
+                      <span className="tag">{f.ruleId}</span>
+                      <span>{f.message}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {agentFindings.length > 0 && (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: "var(--text-2)" }}>Agents generated with SOD findings</div>
+                {agentFindings.map(({ agent, finding }, i) => (
+                  <div key={`a-${agent.id}-${finding.rule_id}-${i}`} className="sod-panel" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => onOpenAgent(agent)}>
+                    <div className="sod-item" style={{ marginTop: 0 }}>
+                      <SevTag severity={finding.severity} />
+                      <span className="tag">{finding.rule_id}</span>
+                      <span><strong>{agent.name}</strong> ({agent.person.name}) — {finding.message}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }

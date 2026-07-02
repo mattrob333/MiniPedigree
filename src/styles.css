@@ -668,6 +668,13 @@ button {
 .tag.cyan { color: var(--cyan); border-color: var(--border-cyan); background: rgba(56,213,255,0.05); }
 .tag.green { color: var(--green); border-color: #1e5840; background: rgba(52,211,153,0.05); }
 .tag.yellow { color: var(--yellow); border-color: #5a4a14; background: rgba(250,204,21,0.05); }
+.tag.red { color: var(--red); border-color: #5a1e24; background: rgba(248,113,113,0.06); }
+
+/* Segregation-of-duties conflict panel (Create Agent modal + Compliance tab) */
+.sod-panel { border: 1px solid rgba(248,113,113,0.45); background: var(--red-faint); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+.sod-panel .sod-title { display: flex; align-items: center; gap: 6px; color: var(--red); font-weight: 600; font-size: 12.5px; letter-spacing: 0.02em; }
+.sod-panel .sod-item { font-size: 12px; margin-top: 7px; line-height: 1.45; display: flex; gap: 7px; align-items: baseline; }
+.sod-panel .sod-item .tag { flex-shrink: 0; }
 
 /* ============================================================
    Org Map canvas
@@ -1854,6 +1861,7 @@ select.select {
 :root[data-theme="light"] .tag.cyan { background: #ecfbff; border-color: #b9e6f0; }
 :root[data-theme="light"] .tag.green { background: #ecfbf3; border-color: #b4e2c8; }
 :root[data-theme="light"] .tag.yellow { background: #fef6e3; border-color: #ecd49a; }
+:root[data-theme="light"] .tag.red { background: #fef2f2; border-color: #f0b9bf; }
 
 :root[data-theme="light"] .canvas-edge { stroke: #94a3b8; }
 :root[data-theme="light"] .canvas-edge.dim { stroke: #cbd5e1; }

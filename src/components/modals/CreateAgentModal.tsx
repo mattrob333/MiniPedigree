@@ -4,6 +4,7 @@ import { BrandChip } from "../BrandLogo";
 import type { AgentLifecycleClass, RiskLevel } from "@/types";
 import type { CreateAgentCtx } from "../Drawer";
 import { suggestedAgentName } from "@/lib/parse";
+import type { SodFinding } from "@/lib/sod";
 
 export interface GenerateCtx extends CreateAgentCtx {
   agentName: string;
@@ -18,9 +19,11 @@ interface Props {
   onClose: () => void;
   ctx: CreateAgentCtx | null;
   onGenerate: (ctx: GenerateCtx) => void;
+  /** Segregation-of-duties conflicts detected for this proposed agent. */
+  sodFindings?: SodFinding[];
 }
 
-export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
+export function CreateAgentModal({ open, onClose, ctx, onGenerate, sodFindings = [] }: Props) {
   const suggested = ctx ? suggestedAgentName(ctx.task.label) : "";
   const [agentName, setAgentName] = useState(suggested);
   const [policy, setPolicy] = useState("auto-write-with-approval");
@@ -34,6 +37,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
   }, [ctx?.task.id]);
 
   if (!open || !ctx) return null;
+  const blocking = sodFindings.some((f) => f.severity === "block");
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -61,6 +65,26 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
               <span className="tag cyan">{ctx.task.respId}</span>
             </div>
           </div>
+
+          {sodFindings.length > 0 && (
+            <div className="sod-panel">
+              <div className="sod-title">
+                <Icon name="shield" size={13} stroke="var(--red)" />
+                Segregation of duties conflict{sodFindings.length > 1 ? "s" : ""} detected
+              </div>
+              {sodFindings.map((f, i) => (
+                <div key={`${f.ruleId}-${f.scope}-${i}`} className="sod-item">
+                  <span className={"tag " + (f.severity === "block" ? "red" : "yellow")}>{f.ruleId}</span>
+                  <span>{f.message}</span>
+                </div>
+              ))}
+              <div className="sod-item" style={{ color: "var(--text-4)" }}>
+                {blocking
+                  ? "Blocking conflicts are recorded in the manifest and the agent's prompt will refuse to exercise both sides of the duty pair. Resolve by narrowing the task scope or obtaining a documented compliance exception."
+                  : "Flagged for compliance review; recorded in the manifest and enforced in the agent's prompt."}
+              </div>
+            </div>
+          )}
 
           <div className="form-field">
             <div className="lbl">Suggested Agent Name</div>
@@ -125,7 +149,7 @@ export function CreateAgentModal({ open, onClose, ctx, onGenerate }: Props) {
           <div className="right">
             <button className="btn" onClick={onClose}>Cancel</button>
             <button className="btn btn-primary" onClick={() => onGenerate({ ...ctx, agentName, policy, riskLevel, lifecycleClass, aiAuthored })}>
-              <Icon name="sparkles" size={12} /> Generate Agent Manifest
+              <Icon name="sparkles" size={12} /> {blocking ? "Generate with SOD findings (logged)" : "Generate Agent Manifest"}
             </button>
           </div>
         </div>

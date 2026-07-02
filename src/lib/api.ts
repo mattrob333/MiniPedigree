@@ -2,6 +2,7 @@ import type { CompanyContext, ParsedMap, ParsedResponsibility, Person } from "@/
 import { generateParsed, nextRespId } from "./parse";
 import { recommendMcp } from "./mcpCatalog";
 import { agentConstructionSpecSchema, companyContextSchema, parsedDiscoverySchema } from "./schemas";
+import { normalizeTranscript } from "./transcript";
 
 export interface ParseOutcome {
   parsed: ParsedMap;
@@ -22,13 +23,17 @@ export async function parseDiscovery(
   companyContext?: CompanyContext,
 ): Promise<ParseOutcome> {
   const scoped = scopeIds && scopeIds.length ? people.filter((p) => scopeIds.includes(p.id)) : people;
+  // Strip meeting-transcript cruft (VTT cues, timestamps, per-caption speaker
+  // tags) up front: a 1-hour Teams/Meet export shrinks 2–4×, which keeps the
+  // request small and gives both the server and the local parser clean text.
+  const cleaned = normalizeTranscript(transcript) || transcript;
 
   try {
     const res = await fetch("/api/discovery/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        transcript,
+        transcript: cleaned,
         company_context: companyContext,
         people: scoped.map((p) => ({
           id: p.id,
@@ -52,7 +57,7 @@ export async function parseDiscovery(
     // fall through to local
   }
 
-  return { parsed: generateParsed(scoped, transcript), source: "local", notes: [] };
+  return { parsed: generateParsed(scoped, cleaned), source: "local", notes: [] };
 }
 
 function discoveryToMap(

@@ -1,6 +1,7 @@
 import { openaiEnabled } from "../openai.js";
 import { callStructured } from "./openaiCall.js";
-import { parsedDiscoverySchema } from "../../src/lib/schemas.js";
+import { parsedDiscoverySchema, type ParsedDiscovery } from "../../src/lib/schemas.js";
+import { chunkTranscript, mergeParsedDiscoveries, normalizeTranscript, DEFAULT_CHUNK_CHARS } from "../../src/lib/transcript.js";
 
 const SYSTEM_PROMPT = `You are Pedigree's Responsibility Parser and Task Decomposition engine.
 
@@ -111,7 +112,31 @@ export type ParseResult =
   | { mode: "ai"; discovery: unknown }
   | { mode: "demo"; reason: string };
 
-/** Framework-agnostic discovery parse — used by both the Express dev server and Vercel functions. */
+// Keep uploaded document text in the prompt bounded — the transcript itself is
+// never truncated (it gets chunked instead), but a company profile carrying
+// full policy PDFs pasted as text can dwarf the transcript.
+function contextForPrompt(companyContext: unknown): unknown {
+  if (!companyContext || typeof companyContext !== "object") return companyContext;
+  const ctx = companyContext as Record<string, unknown>;
+  const docs = ctx.contextDocuments;
+  if (!Array.isArray(docs)) return companyContext;
+  return {
+    ...ctx,
+    contextDocuments: docs.map((doc) => {
+      if (!doc || typeof doc !== "object") return doc;
+      const d = doc as Record<string, unknown>;
+      const text = typeof d.text === "string" ? d.text : "";
+      return text.length > 8_000 ? { ...d, text: `${text.slice(0, 8_000)}\n…[truncated for parsing]` } : d;
+    }),
+  };
+}
+
+/**
+ * Framework-agnostic discovery parse — used by both the Express dev server and
+ * Vercel functions. Long transcripts (30–60+ minute Teams / Google Meet
+ * meetings) are normalized, split into speaker-boundary chunks, parsed in
+ * parallel, and merged — never rejected for size.
+ */
 export async function runDiscoveryParse({ transcript, people, company_context }: ParseInput): Promise<ParseResult> {
   if (!openaiEnabled) {
     return { mode: "demo", reason: "OPENAI_API_KEY not configured" };
@@ -119,24 +144,32 @@ export async function runDiscoveryParse({ transcript, people, company_context }:
   if (!transcript || typeof transcript !== "string" || !transcript.trim()) {
     return { mode: "demo", reason: "empty transcript" };
   }
-  // Cap prompt size: these endpoints are unauthenticated in the MVP, so don't
-  // let arbitrary multi-MB payloads become paid model tokens.
-  if (transcript.length > 200_000) {
-    return { mode: "demo", reason: "transcript_too_large" };
-  }
 
   try {
+    const normalized = normalizeTranscript(transcript) || transcript.trim();
+    const chunks = chunkTranscript(normalized, DEFAULT_CHUNK_CHARS);
     const ctxBlock = company_context && typeof company_context === "object"
-      ? `Company profile (the single source of truth for this business — ground every responsibility, task, and recommendation in it, and prefer the company's own terminology):\n${JSON.stringify(company_context, null, 2)}\n\n`
+      ? `Company profile (the single source of truth for this business — ground every responsibility, task, and recommendation in it, and prefer the company's own terminology):\n${JSON.stringify(contextForPrompt(company_context), null, 2)}\n\n`
       : "";
-    const userMsg = `${ctxBlock}People (JSON):\n${JSON.stringify(people, null, 2)}\n\nDiscovery transcript:\n"""\n${transcript}\n"""`;
-    const parsed = await callStructured({
-      system: SYSTEM_PROMPT,
-      user: userMsg,
-      schemaName: responseSchema.name,
-      schema: responseSchema.schema as Record<string, unknown>,
-    });
-    const discovery = parsedDiscoverySchema.parse(parsed);
+    const peopleBlock = `People (JSON):\n${JSON.stringify(people, null, 2)}`;
+
+    const parseChunk = async (chunk: string, i: number): Promise<ParsedDiscovery> => {
+      const partLabel = chunks.length > 1
+        ? `\n\nThis is part ${i + 1} of ${chunks.length} of one meeting; other parts are parsed separately, so extract only what THIS part supports.`
+        : "";
+      const userMsg = `${ctxBlock}${peopleBlock}${partLabel}\n\nDiscovery transcript:\n"""\n${chunk}\n"""`;
+      const parsed = await callStructured({
+        system: SYSTEM_PROMPT,
+        user: userMsg,
+        schemaName: responseSchema.name,
+        schema: responseSchema.schema as Record<string, unknown>,
+      });
+      return parsedDiscoverySchema.parse(parsed);
+    };
+
+    if (chunks.length > 1) console.log(`[pedigree] long transcript: ${normalized.length} chars → ${chunks.length} chunks`);
+    const parts = await Promise.all(chunks.map((chunk, i) => parseChunk(chunk, i)));
+    const discovery = mergeParsedDiscoveries(parts);
     return { mode: "ai", discovery };
   } catch (e) {
     // Log the full error server-side only — provider messages can contain key

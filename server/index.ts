@@ -16,7 +16,9 @@ const MAX_MB = Number(process.env.MAX_AUDIO_UPLOAD_MB || 25);
 // should not be reachable from other machines on the LAN.
 const DEV_ORIGINS = (process.env.CORS_ORIGINS || "http://localhost:5173,http://127.0.0.1:5173").split(",");
 app.use(cors({ origin: DEV_ORIGINS }));
-app.use(express.json({ limit: "4mb" }));
+// Generous body limit: hour-plus meeting transcripts arrive here. The client
+// normalizes transcripts before sending, so real payloads stay far smaller.
+app.use(express.json({ limit: "20mb" }));
 
 const upload = multer({
   storage: multer.memoryStorage(),

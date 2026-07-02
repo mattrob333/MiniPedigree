@@ -14,10 +14,12 @@ Pedigree today is a **governance compiler**: CSV → org map → responsibility 
 delegation classification → agent manifest + system prompt + deployment package. That is a
 real and differentiated core. But three gaps matter for Wesco specifically:
 
-1. **SOD is context, not enforcement.** Uploaded SOD documents are injected into prompts and
-   manifests (`company_context.segregation_of_duties`, the SOD document bucket) — the agent is
-   *told* about SOD. Nothing in the product *checks* an agent's allowed-task set against SOD
-   rules and flags a violation. For Wesco, detection is the product.
+1. **SOD is context, not enforcement.** *(Addressed — SOD engine v0 now ships:
+   `src/lib/sod.ts` evaluates eight deterministic duty-pair rules at agent-creation time
+   (red conflict panel in the Create Agent modal), embeds `sod_findings` + a
+   `[SEGREGATION OF DUTIES CONSTRAINTS]` block into every manifest/prompt, and powers an
+   org-wide **Compliance** tab. Next: parse customer SOD matrices into rules, and add
+   a compliance-approval workflow for blocking findings.)*
 2. **The audit trail is declared, not recorded.** Manifests carry `audit.trace_id`,
    `audit_events`, and retention fields — but the app itself doesn't yet write an immutable
    event log of who mapped what, who approved which changeset, and who generated which agent.
@@ -65,32 +67,31 @@ Wesco about which is which:
 - **Pedigree helping Wesco's own SOX/SOC control environment** (the sales story): SOD
   detection, approval gates, access reviews, evidence exports. This is pillar 1–3.
 
-## 3. The SOD engine (build this before the demo if anything)
+## 3. The SOD engine (v0 SHIPPED on this branch)
 
-Smallest credible version, all deterministic — no AI required:
+What exists now, all deterministic — no AI required, so it can never be prompt-injected:
 
-1. **Rule model** (`src/lib/sod.ts`):
-   ```ts
-   interface SodRule {
-     id: string;            // "SOD-01"
-     name: string;          // "Vendor master vs. payment approval"
-     dutyA: string[];       // keyword/phrase matchers: ["vendor master", "vendor record", "bank detail"]
-     dutyB: string[];       // ["approve invoice", "payment run", "release payment"]
-     severity: "block" | "flag";
-   }
-   ```
-2. **Checkpoints:**
-   - `checkAgentSod(allowed, approval, personRow, rules)` → violations when one agent's task
-     set (or the agent + its owner's other agents) spans dutyA and dutyB.
-   - Run it inside `buildAgentArtifacts` → violations land in `validation_warnings` (already
-     rendered) and a new `sod_findings` manifest block.
-   - Run it on org-sync changesets → "this reassignment gives Priya both sides of SOD-03."
-3. **UI:** red "SOD conflict" chip in the Create Agent modal + a Compliance panel listing all
-   findings across the org (that panel *is* the auditor demo).
-4. **Seed rules** ship from the bundled policy file (`public/samples/granite-ridge-sod-policy.txt`,
-   added in this branch) so the demo needs zero setup; real deployments parse the customer's
-   SOD matrix into rules with the existing company-profile AI parse (human-reviewed, like
-   org sync).
+1. **Rule model** — `src/lib/sod.ts` ships `DEFAULT_SOD_RULES`: eight duty-pair rules
+   (SOD-01…08) seeded from the bundled Granite Ridge policy — vendor master × payment
+   approval, PO × goods receipt, receipt × invoice processing, credit × order release,
+   pricing × rebate approval, provisioning × certification, JE creation × approval,
+   RMA creation × approval. Each rule carries `block` or `flag` severity and keyword
+   matchers that are quoted back in findings ("matched *vendor bank* in task X") so every
+   flag is explainable to an auditor.
+2. **Checkpoints (live):**
+   - **Agent creation** — `checkAgentSod` runs inside `buildAgentArtifacts`: conflicts inside
+     the proposed agent's task set AND agent-vs-owner conflicts (the owner is the accountable
+     actor, so an agent handing them the other side of a duty pair is flagged too).
+   - Findings land in the manifest (`sod_findings` with resolution guidance),
+     `validation_warnings`, and a hard `[SEGREGATION OF DUTIES CONSTRAINTS]` section in the
+     generated system prompt instructing the agent to refuse-and-escalate.
+   - **Create Agent modal** shows a red conflict panel before generation; blocking findings
+     change the button to "Generate with SOD findings (logged)".
+   - **Compliance tab** (keyboard: `4`) — org-wide scan of every person's mapped duties plus
+     every generated agent's authority; click-through to the person or manifest.
+3. **Next (v1):** parse the customer's own SOD matrix into rules (human-reviewed, like org
+   sync), run the check on org-sync changesets before approval, and require a named
+   compliance approver to acknowledge blocking findings (logged to the audit ledger).
 
 ## 4. Demo playbook for Wesco
 
@@ -104,6 +105,13 @@ Load it from the home screen like the other demo companies.
 `granite-ridge-sod-policy.txt` into the **SOD documents** bucket of the company profile,
 and pre-run the leadership session so the map is partially lit.
 
+**Long transcripts are safe to demo live.** Raw 30–60+ minute Teams/Google Meet/Zoom/VTT
+exports are normalized client-side (timestamps, cue numbers, and voice tags stripped —
+typically a 2–4× size reduction), and anything still long is split on speaker boundaries,
+parsed in parallel, and merged server-side. There is no size rejection anywhere in the
+pipeline, so pasting a full raw meeting export into a session or Org Sync is a good
+flex, not a risk.
+
 ### Scenario A — "Map the org before you automate it" (the opener, ~5 min)
 Upload the CSV live → org map renders the branch structure → run a Department Session on
 Susan Hale (VP Supply Chain) using **Insert Demo Session** → nodes light up, tasks get
@@ -112,15 +120,23 @@ default. **Line:** "Nobody at Wesco can tell you today which of your 20,000 peop
 are already being quietly delegated to ChatGPT. This is the inventory step."
 
 ### Scenario B — "The SOD catch" (the money demo, ~7 min)
-Create an agent for **Kevin Doyle (AP Specialist)** on his 3-way-match task. Show in the
-manifest: vendor-master work is **not** in allowed tasks, payment-run approval is
-**blocked**, exceptions route to **Priya Nair** for approval, and the SOD policy text is
-embedded in `company_context` + the `[BUSINESS CONTEXT]` block of the system prompt. Then
-attempt the violation: try to give one agent both "maintain vendor bank details" and
-"approve payment runs." With the SOD engine built, this throws a red SOD-01 conflict
-requiring CCO sign-off; until then, narrate it over the blocked/approval buckets.
+Run an Individual Role session on **Sam Ortiz (Vendor Master Data Analyst)** and paste this
+transcript (verified end-to-end — it produces the conflict deterministically, no API key
+needed):
+
+> Tom: Sam owns vendor master record maintenance in SAP, and he maintains vendor bank
+> details when suppliers change accounts. To speed things up, Sam also drafts payment run
+> approval packets for Priya every Friday. Sam reviews duplicate vendor entries monthly.
+
+Apply the mapping, then click **Create Agent** on any of Sam's vendor tasks. The modal
+throws the red panel: **SOD-01 (blocking) — vendor master data vs. invoice/payment
+approval**, quoting the exact conflicting tasks. Generate anyway ("Generate with SOD
+findings (logged)") and show the manifest's `sod_findings` block with resolution guidance,
+the `[SEGREGATION OF DUTIES CONSTRAINTS]` refuse-and-escalate section in the system prompt,
+and the finding sitting on the **Compliance** tab next to Sam's person-level SOD-01.
 **Line:** "Your auditors test this exact control for humans every year. We apply it to
-agents at design time — before the agent exists, not after the finding."
+agents at design time — before the agent exists, not after the finding. And the check is
+deterministic code, not a model opinion — it can't be talked out of it."
 
 ### Scenario C — "Every agent has a pedigree" (the compliance close, ~5 min)
 Open the generated manifest and walk the governance fields: human owner, parent
@@ -154,8 +170,8 @@ run B and C only, on the pre-loaded workspace.
 
 Priority-ordered; 1–3 are demo-critical, 4–6 are pilot-critical:
 
-1. **SOD engine v0** (section 3) — deterministic rules + Create-Agent conflict chip +
-   compliance findings panel.
+1. ~~**SOD engine v0**~~ ✅ shipped (section 3) — deterministic rules + Create-Agent conflict
+   panel + Compliance tab + manifest/prompt embedding.
 2. **Audit event ledger v0** — append-only `audit_events` table (or localStorage ring in
    demo mode) + "Audit Log" screen + CSV export. Cheap, hugely demo-visible.
 3. **Demo hardening** — rehearse on Granite Ridge with no API keys (deterministic path),
